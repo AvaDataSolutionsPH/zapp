@@ -7,6 +7,7 @@ import {
   Truck,
   Package,
   ClipboardList,
+  ClipboardCheck,
   Brain,
   CreditCard,
   DollarSign,
@@ -155,6 +156,17 @@ const navSections: NavSection[] = [
         path: '/ai-validation',
         icon: Brain,
         allowedRoles: ['owner', 'operations_manager', 'plant_manager'],
+      },
+      {
+        label: 'Inventory Reviews',
+        path: '/inventory-reviews',
+        icon: ClipboardCheck,
+        allowedRoles: [
+          'owner',
+          'operations_manager',
+          'partner_distributor',
+          'area_manager',
+        ],
       },
       {
         label: 'Packaging',

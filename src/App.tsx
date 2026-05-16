@@ -39,6 +39,7 @@ import DeliveriesPage from '@/pages/deliveries/DeliveriesPage'
 import BeginningInventoryPage from '@/pages/inventory/BeginningInventoryPage'
 import EndingInventoryPage from '@/pages/inventory/EndingInventoryPage'
 import AIValidationPage from '@/pages/inventory/AIValidationPage'
+import InventoryReviewsPage from '@/pages/inventory/InventoryReviewsPage'
 
 // Billing & Payments
 import BillingPage from '@/pages/billing/BillingPage'
@@ -103,6 +104,7 @@ function App() {
         <Route path="/beginning-inventory" element={<BeginningInventoryPage />} />
         <Route path="/ending-inventory" element={<EndingInventoryPage />} />
         <Route path="/ai-validation" element={<AIValidationPage />} />
+        <Route path="/inventory-reviews" element={<InventoryReviewsPage />} />
 
         {/* Financial */}
         <Route path="/billing" element={<BillingPage />} />

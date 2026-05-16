@@ -44,19 +44,30 @@ const storeStatuses: Record<string, StatusConfig> = {
   blocked:  { label: 'Blocked',  variant: 'danger' },
 };
 
+const inventoryReviewStatuses: Record<string, StatusConfig> = {
+  pending_review:      { label: 'Pending Review',      variant: 'info' },
+  needs_review:        { label: 'Needs Review',        variant: 'warning' },
+  correction_required: { label: 'Correction Required', variant: 'danger' },
+  approved:            { label: 'Approved',            variant: 'success' },
+  // Legacy compatibility: prior data may carry these values
+  pending:   { label: 'Pending',  variant: 'warning' },
+  confirmed: { label: 'Approved', variant: 'success' },
+};
+
 const categoryMap: Record<string, Record<string, StatusConfig>> = {
   application: applicationStatuses,
   delivery: deliveryStatuses,
   payment: paymentStatuses,
   billing: billingStatuses,
   store: storeStatuses,
+  inventory_review: inventoryReviewStatuses,
 };
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
-type StatusCategory = 'application' | 'delivery' | 'payment' | 'billing' | 'store';
+type StatusCategory = 'application' | 'delivery' | 'payment' | 'billing' | 'store' | 'inventory_review';
 
 interface StatusBadgeProps {
   category: StatusCategory;

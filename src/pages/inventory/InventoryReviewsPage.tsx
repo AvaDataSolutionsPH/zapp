@@ -25,10 +25,12 @@ export default function InventoryReviewsPage() {
   const getEIForReview = useStore((s) => s.getEndingInventoriesForReview);
 
   // Re-evaluate scoped list whenever any underlying slice changes.
-  const eis = useMemo(
-    () => getEIForReview(),
-    [endingInventories, stores, currentUser, getEIForReview],
-  );
+  // The getter reads endingInventories/stores/currentUser via Zustand's get()
+  // inside its body, so ESLint can't see those reads and flags them as
+  // unnecessary deps. They are required — without them the memo would never
+  // recompute when those slices change.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const eis = useMemo(() => getEIForReview(), [endingInventories, stores, currentUser, getEIForReview]);
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('pending_review');
   const [search, setSearch] = useState('');

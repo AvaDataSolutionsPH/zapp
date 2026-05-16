@@ -49,7 +49,13 @@ export function CorrectionRequestForm({
   const [reason, setReason] = useState('');
 
   useEffect(() => {
+    // Reset form state whenever the modal (re)opens or the source EI changes.
+    // The lint rule flags setState-in-effect, but this is the standard
+    // "controlled-modal-reset" pattern — without it, stale row edits leak
+    // across opens. Refactoring to a `key` prop on the Modal would require
+    // splitting this component and re-plumbing props.
     if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setRows(initialRows);
       setReason('');
     }

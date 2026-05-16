@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye } from 'lucide-react';
+import { Eye, AlertOctagon, AlertTriangle, CheckCircle } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import {
   Card,
@@ -12,7 +12,22 @@ import {
   Badge,
 } from '@/components/ui';
 import type { TableColumn, SelectOption } from '@/components/ui';
-import type { Store } from '@/types';
+import type { Store, StoreDeliveryStatus } from '@/types';
+import { getOverdueReasonForStore } from '@/lib/deliveryEnforcement';
+
+const deliveryStatusVariant = (
+  s: StoreDeliveryStatus,
+): 'success' | 'warning' | 'danger' => {
+  if (s === 'hold') return 'danger';
+  if (s === 'warning') return 'warning';
+  return 'success';
+};
+
+const deliveryStatusIcon = (s: StoreDeliveryStatus) => {
+  if (s === 'hold') return <AlertOctagon size={10} className="inline mr-0.5" />;
+  if (s === 'warning') return <AlertTriangle size={10} className="inline mr-0.5" />;
+  return <CheckCircle size={10} className="inline mr-0.5" />;
+};
 
 const PAGE_SIZE = 10;
 
@@ -22,6 +37,8 @@ export default function StoresPage() {
     getStoresForCurrentUser,
     plants,
     distributors,
+    billingRecords,
+    payments,
   } = useStore();
 
   const allStores = getStoresForCurrentUser();
@@ -32,6 +49,7 @@ export default function StoresPage() {
   const [provinceFilter, setProvinceFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
+  const [deliveryFilter, setDeliveryFilter] = useState('');
   const [page, setPage] = useState(1);
 
   // Derive unique provinces and areas from stores
@@ -51,6 +69,7 @@ export default function StoresPage() {
     if (provinceFilter) result = result.filter((s) => s.province === provinceFilter);
     if (statusFilter) result = result.filter((s) => s.status === statusFilter);
     if (typeFilter) result = result.filter((s) => s.franchiseType === typeFilter);
+    if (deliveryFilter) result = result.filter((s) => s.deliveryStatus === deliveryFilter);
     if (search) {
       const q = search.toLowerCase();
       result = result.filter(
@@ -61,7 +80,7 @@ export default function StoresPage() {
     }
     result.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     return result;
-  }, [allStores, plantFilter, areaFilter, provinceFilter, statusFilter, typeFilter, search]);
+  }, [allStores, plantFilter, areaFilter, provinceFilter, statusFilter, typeFilter, deliveryFilter, search]);
 
   const paged = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
@@ -94,6 +113,12 @@ export default function StoresPage() {
     { value: '', label: 'All Types' },
     { value: 'distributor', label: 'Distributor' },
     { value: 'direct', label: 'Direct' },
+  ];
+  const deliveryOptions: SelectOption[] = [
+    { value: '', label: 'All Delivery' },
+    { value: 'active', label: 'Active' },
+    { value: 'warning', label: 'Warning' },
+    { value: 'hold', label: 'Hold' },
   ];
 
   const columns: TableColumn<Store>[] = [
@@ -148,6 +173,21 @@ export default function StoresPage() {
       render: (row) => <StatusBadge category="store" status={row.status} />,
     },
     {
+      key: 'deliveryStatus',
+      header: 'Delivery',
+      render: (row) => {
+        const reason = getOverdueReasonForStore(row.id, billingRecords, payments);
+        return (
+          <span title={reason.label}>
+            <Badge variant={deliveryStatusVariant(row.deliveryStatus)} size="sm" dot>
+              {deliveryStatusIcon(row.deliveryStatus)}
+              {row.deliveryStatus.toUpperCase()}
+            </Badge>
+          </span>
+        );
+      },
+    },
+    {
       key: 'createdAt',
       header: 'Created',
       sortable: true,
@@ -187,6 +227,7 @@ export default function StoresPage() {
             <Select options={provinceOptions} value={provinceFilter} onChange={(e) => { setProvinceFilter(e.target.value); setPage(1); }} />
             <Select options={statusOptions} value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }} />
             <Select options={typeOptions} value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }} />
+            <Select options={deliveryOptions} value={deliveryFilter} onChange={(e) => { setDeliveryFilter(e.target.value); setPage(1); }} />
             <SearchInput value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search store name..." />
           </div>
         </CardContent>

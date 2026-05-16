@@ -52,6 +52,7 @@ import {
   specialOrders as mockSpecialOrders,
 } from '@/data/mockData';
 import { computeBillingsFromState } from '@/lib/billingComputations';
+import { computeStoreDeliveryStatus } from '@/lib/deliveryEnforcement';
 
 // Compute the initial billing list from the seeded mock entities. This replaces
 // the previously hard-coded mockBillingRecords — billings are now derived from
@@ -64,6 +65,14 @@ const initialBillings = computeBillingsFromState({
   stores: mockStores,
   payments: mockPayments,
 });
+
+// Apply auto-derived delivery status to each store based on initial billings.
+// Overrides any hard-coded deliveryStatus in the mock data — the auto rule
+// (0/1/2+ overdue → active/warning/hold) is the source of truth.
+const initialStores = mockStores.map((s) => ({
+  ...s,
+  deliveryStatus: computeStoreDeliveryStatus(s.id, initialBillings, mockPayments),
+}));
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -213,19 +222,24 @@ interface AppStore {
 export const useStore = create<AppStore>((set, get) => {
   // Recompute the billing slice from current state. Called after any mutation
   // that affects the billing inputs (approve EI, add Special Order, add
-  // Packaging Order, verify Payment).
+  // Packaging Order, verify Payment). Cascades into recomputeDeliveryStatuses
+  // because every billing change can shift the overdue count and therefore
+  // the auto-derived delivery status.
   const recomputeBillings = (): void => {
     const s = get();
-    set({
-      billingRecords: computeBillingsFromState({
-        endingInventories: s.endingInventories,
-        specialOrders: s.specialOrders,
-        packagingOrders: s.packagingOrders,
-        deliveries: s.deliveries,
-        stores: s.stores,
-        payments: s.payments,
-      }),
+    const nextBillings = computeBillingsFromState({
+      endingInventories: s.endingInventories,
+      specialOrders: s.specialOrders,
+      packagingOrders: s.packagingOrders,
+      deliveries: s.deliveries,
+      stores: s.stores,
+      payments: s.payments,
     });
+    const nextStores = s.stores.map((st) => ({
+      ...st,
+      deliveryStatus: computeStoreDeliveryStatus(st.id, nextBillings, s.payments),
+    }));
+    set({ billingRecords: nextBillings, stores: nextStores });
   };
 
   return {
@@ -267,7 +281,7 @@ export const useStore = create<AppStore>((set, get) => {
 
   // ─── Stores ─────────────────────────────────────────────────────
 
-  stores: mockStores,
+  stores: initialStores,
 
   addStore: (store: Store) => {
     set((s) => ({ stores: [...s.stores, store] }));

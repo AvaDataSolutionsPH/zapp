@@ -3,6 +3,7 @@
 // ============================================================
 
 import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useStore } from '@/store/useStore';
 import { Card, CardHeader, CardContent } from '@/components/ui/Card';
 import { Stat } from '@/components/ui/Stat';
@@ -14,6 +15,8 @@ import {
   DollarSign,
   TrendingUp,
   PieChart as PieChartIcon,
+  ClipboardCheck,
+  ChevronRight,
 } from 'lucide-react';
 import {
   BarChart,
@@ -32,12 +35,14 @@ import {
 const COLORS = ['#FF6B00', '#2563EB', '#22C55E', '#EAB308', '#8B5CF6', '#EC4899'];
 
 export function AreaManagerDashboard() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
 
   const currentUser = useStore((s) => s.currentUser);
   const stores = useStore((s) => s.stores);
   const salesMetrics = useStore((s) => s.salesMetrics);
   const billingRecords = useStore((s) => s.billingRecords);
+  const endingInventories = useStore((s) => s.endingInventories);
 
   useEffect(() => {
     const timer = setTimeout(() => setLoading(false), 600);
@@ -47,6 +52,16 @@ export function AreaManagerDashboard() {
   // ── My Stores ───────────────────────────────────────────────
   const myStoreIds = useMemo(() => currentUser?.assignedStoreIds ?? [], [currentUser]);
   const myStores = useMemo(() => stores.filter((s) => myStoreIds.includes(s.id)), [stores, myStoreIds]);
+
+  // ── Pending reviews (direct-franchise EIs awaiting reviewer action) ──
+  const pendingReviewCount = useMemo(() => {
+    const directStoreIds = new Set(
+      myStores.filter((s) => s.franchiseType === 'direct').map((s) => s.id),
+    );
+    return endingInventories.filter(
+      (ei) => directStoreIds.has(ei.storeId) && ei.status === 'pending_review',
+    ).length;
+  }, [endingInventories, myStores]);
   const mySales = useMemo(
     () => salesMetrics.filter((m) => myStoreIds.includes(m.storeId)),
     [salesMetrics, myStoreIds],
@@ -162,6 +177,26 @@ export function AreaManagerDashboard() {
           Performance for your assigned stores and areas
         </p>
       </div>
+
+      {/* Pending Reviews alert (Direct-to-Zapp submissions) */}
+      {pendingReviewCount > 0 && (
+        <button
+          onClick={() => navigate('/inventory-reviews')}
+          className="w-full text-left rounded-xl border-2 border-amber-200 bg-amber-50 p-4 flex items-center gap-3 hover:bg-amber-100 transition-colors cursor-pointer"
+        >
+          <span className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center text-amber-700 shrink-0">
+            <ClipboardCheck size={20} />
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-amber-900">
+              {pendingReviewCount} direct-store ending inventory submission
+              {pendingReviewCount === 1 ? '' : 's'} await your review
+            </p>
+            <p className="text-sm text-amber-700">Click to open the reviewer queue.</p>
+          </div>
+          <ChevronRight size={18} className="text-amber-700 shrink-0" />
+        </button>
+      )}
 
       {/* KPI Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

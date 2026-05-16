@@ -12,6 +12,10 @@ import {
   Bot,
   Image as ImageIcon,
   X,
+  ClipboardCheck,
+  Package,
+  ShoppingBag,
+  Layers,
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import {
@@ -22,6 +26,7 @@ import {
   StatusBadge,
 } from '@/components/ui';
 import type { BillingRecord } from '@/types';
+import { getBillingBreakdown } from '@/lib/billingComputations';
 
 // ── AI Log Entry (simulated) ────────────────────────────────────────────
 
@@ -166,8 +171,32 @@ interface BillingDetailDrawerProps {
 }
 
 export default function BillingDetailDrawer({ billing, onClose }: BillingDetailDrawerProps) {
-  const { stores, distributors, plants, payments } = useStore();
+  const {
+    stores,
+    distributors,
+    plants,
+    payments,
+    endingInventories,
+    specialOrders,
+    packagingOrders,
+    deliveries,
+  } = useStore();
   const [imageModal, setImageModal] = useState<string | null>(null);
+
+  // Resolve which approved EIs / Special Orders / Packaging Orders fed this
+  // computed billing. Returns null for non-deterministic ids (legacy /
+  // manually-created billings), in which case the breakdown card is skipped.
+  const breakdown = useMemo(() => {
+    if (!billing) return null;
+    return getBillingBreakdown(billing.id, {
+      endingInventories,
+      specialOrders,
+      packagingOrders,
+      deliveries,
+      stores,
+      payments,
+    });
+  }, [billing, endingInventories, specialOrders, packagingOrders, deliveries, stores, payments]);
 
   const store = useMemo(
     () => (billing ? stores.find((s) => s.id === billing.storeId) : null),
@@ -317,6 +346,130 @@ export default function BillingDetailDrawer({ billing, onClose }: BillingDetailD
               </div>
             </CardContent>
           </Card>
+
+          {/* Breakdown — what fed this billing */}
+          {breakdown && (
+            <Card>
+              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                  <Layers size={16} /> Source Breakdown
+                </h4>
+                <Badge variant="neutral" size="sm">
+                  {breakdown.contributingEis.length +
+                    breakdown.contributingSpecialOrders.length +
+                    breakdown.contributingPackagingOrders.length}{' '}
+                  source{breakdown.contributingEis.length +
+                    breakdown.contributingSpecialOrders.length +
+                    breakdown.contributingPackagingOrders.length === 1
+                    ? ''
+                    : 's'}
+                </Badge>
+              </div>
+              <CardContent>
+                <p className="text-xs text-gray-500 mb-3 italic">
+                  This billing is the aggregate of the items below for cutoff{' '}
+                  <span className="font-medium">
+                    {breakdown.yearMonth} {breakdown.cutoffRange}
+                  </span>
+                  .
+                </p>
+
+                {/* Approved EIs */}
+                {breakdown.contributingEis.length > 0 && (
+                  <div className="mb-4">
+                    <p className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                      <ClipboardCheck size={12} /> Approved Ending Inventories ({breakdown.contributingEis.length})
+                    </p>
+                    <ul className="space-y-1.5 text-xs">
+                      {breakdown.contributingEis.map((ei) => {
+                        const delivery = deliveries.find((d) => d.id === ei.deliveryId);
+                        const totalUnsold = ei.unsoldItems.reduce((s, u) => s + u.quantity, 0);
+                        return (
+                          <li
+                            key={ei.id}
+                            className="flex items-center justify-between bg-green-50 rounded px-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <p className="font-medium text-green-900">{ei.id}</p>
+                              <p className="text-green-700">
+                                {delivery?.drNumber ?? '—'} · {ei.date}
+                              </p>
+                            </div>
+                            <span className="text-green-800 font-semibold">
+                              {totalUnsold} unsold
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Special Orders */}
+                {breakdown.contributingSpecialOrders.length > 0 && (
+                  <div className="mb-4">
+                    <p className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                      <Package size={12} /> Special Orders ({breakdown.contributingSpecialOrders.length})
+                    </p>
+                    <ul className="space-y-1.5 text-xs">
+                      {breakdown.contributingSpecialOrders.map((so) => (
+                        <li
+                          key={so.id}
+                          className="flex items-center justify-between bg-purple-50 rounded px-3 py-2"
+                        >
+                          <div className="min-w-0">
+                            <p className="font-medium text-purple-900">{so.id}</p>
+                            <p className="text-purple-700">
+                              {so.date} · {so.items.length} SKU{so.items.length === 1 ? '' : 's'}
+                            </p>
+                          </div>
+                          <span className="text-purple-800 font-semibold">
+                            P{so.totalSRP.toLocaleString()}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Packaging Orders */}
+                {breakdown.contributingPackagingOrders.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                      <ShoppingBag size={12} /> Packaging Orders ({breakdown.contributingPackagingOrders.length})
+                    </p>
+                    <ul className="space-y-1.5 text-xs">
+                      {breakdown.contributingPackagingOrders.map((po) => (
+                        <li
+                          key={po.id}
+                          className="flex items-center justify-between bg-blue-50 rounded px-3 py-2"
+                        >
+                          <div className="min-w-0">
+                            <p className="font-medium text-blue-900">{po.id}</p>
+                            <p className="text-blue-700">
+                              {po.orderedAt.slice(0, 10)} · {po.items.length} item
+                              {po.items.length === 1 ? '' : 's'}
+                            </p>
+                          </div>
+                          <span className="text-blue-800 font-semibold">
+                            P{po.totalAmount.toLocaleString()}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {breakdown.contributingEis.length === 0 &&
+                  breakdown.contributingSpecialOrders.length === 0 &&
+                  breakdown.contributingPackagingOrders.length === 0 && (
+                    <p className="text-xs text-gray-400 text-center py-2">
+                      No source records found. Underlying data may have been removed.
+                    </p>
+                  )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Attached Files */}
           <Card>

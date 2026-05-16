@@ -40,7 +40,6 @@ import {
   deliveries as mockDeliveries,
   beginningInventories as mockBeginningInventories,
   endingInventories as mockEndingInventories,
-  billingRecords as mockBillingRecords,
   payments as mockPayments,
   packagingCatalog as mockPackagingCatalog,
   packagingOrders as mockPackagingOrders,
@@ -50,6 +49,19 @@ import {
   notifications as mockNotifications,
   specialOrders as mockSpecialOrders,
 } from '@/data/mockData';
+import { computeBillingsFromState } from '@/lib/billingComputations';
+
+// Compute the initial billing list from the seeded mock entities. This replaces
+// the previously hard-coded mockBillingRecords — billings are now derived from
+// approved EIs + Special Orders + Packaging Orders, not stored as primary data.
+const initialBillings = computeBillingsFromState({
+  endingInventories: mockEndingInventories,
+  specialOrders: mockSpecialOrders,
+  packagingOrders: mockPackagingOrders,
+  deliveries: mockDeliveries,
+  stores: mockStores,
+  payments: mockPayments,
+});
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -193,7 +205,25 @@ interface AppStore {
 
 // ── Store Creation ──────────────────────────────────────────────────
 
-export const useStore = create<AppStore>((set, get) => ({
+export const useStore = create<AppStore>((set, get) => {
+  // Recompute the billing slice from current state. Called after any mutation
+  // that affects the billing inputs (approve EI, add Special Order, add
+  // Packaging Order, verify Payment).
+  const recomputeBillings = (): void => {
+    const s = get();
+    set({
+      billingRecords: computeBillingsFromState({
+        endingInventories: s.endingInventories,
+        specialOrders: s.specialOrders,
+        packagingOrders: s.packagingOrders,
+        deliveries: s.deliveries,
+        stores: s.stores,
+        payments: s.payments,
+      }),
+    });
+  };
+
+  return {
   // ─── Auth ───────────────────────────────────────────────────────
 
   currentUser: demoUsers.find((u) => u.role === 'owner') ?? null,
@@ -449,6 +479,9 @@ export const useStore = create<AppStore>((set, get) => ({
       type: 'inventory_review',
       targetStoreId: ei.storeId,
     });
+
+    // Approved EIs feed the billing layer — recompute so billings reflect.
+    recomputeBillings();
   },
 
   markEndingInventoryNeedsReview: (id, reviewerId, comment) => {
@@ -551,7 +584,7 @@ export const useStore = create<AppStore>((set, get) => ({
 
   // ─── Billing ──────────────────────────────────────────────────
 
-  billingRecords: mockBillingRecords,
+  billingRecords: initialBillings,
 
   updateBillingRecord: (id: string, updates: Partial<BillingRecord>) => {
     set((s) => ({
@@ -593,6 +626,9 @@ export const useStore = create<AppStore>((set, get) => ({
           : p,
       ),
     }));
+
+    // Payment status affects billing.status (paid / issued / overdue).
+    recomputeBillings();
   },
 
   // ─── Packaging ────────────────────────────────────────────────
@@ -612,6 +648,9 @@ export const useStore = create<AppStore>((set, get) => ({
     set((s) => ({
       packagingOrders: [...s.packagingOrders, newOrder],
     }));
+
+    // Packaging totals flow into Zapp Billing for the matching cutoff.
+    recomputeBillings();
   },
 
   // ─── Forecasts ────────────────────────────────────────────────
@@ -703,6 +742,9 @@ export const useStore = create<AppStore>((set, get) => ({
       id: `so-${uid()}`,
     };
     set((s) => ({ specialOrders: [...s.specialOrders, newOrder] }));
+
+    // Special Orders are always sold and flow directly into billing totals.
+    recomputeBillings();
   },
 
   // ─── Filtered Data Helpers ────────────────────────────────────
@@ -852,4 +894,5 @@ export const useStore = create<AppStore>((set, get) => ({
         return [];
     }
   },
-}));
+  };
+});

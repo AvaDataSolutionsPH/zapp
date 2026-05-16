@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import {
   CheckCircle,
   AlertCircle,
+  AlertOctagon,
   Image as ImageIcon,
   Bot,
   History,
@@ -22,11 +23,12 @@ import {
   Modal,
   useToast,
 } from '@/components/ui';
-import type { EndingInventory } from '@/types';
+import type { EndingInventory, EndingInventoryCorrectionItem } from '@/types';
 import {
   computeEndingInventory,
   type EndingInventoryComputation,
 } from '@/lib/inventoryComputations';
+import { CorrectionRequestForm } from './CorrectionRequestForm';
 
 interface Props {
   ei: EndingInventory | null;
@@ -56,10 +58,12 @@ export function InventoryReviewDetailDrawer({ ei, open, onClose }: Props) {
   const currentUser = useStore((s) => s.currentUser);
   const approveEI = useStore((s) => s.approveEndingInventory);
   const flagEI = useStore((s) => s.markEndingInventoryNeedsReview);
+  const requestCorrection = useStore((s) => s.requestEndingInventoryCorrection);
   const { addToast } = useToast();
 
   const [showApprove, setShowApprove] = useState(false);
   const [showNeedsReview, setShowNeedsReview] = useState(false);
+  const [showCorrection, setShowCorrection] = useState(false);
   const [needsReviewComment, setNeedsReviewComment] = useState('');
 
   const store = ei ? stores.find((s) => s.id === ei.storeId) : null;
@@ -91,6 +95,19 @@ export function InventoryReviewDetailDrawer({ ei, open, onClose }: Props) {
     setShowNeedsReview(false);
     setNeedsReviewComment('');
     addToast('success', 'Store notified for clarification.');
+  };
+
+  const onSubmitCorrection = (
+    corrections: EndingInventoryCorrectionItem[],
+    reason: string,
+  ) => {
+    if (!ei || !currentUser) return;
+    requestCorrection(ei.id, currentUser.id, corrections, reason);
+    setShowCorrection(false);
+    addToast(
+      'success',
+      `${corrections.length} correction${corrections.length === 1 ? '' : 's'} sent to store.`,
+    );
   };
 
   const title = delivery ? `Inventory Review · ${delivery.drNumber}` : 'Inventory Review';
@@ -427,13 +444,20 @@ export function InventoryReviewDetailDrawer({ ei, open, onClose }: Props) {
 
           {/* Action buttons */}
           {canAct && (
-            <div className="sticky bottom-0 -mx-6 px-6 py-4 bg-white border-t border-gray-200 flex gap-3 justify-end">
+            <div className="sticky bottom-0 -mx-6 px-6 py-4 bg-white border-t border-gray-200 flex gap-3 justify-end flex-wrap">
               <Button
                 variant="outline"
                 iconLeft={<AlertCircle size={14} />}
                 onClick={() => setShowNeedsReview(true)}
               >
                 Mark Needs Review
+              </Button>
+              <Button
+                variant="danger"
+                iconLeft={<AlertOctagon size={14} />}
+                onClick={() => setShowCorrection(true)}
+              >
+                Request Correction
               </Button>
               <Button
                 variant="primary"
@@ -462,6 +486,14 @@ export function InventoryReviewDetailDrawer({ ei, open, onClose }: Props) {
         title="Approve Ending Inventory"
         message={`Approve ending inventory for ${store?.name ?? 'this store'}? This action is final — approved inventories feed downstream billing and cannot be reverted.`}
         confirmLabel="Approve"
+      />
+
+      <CorrectionRequestForm
+        open={showCorrection}
+        onClose={() => setShowCorrection(false)}
+        ei={ei}
+        deliveryItems={delivery?.items ?? []}
+        onSubmit={onSubmitCorrection}
       />
 
       <Modal open={showNeedsReview} onClose={() => setShowNeedsReview(false)} title="Mark as Needs Review">

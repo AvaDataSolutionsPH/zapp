@@ -11,6 +11,7 @@ export type UserRole =
   | 'plant_manager'
   | 'billing_user'
   | 'partner_distributor'
+  | 'sub_partner_distributor'
   | 'franchisee_distributor'
   | 'franchisee_direct'
   | 'area_manager';
@@ -74,6 +75,7 @@ export interface User {
   avatar: string;
   plantId?: string;
   distributorId?: string;
+  subPartnerDistributorId?: string;
   areaIds?: string[];
   assignedStoreIds?: string[];
 }
@@ -98,6 +100,18 @@ export interface Distributor {
   status: DistributorStatus;
 }
 
+export interface SubPartnerDistributor {
+  id: string;
+  name: string;
+  contactPerson: string;
+  email: string;
+  phone: string;
+  parentDistributorId: string;
+  plantId: string;
+  assignedStoreIds: string[];
+  status: DistributorStatus;
+}
+
 export interface AreaSupervisor {
   id: string;
   name: string;
@@ -118,6 +132,7 @@ export interface Store {
   lng: number;
   plantId: string;
   distributorId?: string;
+  subPartnerDistributorId?: string;
   areaSupervisorId: string;
   franchiseType: FranchiseType;
   status: StoreStatus;
@@ -288,6 +303,9 @@ export interface BillingRecord {
   franchiseeProfit: number;
   remitToPD: number;
   cutoffPeriod: string;
+  pdProfit?: number;
+  spdProfit?: number;
+  subPartnerDistributorId?: string;
 }
 
 export interface Payment {

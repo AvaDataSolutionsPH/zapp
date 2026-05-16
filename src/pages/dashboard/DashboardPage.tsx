@@ -9,6 +9,7 @@ import { ForecasterDashboard } from './ForecasterDashboard';
 import { PlantManagerDashboard } from './PlantManagerDashboard';
 import { BillingDashboard } from './BillingDashboard';
 import { DistributorDashboard } from './DistributorDashboard';
+import { SubPartnerDashboard } from './SubPartnerDashboard';
 import { FranchiseeDashboard } from './FranchiseeDashboard';
 import { AreaManagerDashboard } from './AreaManagerDashboard';
 
@@ -36,6 +37,8 @@ export default function DashboardPage() {
       return <BillingDashboard />;
     case 'partner_distributor':
       return <DistributorDashboard />;
+    case 'sub_partner_distributor':
+      return <SubPartnerDashboard />;
     case 'franchisee_distributor':
     case 'franchisee_direct':
       return <FranchiseeDashboard />;

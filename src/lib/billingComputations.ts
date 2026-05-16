@@ -231,6 +231,14 @@ export function computeBillingsFromState(
     const remitToPD = isDirect ? 0 : grossSales * 0.85;
     const zappBilling = drSold + packagingTotal;
 
+    // PD Profit pool = 10% Gross (distributor flow only). When the store has a
+    // Sub-Partner Distributor assigned, the pool splits 50/50 between PD and SPD;
+    // otherwise PD keeps the full pool.
+    const pdProfitFull = isDirect ? 0 : grossSales * 0.10;
+    const hasSpd = !!store.subPartnerDistributorId;
+    const pdProfit = hasSpd ? pdProfitFull / 2 : pdProfitFull;
+    const spdProfit = hasSpd ? pdProfitFull / 2 : 0;
+
     const [yearStr, monthStr] = b.yearMonth.split('-');
     const year = parseInt(yearStr, 10);
     const monthZeroBased = parseInt(monthStr, 10) - 1;
@@ -261,6 +269,9 @@ export function computeBillingsFromState(
       franchiseeProfit,
       remitToPD,
       cutoffPeriod: b.cutoffRange,
+      pdProfit,
+      spdProfit,
+      subPartnerDistributorId: store.subPartnerDistributorId,
     });
   }
 

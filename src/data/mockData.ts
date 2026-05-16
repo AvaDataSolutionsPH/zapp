@@ -7,6 +7,7 @@ import type {
   Plant,
   SKU,
   Distributor,
+  SubPartnerDistributor,
   AreaSupervisor,
   Store,
   Application,
@@ -115,6 +116,24 @@ export const distributors: Distributor[] = [
   },
 ];
 
+// ─── Sub-Partner Distributors ───────────────────────────────────
+// Optional layer under a Partner Distributor. Receives a 50% share of the
+// parent PD's profit (i.e. 5% of Gross instead of the parent's 10%).
+
+export const subPartnerDistributors: SubPartnerDistributor[] = [
+  {
+    id: 'spd-01',
+    name: 'Albay South Sub-Distribution',
+    contactPerson: 'Mariel Tan',
+    email: 'mariel@albaysouthdist.ph',
+    phone: '+63-918-222-3344',
+    parentDistributorId: 'dist-01',
+    plantId: 'plant-01',
+    assignedStoreIds: ['store-02', 'store-04'],
+    status: 'active',
+  },
+];
+
 // ─── Area Supervisors ───────────────────────────────────────────
 
 export const areaSupervisors: AreaSupervisor[] = [
@@ -205,7 +224,7 @@ export const stores: Store[] = [
   {
     id: 'store-02', name: 'ZAPP Daraga Market', businessName: 'Daraga Market Treats', ownerName: 'Jose Ramos',
     address: '45 Market Rd, Daraga, Albay', lat: 13.1548, lng: 123.6982, plantId: 'plant-01',
-    distributorId: 'dist-01', areaSupervisorId: 'am-01', franchiseType: 'distributor', status: 'active',
+    distributorId: 'dist-01', subPartnerDistributorId: 'spd-01', areaSupervisorId: 'am-01', franchiseType: 'distributor', status: 'active',
     province: 'Albay', area: 'Daraga', phone: '+63-926-001-0002', email: 'daraga.market@zapp.ph', createdAt: '2025-07-01', deliveryStatus: 'active',
   },
   {
@@ -217,7 +236,7 @@ export const stores: Store[] = [
   {
     id: 'store-04', name: 'ZAPP Tabaco Plaza', businessName: 'Tabaco Donut Hub', ownerName: 'Pedro Garcia',
     address: '12 National Hwy, Tabaco City, Albay', lat: 13.3587, lng: 123.7338, plantId: 'plant-01',
-    distributorId: 'dist-01', areaSupervisorId: 'am-02', franchiseType: 'distributor', status: 'active',
+    distributorId: 'dist-01', subPartnerDistributorId: 'spd-01', areaSupervisorId: 'am-02', franchiseType: 'distributor', status: 'active',
     province: 'Albay', area: 'Tabaco', phone: '+63-926-001-0004', email: 'tabaco.plaza@zapp.ph', createdAt: '2025-09-01', deliveryStatus: 'active',
   },
   {
@@ -890,6 +909,11 @@ export const users: User[] = [
     id: 'user-10', name: 'Ricardo Santos', email: 'ricardo@mmfoods.ph', role: 'partner_distributor',
     avatar: 'https://ui-avatars.com/api/?name=Ricardo+Santos&background=A855F7&color=fff',
     distributorId: 'dist-03', plantId: 'plant-02',
+  },
+  {
+    id: 'user-11', name: 'Mariel Tan', email: 'mariel@albaysouthdist.ph', role: 'sub_partner_distributor',
+    avatar: 'https://ui-avatars.com/api/?name=Mariel+Tan&background=14B8A6&color=fff',
+    distributorId: 'dist-01', subPartnerDistributorId: 'spd-01', plantId: 'plant-01',
   },
 ];
 

@@ -11,6 +11,7 @@ import type {
   Store,
   Application,
   Distributor,
+  SubPartnerDistributor,
   AreaSupervisor,
   Delivery,
   BeginningInventory,
@@ -36,6 +37,7 @@ import {
   stores as mockStores,
   applications as mockApplications,
   distributors as mockDistributors,
+  subPartnerDistributors as mockSubPartnerDistributors,
   areaSupervisors as mockAreaSupervisors,
   deliveries as mockDeliveries,
   beginningInventories as mockBeginningInventories,
@@ -106,6 +108,9 @@ interface AppStore {
 
   // Distributors
   distributors: Distributor[];
+
+  // Sub-Partner Distributors
+  subPartnerDistributors: SubPartnerDistributor[];
 
   // Area Supervisors
   areaSupervisors: AreaSupervisor[];
@@ -383,6 +388,10 @@ export const useStore = create<AppStore>((set, get) => {
   // ─── Distributors ──────────────────────────────────────────────
 
   distributors: mockDistributors,
+
+  // ─── Sub-Partner Distributors ─────────────────────────────────
+
+  subPartnerDistributors: mockSubPartnerDistributors,
 
   // ─── Area Supervisors ─────────────────────────────────────────────
 
@@ -767,6 +776,11 @@ export const useStore = create<AppStore>((set, get) => {
       case 'franchisee_distributor':
         return stores.filter((s) => s.distributorId === currentUser.distributorId);
 
+      case 'sub_partner_distributor':
+        return stores.filter(
+          (s) => s.subPartnerDistributorId === currentUser.subPartnerDistributorId,
+        );
+
       case 'area_manager':
         return stores.filter(
           (s) =>
@@ -799,7 +813,8 @@ export const useStore = create<AppStore>((set, get) => {
         return deliveries.filter((d) => d.plantId === currentUser.plantId);
 
       case 'partner_distributor':
-      case 'franchisee_distributor': {
+      case 'franchisee_distributor':
+      case 'sub_partner_distributor': {
         const storeIds = get()
           .getStoresForCurrentUser()
           .map((s) => s.id);
@@ -839,6 +854,11 @@ export const useStore = create<AppStore>((set, get) => {
         return billingRecords.filter(
           (b) => b.distributorId === currentUser.distributorId,
         );
+
+      case 'sub_partner_distributor': {
+        const storeIds = new Set(get().getStoresForCurrentUser().map((s) => s.id));
+        return billingRecords.filter((b) => storeIds.has(b.storeId));
+      }
 
       case 'area_manager': {
         const storeIds = currentUser.assignedStoreIds ?? [];

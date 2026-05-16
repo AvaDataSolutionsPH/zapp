@@ -99,7 +99,10 @@ export default function EndingInventoryPage() {
     [endingInventories, myStoreIds],
   );
 
-  const delivery = eligibleDeliveries.find((d) => d.id === selectedDeliveryId);
+  // Look up from the full deliveries list — the "eligibleDeliveries" filter only
+  // gates the new-submission dropdown. Once an EI exists (e.g. during resubmit),
+  // the delivery's tracking status (in_transit / scheduled) is irrelevant.
+  const delivery = deliveries.find((d) => d.id === selectedDeliveryId);
   const store = delivery ? stores.find((s) => s.id === delivery.storeId) : null;
 
   const deliveryOptions: SelectOption[] = [

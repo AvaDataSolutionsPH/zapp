@@ -6,6 +6,9 @@ import {
   Save,
   AlertTriangle,
   CheckSquare,
+  History,
+  Eye,
+  RotateCcw,
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { aiService } from '@/services/api';
@@ -19,9 +22,11 @@ import {
   FileUpload,
   ConfirmDialog,
   EmptyState,
+  StatusBadge,
 } from '@/components/ui';
 import type { SelectOption, UploadedFile } from '@/components/ui';
-import type { AIResult, InventoryItem } from '@/types';
+import type { AIResult, EndingInventory, InventoryItem } from '@/types';
+import { InventoryReviewDetailDrawer } from './InventoryReviewDetailDrawer';
 
 interface UnsoldRow {
   skuId: string;
@@ -51,6 +56,9 @@ export default function EndingInventoryPage() {
     deliveries,
     stores,
     addEndingInventory,
+    endingInventories,
+    currentUser,
+    resubmitEndingInventory,
   } = useStore();
 
   // Deliveries that have been delivered (or have beginning inventory)
@@ -68,6 +76,28 @@ export default function EndingInventoryPage() {
   const [showSave, setShowSave] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [resubmittingEI, setResubmittingEI] = useState<EndingInventory | null>(null);
+  const [viewingEI, setViewingEI] = useState<EndingInventory | null>(null);
+
+  const isFranchisee =
+    currentUser?.role === 'franchisee_distributor' ||
+    currentUser?.role === 'franchisee_direct';
+
+  const myStoreIds = useMemo(
+    () => currentUser?.assignedStoreIds ?? [],
+    [currentUser],
+  );
+
+  const myEIs = useMemo(
+    () =>
+      endingInventories
+        .filter((ei) => myStoreIds.includes(ei.storeId))
+        .slice()
+        .sort((a, b) =>
+          (b.submittedAt ?? b.date).localeCompare(a.submittedAt ?? a.date),
+        ),
+    [endingInventories, myStoreIds],
+  );
 
   const delivery = eligibleDeliveries.find((d) => d.id === selectedDeliveryId);
   const store = delivery ? stores.find((s) => s.id === delivery.storeId) : null;
@@ -160,9 +190,56 @@ export default function EndingInventoryPage() {
     );
   };
 
-  // Save
+  // Enter resubmit mode: pre-fill rows with reviewer's correctedQty when available.
+  const enterResubmitMode = (ei: EndingInventory) => {
+    const del = deliveries.find((d) => d.id === ei.deliveryId);
+    if (!del) return;
+    const latestCorrection = ei.revisions
+      ?.slice()
+      .reverse()
+      .find((r) => r.action === 'correction_requested');
+    const correctionsBySku = new Map<string, number>(
+      latestCorrection?.corrections?.map((c) => [c.skuId, c.correctedQty]) ?? [],
+    );
+
+    setResubmittingEI(ei);
+    setSelectedDeliveryId(del.id);
+    setUnsoldRows(
+      del.items.map((item) => {
+        const submittedUnsold =
+          ei.unsoldItems.find((u) => u.skuId === item.skuId)?.quantity ?? 0;
+        const targetUnsold = correctionsBySku.get(item.skuId) ?? submittedUnsold;
+        const clamped = Math.max(0, Math.min(targetUnsold, item.quantity));
+        return {
+          skuId: item.skuId,
+          skuName: item.skuName,
+          deliveredQty: item.quantity,
+          unsoldQty: clamped,
+          soldQty: item.quantity - clamped,
+          aiEstimate: null,
+          aiConfidence: null,
+          useAI: false,
+          hasDiscrepancy: false,
+        };
+      }),
+    );
+    setAiDone(false);
+    setCrateFiles([]);
+    setNotes('');
+  };
+
+  const cancelResubmit = () => {
+    setResubmittingEI(null);
+    setSelectedDeliveryId('');
+    setUnsoldRows([]);
+    setCrateFiles([]);
+    setAiDone(false);
+    setNotes('');
+  };
+
+  // Save (new submission or resubmit)
   const handleSave = () => {
-    if (!delivery) return;
+    if (!delivery || !currentUser) return;
     setSaveLoading(true);
     setTimeout(() => {
       const items: InventoryItem[] = unsoldRows.map((r) => ({
@@ -175,18 +252,39 @@ export default function EndingInventoryPage() {
         manualOverride: !r.useAI,
       }));
 
-      const id = `ei-${Date.now().toString(36)}`;
-      addEndingInventory({
-        id,
-        deliveryId: delivery.id,
-        storeId: delivery.storeId,
-        date: new Date().toISOString().slice(0, 10),
-        crateImageUrls: crateFiles.map((f) => f.preview ?? 'mock'),
-        unsoldItems: items,
-        aiResults: [],
-        status: 'confirmed',
-        notes: notes || undefined,
-      });
+      if (resubmittingEI) {
+        resubmitEndingInventory(
+          resubmittingEI.id,
+          items,
+          currentUser.id,
+          notes || undefined,
+        );
+      } else {
+        const id = `ei-${Date.now().toString(36)}`;
+        const now = new Date().toISOString();
+        addEndingInventory({
+          id,
+          deliveryId: delivery.id,
+          storeId: delivery.storeId,
+          date: now.slice(0, 10),
+          crateImageUrls: crateFiles.map((f) => f.preview ?? 'mock'),
+          unsoldItems: items,
+          aiResults: [],
+          status: 'pending_review',
+          notes: notes || undefined,
+          submittedAt: now,
+          originalUnsoldItems: items,
+          revisions: [
+            {
+              id: `eir-${Date.now().toString(36)}`,
+              action: 'submitted',
+              performedBy: currentUser.id,
+              performedAt: now,
+              comment: notes || undefined,
+            },
+          ],
+        });
+      }
 
       setSaveLoading(false);
       setShowSave(false);
@@ -201,15 +299,21 @@ export default function EndingInventoryPage() {
   const discrepancyCount = unsoldRows.filter((r) => r.hasDiscrepancy).length;
 
   if (submitted) {
+    const wasResubmit = resubmittingEI !== null;
     return (
       <div className="p-6">
         <EmptyState
           icon={<CheckSquare size={28} />}
-          title="Ending Inventory Saved"
-          description={`Ending inventory for ${delivery?.drNumber} has been reconciled.`}
+          title={wasResubmit ? 'Resubmitted for Review' : 'Submitted for Review'}
+          description={
+            wasResubmit
+              ? `Your corrections for ${delivery?.drNumber} are now back in your reviewer's queue.`
+              : `Your ending inventory for ${delivery?.drNumber} has been sent to your reviewer.`
+          }
           actionLabel="Process Another"
           onAction={() => {
             setSubmitted(false);
+            setResubmittingEI(null);
             setSelectedDeliveryId('');
             setUnsoldRows([]);
             setCrateFiles([]);
@@ -228,17 +332,100 @@ export default function EndingInventoryPage() {
         <p className="text-sm text-gray-500 mt-1">Record unsold quantities and reconcile end-of-day inventory</p>
       </div>
 
-      {/* Select Delivery */}
-      <Card>
-        <CardContent>
-          <Select
-            label="Select Delivery"
-            options={deliveryOptions}
-            value={selectedDeliveryId}
-            onChange={(e) => handleDeliveryChange(e.target.value)}
-          />
-        </CardContent>
-      </Card>
+      {/* My Submission History — franchisee-only */}
+      {isFranchisee && myEIs.length > 0 && !resubmittingEI && (
+        <Card>
+          <CardHeader>
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <History size={18} /> My Submission History
+            </h2>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
+                  <tr>
+                    <th className="px-3 py-2 text-left">EI Date</th>
+                    <th className="px-3 py-2 text-left">DR Number</th>
+                    <th className="px-3 py-2 text-left">Status</th>
+                    <th className="px-3 py-2 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {myEIs.slice(0, 10).map((ei) => {
+                    const drNumber = deliveries.find((d) => d.id === ei.deliveryId)?.drNumber;
+                    const canResubmit = ei.status === 'correction_required';
+                    return (
+                      <tr key={ei.id}>
+                        <td className="px-3 py-2 text-gray-900">{ei.date}</td>
+                        <td className="px-3 py-2 font-mono text-xs text-gray-700">
+                          {drNumber ?? '—'}
+                        </td>
+                        <td className="px-3 py-2">
+                          <StatusBadge category="inventory_review" status={ei.status} size="sm" />
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <div className="inline-flex items-center gap-4">
+                            <button
+                              onClick={() => setViewingEI(ei)}
+                              className="text-xs text-zapp-orange hover:underline inline-flex items-center gap-1"
+                            >
+                              <Eye size={12} /> View
+                            </button>
+                            {canResubmit && (
+                              <button
+                                onClick={() => enterResubmitMode(ei)}
+                                className="text-xs text-red-700 hover:underline inline-flex items-center gap-1 font-medium"
+                              >
+                                <RotateCcw size={12} /> Resubmit
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Resubmit banner */}
+      {resubmittingEI && (
+        <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 flex items-start gap-3">
+          <RotateCcw size={18} className="text-red-700 shrink-0 mt-0.5" />
+          <div className="flex-1 text-sm min-w-0">
+            <p className="font-medium text-red-900">
+              Resubmitting EI {resubmittingEI.id} ({delivery?.drNumber ?? '—'})
+            </p>
+            <p className="text-red-800 mt-0.5">
+              Your reviewer's suggested quantities are pre-filled below. Adjust as needed, then submit for re-review. Original crate photos are preserved.
+            </p>
+          </div>
+          <button
+            onClick={cancelResubmit}
+            className="text-xs text-red-700 hover:text-red-900 font-medium underline shrink-0"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* Select Delivery — hidden in resubmit mode (locked to existing) */}
+      {!resubmittingEI && (
+        <Card>
+          <CardContent>
+            <Select
+              label="Select Delivery"
+              options={deliveryOptions}
+              value={selectedDeliveryId}
+              onChange={(e) => handleDeliveryChange(e.target.value)}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {delivery && unsoldRows.length > 0 && (
         <>
@@ -338,31 +525,33 @@ export default function EndingInventoryPage() {
             </CardContent>
           </Card>
 
-          {/* Upload Crate Images */}
-          <Card>
-            <CardHeader>
-              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <Camera size={18} /> Upload End-of-Day Crate Images
-              </h2>
-            </CardHeader>
-            <CardContent>
-              <FileUpload
-                accept="image/*"
-                multiple
-                maxSizeMB={10}
-                onChange={setCrateFiles}
-              />
-              {crateFiles.length > 0 && (
-                <div className="mt-4 grid grid-cols-4 gap-2">
-                  {crateFiles.map((f) =>
-                    f.preview ? (
-                      <img key={f.id} src={f.preview} alt="Crate" className="h-20 w-full object-cover rounded-lg border border-gray-200" />
-                    ) : null,
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          {/* Upload Crate Images — hidden in resubmit mode; original photos preserved */}
+          {!resubmittingEI && (
+            <Card>
+              <CardHeader>
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <Camera size={18} /> Upload End-of-Day Crate Images
+                </h2>
+              </CardHeader>
+              <CardContent>
+                <FileUpload
+                  accept="image/*"
+                  multiple
+                  maxSizeMB={10}
+                  onChange={setCrateFiles}
+                />
+                {crateFiles.length > 0 && (
+                  <div className="mt-4 grid grid-cols-4 gap-2">
+                    {crateFiles.map((f) =>
+                      f.preview ? (
+                        <img key={f.id} src={f.preview} alt="Crate" className="h-20 w-full object-cover rounded-lg border border-gray-200" />
+                      ) : null,
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* AI Estimation */}
           <Card>
@@ -445,11 +634,11 @@ export default function EndingInventoryPage() {
 
               <Button
                 variant="primary"
-                iconLeft={<Save size={16} />}
+                iconLeft={resubmittingEI ? <RotateCcw size={16} /> : <Save size={16} />}
                 onClick={() => setShowSave(true)}
                 fullWidth
               >
-                Save Ending Inventory
+                {resubmittingEI ? 'Resubmit Corrected Quantities' : 'Save Ending Inventory'}
               </Button>
             </CardContent>
           </Card>
@@ -460,10 +649,20 @@ export default function EndingInventoryPage() {
         open={showSave}
         onClose={() => setShowSave(false)}
         onConfirm={handleSave}
-        title="Save Ending Inventory"
-        message={`Save ending inventory with ${totalSold} sold and ${totalUnsold} unsold items?`}
-        confirmLabel="Save"
+        title={resubmittingEI ? 'Resubmit Ending Inventory' : 'Save Ending Inventory'}
+        message={
+          resubmittingEI
+            ? `Resubmit corrected quantities (${totalSold} sold / ${totalUnsold} unsold) back to your reviewer's queue?`
+            : `Save ending inventory with ${totalSold} sold and ${totalUnsold} unsold items?`
+        }
+        confirmLabel={resubmittingEI ? 'Resubmit' : 'Save'}
         loading={saveLoading}
+      />
+
+      <InventoryReviewDetailDrawer
+        ei={viewingEI}
+        open={viewingEI !== null}
+        onClose={() => setViewingEI(null)}
       />
     </div>
   );

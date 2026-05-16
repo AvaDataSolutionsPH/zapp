@@ -26,6 +26,8 @@ import type {
   Notification,
   AuditEntry,
   SpecialOrder,
+  EndingInventoryReview,
+  EndingInventoryCorrectionItem,
 } from '@/types';
 import {
   demoUsers,
@@ -115,6 +117,22 @@ interface AppStore {
   addEndingInventory: (inv: EndingInventory) => void;
   confirmEndingInventory: (id: string, items: InventoryItem[]) => void;
 
+  // Ending Inventory Review (state machine)
+  approveEndingInventory: (id: string, reviewerId: string, comment?: string) => void;
+  markEndingInventoryNeedsReview: (id: string, reviewerId: string, comment: string) => void;
+  requestEndingInventoryCorrection: (
+    id: string,
+    reviewerId: string,
+    corrections: EndingInventoryCorrectionItem[],
+    reason: string,
+  ) => void;
+  resubmitEndingInventory: (
+    id: string,
+    items: InventoryItem[],
+    submitterId: string,
+    comment?: string,
+  ) => void;
+
   // Billing
   billingRecords: BillingRecord[];
   updateBillingRecord: (id: string, updates: Partial<BillingRecord>) => void;
@@ -153,6 +171,7 @@ interface AppStore {
   // Notifications
   notifications: Notification[];
   markNotificationRead: (id: string) => void;
+  addNotification: (notif: Omit<Notification, 'id' | 'createdAt' | 'read'>) => void;
 
   // UI State
   sidebarOpen: boolean;
@@ -169,6 +188,7 @@ interface AppStore {
   getStoresForCurrentUser: () => Store[];
   getDeliveriesForCurrentUser: () => Delivery[];
   getBillingForCurrentUser: () => BillingRecord[];
+  getEndingInventoriesForReview: () => EndingInventory[];
 }
 
 // ── Store Creation ──────────────────────────────────────────────────
@@ -394,6 +414,141 @@ export const useStore = create<AppStore>((set, get) => ({
     }));
   },
 
+  // ─── Ending Inventory Review (state machine) ──────────────────
+
+  approveEndingInventory: (id, reviewerId, comment) => {
+    const ei = get().endingInventories.find((e) => e.id === id);
+    if (!ei || ei.status === 'approved') return;
+
+    const now = new Date().toISOString();
+    const review: EndingInventoryReview = {
+      id: `eir-${uid()}`,
+      action: 'approved',
+      performedBy: reviewerId,
+      performedAt: now,
+      comment,
+    };
+
+    set((s) => ({
+      endingInventories: s.endingInventories.map((e) =>
+        e.id === id
+          ? {
+              ...e,
+              status: 'approved' as const,
+              revisions: [...(e.revisions ?? []), review],
+              reviewedBy: reviewerId,
+              reviewedAt: now,
+            }
+          : e,
+      ),
+    }));
+
+    get().addNotification({
+      title: 'Ending Inventory Approved',
+      message: `Your ending inventory dated ${ei.date} has been approved.`,
+      type: 'inventory_review',
+      targetStoreId: ei.storeId,
+    });
+  },
+
+  markEndingInventoryNeedsReview: (id, reviewerId, comment) => {
+    const ei = get().endingInventories.find((e) => e.id === id);
+    if (!ei || ei.status === 'approved') return;
+
+    const now = new Date().toISOString();
+    const review: EndingInventoryReview = {
+      id: `eir-${uid()}`,
+      action: 'needs_review',
+      performedBy: reviewerId,
+      performedAt: now,
+      comment,
+    };
+
+    set((s) => ({
+      endingInventories: s.endingInventories.map((e) =>
+        e.id === id
+          ? {
+              ...e,
+              status: 'needs_review' as const,
+              revisions: [...(e.revisions ?? []), review],
+              reviewedBy: reviewerId,
+              reviewedAt: now,
+            }
+          : e,
+      ),
+    }));
+
+    get().addNotification({
+      title: 'Ending Inventory Needs Review',
+      message: `Reviewer asked for clarification on your ending inventory dated ${ei.date}: ${comment}`,
+      type: 'inventory_review',
+      targetStoreId: ei.storeId,
+    });
+  },
+
+  requestEndingInventoryCorrection: (id, reviewerId, corrections, reason) => {
+    const ei = get().endingInventories.find((e) => e.id === id);
+    if (!ei || ei.status === 'approved') return;
+
+    const now = new Date().toISOString();
+    const review: EndingInventoryReview = {
+      id: `eir-${uid()}`,
+      action: 'correction_requested',
+      performedBy: reviewerId,
+      performedAt: now,
+      reason,
+      corrections,
+    };
+
+    set((s) => ({
+      endingInventories: s.endingInventories.map((e) =>
+        e.id === id
+          ? {
+              ...e,
+              status: 'correction_required' as const,
+              revisions: [...(e.revisions ?? []), review],
+              reviewedBy: reviewerId,
+              reviewedAt: now,
+            }
+          : e,
+      ),
+    }));
+
+    get().addNotification({
+      title: 'Ending Inventory Needs Correction',
+      message: `Reviewer requested specific corrections for your ending inventory dated ${ei.date}. Please review and resubmit.`,
+      type: 'inventory_review',
+      targetStoreId: ei.storeId,
+    });
+  },
+
+  resubmitEndingInventory: (id, items, submitterId, comment) => {
+    const ei = get().endingInventories.find((e) => e.id === id);
+    if (!ei || ei.status === 'approved') return;
+
+    const now = new Date().toISOString();
+    const review: EndingInventoryReview = {
+      id: `eir-${uid()}`,
+      action: 'resubmitted',
+      performedBy: submitterId,
+      performedAt: now,
+      comment,
+    };
+
+    set((s) => ({
+      endingInventories: s.endingInventories.map((e) =>
+        e.id === id
+          ? {
+              ...e,
+              unsoldItems: items,
+              status: 'pending_review' as const,
+              revisions: [...(e.revisions ?? []), review],
+            }
+          : e,
+      ),
+    }));
+  },
+
   // ─── Billing ──────────────────────────────────────────────────
 
   billingRecords: mockBillingRecords,
@@ -514,6 +669,16 @@ export const useStore = create<AppStore>((set, get) => ({
         n.id === id ? { ...n, read: true } : n,
       ),
     }));
+  },
+
+  addNotification: (notif) => {
+    const newNotif: Notification = {
+      ...notif,
+      id: `notif-${uid()}`,
+      read: false,
+      createdAt: new Date().toISOString(),
+    };
+    set((s) => ({ notifications: [newNotif, ...s.notifications] }));
   },
 
   // ─── UI State ─────────────────────────────────────────────────
@@ -645,6 +810,43 @@ export const useStore = create<AppStore>((set, get) => ({
 
       case 'forecaster':
         return billingRecords.filter((b) => b.plantId === currentUser.plantId);
+
+      default:
+        return [];
+    }
+  },
+
+  getEndingInventoriesForReview: (): EndingInventory[] => {
+    const { currentUser, endingInventories, stores } = get();
+    if (!currentUser) return [];
+
+    switch (currentUser.role) {
+      case 'owner':
+      case 'operations_manager':
+        return endingInventories;
+
+      case 'partner_distributor': {
+        const scopedStoreIds = new Set(
+          stores
+            .filter((s) => s.distributorId === currentUser.distributorId)
+            .map((s) => s.id),
+        );
+        return endingInventories.filter((ei) => scopedStoreIds.has(ei.storeId));
+      }
+
+      case 'area_manager': {
+        const scopedStoreIds = new Set(
+          stores
+            .filter(
+              (s) =>
+                s.franchiseType === 'direct' &&
+                (currentUser.assignedStoreIds?.includes(s.id) ||
+                  currentUser.areaIds?.includes(s.areaSupervisorId)),
+            )
+            .map((s) => s.id),
+        );
+        return endingInventories.filter((ei) => scopedStoreIds.has(ei.storeId));
+      }
 
       default:
         return [];

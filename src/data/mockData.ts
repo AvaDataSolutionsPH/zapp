@@ -993,7 +993,7 @@ export const users: User[] = [
   {
     id: 'user-09', name: 'Patricia Bautista', email: 'patricia@zappdonuts.ph', role: 'area_manager',
     avatar: 'https://ui-avatars.com/api/?name=Patricia+Bautista&background=84CC16&color=fff',
-    plantId: 'plant-01', areaIds: ['area-albay-01', 'area-albay-02'], assignedStoreIds: ['store-01', 'store-02', 'store-03'],
+    plantId: 'plant-01', areaIds: ['area-albay-01', 'area-albay-02'], assignedStoreIds: ['store-01', 'store-02', 'store-03', 'store-05'],
   },
   {
     id: 'user-10', name: 'Ricardo Santos', email: 'ricardo@mmfoods.ph', role: 'partner_distributor',
@@ -1147,6 +1147,7 @@ export const beginningInventories: BeginningInventory[] = [
 ];
 
 export const endingInventories: EndingInventory[] = [
+  // ei-01: store-01 (distributor dist-01) — fresh submission, awaiting PD (user-06) review
   {
     id: 'ei-01', deliveryId: 'del-01', storeId: 'store-01', date: '2026-03-01',
     crateImageUrls: ['/uploads/inventory/ei-01-crate1.jpg'],
@@ -1160,8 +1161,23 @@ export const endingInventories: EndingInventory[] = [
       { id: 'air-21', type: 'crate_estimate', skuId: 'sku-03', skuName: 'Bavarian Cream', estimatedValue: 4, confidence: 'medium', warning: 'Possibly 4 or 5 unsold' },
       { id: 'air-22', type: 'crate_estimate', skuId: 'sku-09', skuName: 'Cinnamon Sugar', estimatedValue: 2, confidence: 'high' },
     ],
-    status: 'confirmed',
+    status: 'pending_review',
+    submittedAt: '2026-03-01T19:30:00Z',
+    originalUnsoldItems: [
+      { skuId: 'sku-01', skuName: 'Classic Glazed', quantity: 3, aiEstimate: 3, confidence: 'high' },
+      { skuId: 'sku-03', skuName: 'Bavarian Cream', quantity: 5, aiEstimate: 4, confidence: 'medium', discrepancy: 1, manualOverride: true },
+      { skuId: 'sku-09', skuName: 'Cinnamon Sugar', quantity: 2, aiEstimate: 2, confidence: 'high' },
+    ],
+    revisions: [
+      {
+        id: 'eir-01-01', action: 'submitted', performedBy: 'user-07',
+        performedAt: '2026-03-01T19:30:00Z',
+        comment: 'End-of-day inventory submitted for review.',
+      },
+    ],
   },
+
+  // ei-02: store-09 (distributor) — PD flagged for clarification
   {
     id: 'ei-02', deliveryId: 'del-03', storeId: 'store-09', date: '2026-03-01',
     crateImageUrls: ['/uploads/inventory/ei-02-crate1.jpg', '/uploads/inventory/ei-02-crate2.jpg'],
@@ -1175,8 +1191,29 @@ export const endingInventories: EndingInventory[] = [
       { id: 'air-24', type: 'crate_estimate', skuId: 'sku-11', skuName: 'Mango Graham', estimatedValue: 5, confidence: 'medium' },
       { id: 'air-25', type: 'crate_estimate', skuId: 'sku-14', skuName: 'Red Velvet', estimatedValue: 4, confidence: 'high' },
     ],
-    status: 'confirmed',
+    status: 'needs_review',
+    submittedAt: '2026-03-01T20:00:00Z',
+    originalUnsoldItems: [
+      { skuId: 'sku-07', skuName: 'Matcha Glazed', quantity: 8, aiEstimate: 8, confidence: 'high' },
+      { skuId: 'sku-11', skuName: 'Mango Graham', quantity: 6, aiEstimate: 5, confidence: 'medium', discrepancy: 1, manualOverride: true },
+      { skuId: 'sku-14', skuName: 'Red Velvet', quantity: 4, aiEstimate: 4, confidence: 'high' },
+    ],
+    revisions: [
+      {
+        id: 'eir-02-01', action: 'submitted', performedBy: 'user-07',
+        performedAt: '2026-03-01T20:00:00Z',
+      },
+      {
+        id: 'eir-02-02', action: 'needs_review', performedBy: 'user-06',
+        performedAt: '2026-03-02T09:00:00Z',
+        comment: 'Mango Graham unsold count seems high vs AI estimate. Please confirm crate count with a clearer stockroom photo.',
+      },
+    ],
+    reviewedBy: 'user-06',
+    reviewedAt: '2026-03-02T09:00:00Z',
   },
+
+  // ei-03: store-12 — PD requested correction with specific corrected figures
   {
     id: 'ei-03', deliveryId: 'del-06', storeId: 'store-12', date: '2026-03-03',
     crateImageUrls: ['/uploads/inventory/ei-03-crate1.jpg'],
@@ -1188,8 +1225,32 @@ export const endingInventories: EndingInventory[] = [
       { id: 'air-26', type: 'crate_estimate', skuId: 'sku-04', skuName: 'Ube Cheese', estimatedValue: 5, confidence: 'high' },
       { id: 'air-27', type: 'crate_estimate', skuId: 'sku-07', skuName: 'Matcha Glazed', estimatedValue: 7, confidence: 'high' },
     ],
-    status: 'confirmed',
+    status: 'correction_required',
+    submittedAt: '2026-03-03T19:00:00Z',
+    originalUnsoldItems: [
+      { skuId: 'sku-04', skuName: 'Ube Cheese', quantity: 5, aiEstimate: 5, confidence: 'high' },
+      { skuId: 'sku-07', skuName: 'Matcha Glazed', quantity: 7, aiEstimate: 7, confidence: 'high' },
+    ],
+    revisions: [
+      {
+        id: 'eir-03-01', action: 'submitted', performedBy: 'user-07',
+        performedAt: '2026-03-03T19:00:00Z',
+      },
+      {
+        id: 'eir-03-02', action: 'correction_requested', performedBy: 'user-06',
+        performedAt: '2026-03-04T10:00:00Z',
+        reason: 'Physical recount with store via video call shows different figures. Please resubmit with corrected quantities.',
+        corrections: [
+          { skuId: 'sku-04', skuName: 'Ube Cheese', submittedQty: 5, correctedQty: 3 },
+          { skuId: 'sku-07', skuName: 'Matcha Glazed', submittedQty: 7, correctedQty: 8 },
+        ],
+      },
+    ],
+    reviewedBy: 'user-06',
+    reviewedAt: '2026-03-04T10:00:00Z',
   },
+
+  // ei-04: store-10 — clean approved
   {
     id: 'ei-04', deliveryId: 'del-11', storeId: 'store-10', date: '2026-03-06',
     crateImageUrls: ['/uploads/inventory/ei-04-crate1.jpg'],
@@ -1203,7 +1264,89 @@ export const endingInventories: EndingInventory[] = [
       { id: 'air-29', type: 'crate_estimate', skuId: 'sku-08', skuName: 'Salted Caramel', estimatedValue: 6, confidence: 'high' },
       { id: 'air-30', type: 'crate_estimate', skuId: 'sku-10', skuName: 'Pandan Cream', estimatedValue: 3, confidence: 'high' },
     ],
-    status: 'confirmed',
+    status: 'approved',
+    submittedAt: '2026-03-06T19:30:00Z',
+    originalUnsoldItems: [
+      { skuId: 'sku-05', skuName: 'Strawberry Sprinkle', quantity: 4, aiEstimate: 4, confidence: 'high' },
+      { skuId: 'sku-08', skuName: 'Salted Caramel', quantity: 6, aiEstimate: 6, confidence: 'high' },
+      { skuId: 'sku-10', skuName: 'Pandan Cream', quantity: 3, aiEstimate: 3, confidence: 'high' },
+    ],
+    revisions: [
+      {
+        id: 'eir-04-01', action: 'submitted', performedBy: 'user-07',
+        performedAt: '2026-03-06T19:30:00Z',
+      },
+      {
+        id: 'eir-04-02', action: 'approved', performedBy: 'user-06',
+        performedAt: '2026-03-06T21:00:00Z',
+        comment: 'Figures match crate counts. Approved.',
+      },
+    ],
+    reviewedBy: 'user-06',
+    reviewedAt: '2026-03-06T21:00:00Z',
+  },
+
+  // ei-05 (NEW): store-03 (direct franchise) — in Area Supervisor user-09 (Patricia)'s queue, pending review
+  {
+    id: 'ei-05', deliveryId: 'del-10', storeId: 'store-03', date: '2026-03-05',
+    crateImageUrls: ['/uploads/inventory/ei-05-crate1.jpg', '/uploads/inventory/ei-05-crate2.jpg'],
+    unsoldItems: [
+      { skuId: 'sku-01', skuName: 'Classic Glazed', quantity: 6, aiEstimate: 5, confidence: 'medium', discrepancy: 1, manualOverride: true },
+      { skuId: 'sku-06', skuName: 'Cookies & Cream', quantity: 4, aiEstimate: 4, confidence: 'high' },
+      { skuId: 'sku-09', skuName: 'Cinnamon Sugar', quantity: 2, aiEstimate: 2, confidence: 'high' },
+    ],
+    aiResults: [
+      { id: 'air-31', type: 'crate_estimate', skuId: 'sku-01', skuName: 'Classic Glazed', estimatedValue: 5, confidence: 'medium', warning: 'Blurred edge on crate-1 photo; manual recount recommended' },
+      { id: 'air-32', type: 'crate_estimate', skuId: 'sku-06', skuName: 'Cookies & Cream', estimatedValue: 4, confidence: 'high' },
+      { id: 'air-33', type: 'crate_estimate', skuId: 'sku-09', skuName: 'Cinnamon Sugar', estimatedValue: 2, confidence: 'high' },
+    ],
+    status: 'pending_review',
+    submittedAt: '2026-03-05T20:15:00Z',
+    originalUnsoldItems: [
+      { skuId: 'sku-01', skuName: 'Classic Glazed', quantity: 6, aiEstimate: 5, confidence: 'medium', discrepancy: 1, manualOverride: true },
+      { skuId: 'sku-06', skuName: 'Cookies & Cream', quantity: 4, aiEstimate: 4, confidence: 'high' },
+      { skuId: 'sku-09', skuName: 'Cinnamon Sugar', quantity: 2, aiEstimate: 2, confidence: 'high' },
+    ],
+    revisions: [
+      {
+        id: 'eir-05-01', action: 'submitted', performedBy: 'user-08',
+        performedAt: '2026-03-05T20:15:00Z',
+        comment: 'Direct-to-Zapp submission. Manual override on Classic Glazed due to a wet display box.',
+      },
+    ],
+  },
+
+  // ei-06 (NEW): store-05 (direct franchise) — in Patricia's queue, approved
+  {
+    id: 'ei-06', deliveryId: 'del-14', storeId: 'store-05', date: '2026-03-10',
+    crateImageUrls: ['/uploads/inventory/ei-06-crate1.jpg'],
+    unsoldItems: [
+      { skuId: 'sku-02', skuName: 'Chocolate Ring', quantity: 5, aiEstimate: 5, confidence: 'high' },
+      { skuId: 'sku-09', skuName: 'Cinnamon Sugar', quantity: 2, aiEstimate: 2, confidence: 'high' },
+    ],
+    aiResults: [
+      { id: 'air-34', type: 'crate_estimate', skuId: 'sku-02', skuName: 'Chocolate Ring', estimatedValue: 5, confidence: 'high' },
+      { id: 'air-35', type: 'crate_estimate', skuId: 'sku-09', skuName: 'Cinnamon Sugar', estimatedValue: 2, confidence: 'high' },
+    ],
+    status: 'approved',
+    submittedAt: '2026-03-10T19:00:00Z',
+    originalUnsoldItems: [
+      { skuId: 'sku-02', skuName: 'Chocolate Ring', quantity: 5, aiEstimate: 5, confidence: 'high' },
+      { skuId: 'sku-09', skuName: 'Cinnamon Sugar', quantity: 2, aiEstimate: 2, confidence: 'high' },
+    ],
+    revisions: [
+      {
+        id: 'eir-06-01', action: 'submitted', performedBy: 'user-08',
+        performedAt: '2026-03-10T19:00:00Z',
+      },
+      {
+        id: 'eir-06-02', action: 'approved', performedBy: 'user-09',
+        performedAt: '2026-03-10T22:00:00Z',
+        comment: 'Reviewed crate photos; counts match submitted figures. Approved.',
+      },
+    ],
+    reviewedBy: 'user-09',
+    reviewedAt: '2026-03-10T22:00:00Z',
   },
 ];
 

@@ -27,7 +27,20 @@ export type DeliveryStatus = 'scheduled' | 'in_transit' | 'delivered' | 'reconci
 
 export type BeginningInventoryStatus = 'pending_ai' | 'ai_processed' | 'confirmed';
 
-export type EndingInventoryStatus = 'pending' | 'confirmed';
+export type EndingInventoryStatus =
+  | 'pending_review'
+  | 'needs_review'
+  | 'correction_required'
+  | 'approved'
+  | 'pending'
+  | 'confirmed';
+
+export type EndingInventoryReviewAction =
+  | 'submitted'
+  | 'approved'
+  | 'needs_review'
+  | 'correction_requested'
+  | 'resubmitted';
 
 export type AIResultType = 'ocr_dr' | 'crate_estimate' | 'discrepancy';
 
@@ -217,6 +230,23 @@ export interface BeginningInventory {
   notes?: string;
 }
 
+export interface EndingInventoryCorrectionItem {
+  skuId: string;
+  skuName: string;
+  submittedQty: number;
+  correctedQty: number;
+}
+
+export interface EndingInventoryReview {
+  id: string;
+  action: EndingInventoryReviewAction;
+  performedBy: string;
+  performedAt: string;
+  comment?: string;
+  reason?: string;
+  corrections?: EndingInventoryCorrectionItem[];
+}
+
 export interface EndingInventory {
   id: string;
   deliveryId: string;
@@ -227,6 +257,11 @@ export interface EndingInventory {
   aiResults: AIResult[];
   status: EndingInventoryStatus;
   notes?: string;
+  submittedAt?: string;
+  originalUnsoldItems?: InventoryItem[];
+  revisions?: EndingInventoryReview[];
+  reviewedBy?: string;
+  reviewedAt?: string;
 }
 
 // --- Billing & Payments ---
@@ -357,6 +392,7 @@ export interface Notification {
   read: boolean;
   createdAt: string;
   targetRole?: UserRole;
+  targetStoreId?: string;
 }
 
 // --- Special Orders ---

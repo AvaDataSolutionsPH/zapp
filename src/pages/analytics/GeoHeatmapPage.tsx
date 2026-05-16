@@ -21,7 +21,11 @@ import {
 import { MapContainer, TileLayer, Marker, Popup, CircleMarker } from 'react-leaflet';
 import L from 'leaflet';
 
-// Fix leaflet default icon
+// Fix leaflet default icon — leaflet ships a private `_getIconUrl` that
+// breaks bundler asset resolution; deleting it forces fallback to the
+// mergeOptions URLs below. The `any` cast is intentional because the
+// property isn't part of Leaflet's public TypeScript surface.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',

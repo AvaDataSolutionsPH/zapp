@@ -27,6 +27,10 @@ interface ToastContextValue {
 
 const ToastContext = createContext<ToastContextValue | null>(null);
 
+// The hook is intentionally co-located with its provider so consumers import
+// both from the same module path. Splitting would force every consumer to
+// update imports.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useToast() {
   const ctx = useContext(ToastContext);
   if (!ctx) throw new Error('useToast must be used inside <ToastProvider>');

@@ -74,7 +74,9 @@ function generateAILogs(billingId: string): AILogEntry[] {
 // ── Due Timer Component ─────────────────────────────────────────────────
 
 function DueTimer({ dueAt, status }: { dueAt: string; status: string }) {
-  const [now, setNow] = useState(Date.now());
+  // Lazy initializer keeps Date.now() out of the render body — required by the
+  // React Compiler's purity-during-render check.
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 60_000);

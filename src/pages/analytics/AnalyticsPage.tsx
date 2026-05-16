@@ -506,7 +506,7 @@ export default function AnalyticsPage() {
                       <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `P${(v / 1000).toFixed(0)}k`} />
                       <Tooltip
                         contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb' }}
-                        formatter={(value: any) => [fmtCurrency(Number(value)), '']}
+                        formatter={(value: unknown) => [fmtCurrency(Number(value)), '']}
                       />
                       <Legend />
                       <Area
@@ -540,7 +540,7 @@ export default function AnalyticsPage() {
                       <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `P${(v / 1000).toFixed(0)}k`} />
                       <Tooltip
                         contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb' }}
-                        formatter={(value: any) => [fmtCurrency(Number(value)), '']}
+                        formatter={(value: unknown) => [fmtCurrency(Number(value)), '']}
                       />
                       <Legend />
                       <Bar dataKey="dr" fill="#3B82F6" name="DR Sales" radius={[4, 4, 0, 0]} />
@@ -610,7 +610,7 @@ export default function AnalyticsPage() {
                       <YAxis dataKey="area" type="category" tick={{ fontSize: 11 }} width={120} />
                       <Tooltip
                         contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb' }}
-                        formatter={(value: any) => [fmtCurrency(Number(value)), '']}
+                        formatter={(value: unknown) => [fmtCurrency(Number(value)), '']}
                       />
                       <Legend />
                       <Bar dataKey="drSales" fill="#3B82F6" name="DR Sales" radius={[0, 4, 4, 0]} />
@@ -662,6 +662,10 @@ export default function AnalyticsPage() {
                           outerRadius={130}
                           innerRadius={60}
                           strokeWidth={2}
+                          // recharts' PieLabelRenderProps doesn't surface our
+                          // data fields (province, contribution); `any` is
+                          // the cleanest escape hatch for this callback shape.
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
                           label={(entry: any) => `${entry.province} (${entry.contribution.toFixed(1)}%)`}
                           labelLine={{ strokeWidth: 1 }}
                         >
@@ -671,7 +675,7 @@ export default function AnalyticsPage() {
                         </Pie>
                         <Tooltip
                           contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb' }}
-                          formatter={(value: any) => [fmtCurrency(Number(value)), 'SRP Sales']}
+                          formatter={(value: unknown) => [fmtCurrency(Number(value)), 'SRP Sales']}
                         />
                       </PieChart>
                     </ResponsiveContainer>

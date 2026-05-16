@@ -19,8 +19,11 @@ export function SearchInput({
   const [internal, setInternal] = useState(controlledValue ?? '');
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Sync controlled value
+  // Sync controlled value. The setState-in-effect is required to mirror parent
+  // changes into the internal debounce buffer; lifting state up would defeat
+  // the debounce. Standard controlled-input pattern.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (controlledValue !== undefined) setInternal(controlledValue);
   }, [controlledValue]);
 

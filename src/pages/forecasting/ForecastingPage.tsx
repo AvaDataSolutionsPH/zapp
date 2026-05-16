@@ -618,7 +618,7 @@ export default function ForecastingPage() {
                         <YAxis tick={{ fontSize: 11 }} />
                         <Tooltip
                           contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb' }}
-                          formatter={(value: any) => [`P${fmt(Number(value))}`, '']}
+                          formatter={(value: unknown) => [`P${fmt(Number(value))}`, '']}
                         />
                         <Legend />
                         <Line

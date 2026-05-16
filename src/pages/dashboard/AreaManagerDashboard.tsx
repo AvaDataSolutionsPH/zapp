@@ -219,7 +219,7 @@ export function AreaManagerDashboard() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="area" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                <Tooltip formatter={(value: any) => [`P${Number(value).toLocaleString()}`, 'SRP Sales']} />
+                <Tooltip formatter={(value: unknown) => [`P${Number(value).toLocaleString()}`, 'SRP Sales']} />
                 <Bar dataKey="sales" radius={[6, 6, 0, 0]}>
                   {salesByArea.map((_entry, index) => (
                     <Cell key={index} fill={COLORS[index % COLORS.length]} />

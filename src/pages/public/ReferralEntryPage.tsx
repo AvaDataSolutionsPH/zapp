@@ -47,7 +47,6 @@ export default function ReferralEntryPage() {
     if (urlCode) {
       validateCode(urlCode);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlCode]);
 
   const validateCode = async (code: string) => {

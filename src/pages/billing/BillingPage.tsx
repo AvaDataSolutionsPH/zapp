@@ -55,6 +55,10 @@ function DueLabel({ dueAt, status }: { dueAt: string; status: string }) {
     );
   }
 
+  // Date.now() is intentionally non-deterministic here; the BillingPage
+  // already re-renders every 60s via a setInterval tick so the label
+  // refreshes deterministically per render.
+  // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
   const due = new Date(dueAt).getTime();
   const diff = due - now;
@@ -153,6 +157,9 @@ export default function BillingPage() {
     if (dateTo) result = result.filter((b) => b.issuedAt <= dateTo + 'T23:59:59Z');
     result.sort((a, b) => b.issuedAt.localeCompare(a.issuedAt));
     return result;
+    // storeName is a stable lookup over the closure's `stores` slice;
+    // including it would re-run the memo every render without semantic change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allBilling, plantFilter, statusFilter, storeSearch, cutoffFilter, dateFrom, dateTo]);
 
   const paged = useMemo(() => {

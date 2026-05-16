@@ -111,7 +111,7 @@ export default function PaymentsPage() {
 
     result.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
     return result;
-  }, [userPayments, activeTab, statusFilter, storeSearch, dateFrom, dateTo]);
+  }, [userPayments, activeTab, statusFilter, storeSearch, dateFrom, dateTo, stores]);
 
   const paged = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;

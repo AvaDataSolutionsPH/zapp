@@ -421,7 +421,7 @@ export default function LeaderboardPage() {
                 />
                 <Tooltip
                   contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb' }}
-                  formatter={(value: any) => [fmtCurrency(Number(value)), 'SRP Sales']}
+                  formatter={(value: unknown) => [fmtCurrency(Number(value)), 'SRP Sales']}
                 />
                 <Bar dataKey="srpSales" radius={[0, 6, 6, 0]} name="SRP Sales">
                   {top10ChartData.map((_, idx) => (

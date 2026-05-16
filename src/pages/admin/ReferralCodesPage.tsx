@@ -166,6 +166,14 @@ export default function ReferralCodesPage() {
     setDeactivateTarget(null);
   }, [deactivateTarget, addToast]);
 
+  const resetGenerateForm = () => {
+    setGenType('distributor');
+    setGenDistributorId('');
+    setGenAreaSupervisorId('');
+    setGenPlantId('');
+    setGenCodePreview(generateCode('distributor'));
+  };
+
   const handleGenerate = useCallback(() => {
     if (!genPlantId) {
       addToast('warning', 'Please select a plant');
@@ -193,14 +201,6 @@ export default function ReferralCodesPage() {
       setLoading(false);
     }, 500);
   }, [genCodePreview, genType, genDistributorId, genAreaSupervisorId, genPlantId, addReferralCode, addToast]);
-
-  const resetGenerateForm = () => {
-    setGenType('distributor');
-    setGenDistributorId('');
-    setGenAreaSupervisorId('');
-    setGenPlantId('');
-    setGenCodePreview(generateCode('distributor'));
-  };
 
   const handleOpenGenerate = () => {
     resetGenerateForm();

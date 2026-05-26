@@ -18,8 +18,11 @@
 //
 // SAFE TO RE-RUN: yes — each run truncates and re-seeds.
 
-import 'dotenv/config';
+import { config as loadEnv } from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
+
+// Vite reads .env.local automatically; Node scripts have to point dotenv at it.
+loadEnv({ path: '.env.local' });
 
 import {
   plants,

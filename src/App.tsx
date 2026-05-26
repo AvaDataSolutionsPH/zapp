@@ -1,5 +1,7 @@
+import { useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useStore } from '@/store/useStore'
+import { supabase } from '@/lib/supabase'
 
 // Layouts
 import Layout from '@/components/layout/Layout'
@@ -65,6 +67,32 @@ import SettingsPage from '@/pages/admin/SettingsPage'
 
 function App() {
   const isAuthenticated = useStore((s) => s.isAuthenticated)
+  const authLoading = useStore((s) => s.authLoading)
+  const restoreSession = useStore((s) => s.restoreSession)
+
+  // Hydrate currentUser from any persisted Supabase session on first mount, and
+  // keep the local store in sync if the session changes in another tab.
+  useEffect(() => {
+    void restoreSession()
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
+        useStore.setState({ currentUser: null, isAuthenticated: false, authLoading: false })
+      } else if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') {
+        void restoreSession()
+      }
+    })
+    return () => {
+      sub.subscription.unsubscribe()
+    }
+  }, [restoreSession])
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-zapp-cream/30">
+        <div className="text-sm text-gray-500">Loading...</div>
+      </div>
+    )
+  }
 
   return (
     <Routes>

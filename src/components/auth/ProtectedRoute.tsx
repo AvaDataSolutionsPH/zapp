@@ -8,8 +8,17 @@ interface ProtectedRouteProps {
 }
 
 export default function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
-  const { isAuthenticated, currentUser } = useStore();
+  const { isAuthenticated, currentUser, authLoading } = useStore();
   const location = useLocation();
+
+  // Still restoring the Supabase session on first paint — don't bounce to /login.
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-zapp-cream/30">
+        <div className="text-sm text-gray-500">Loading...</div>
+      </div>
+    );
+  }
 
   // Not authenticated -> redirect to login
   if (!isAuthenticated || !currentUser) {

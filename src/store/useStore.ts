@@ -53,6 +53,7 @@ import {
 } from '@/data/mockData';
 import { computeBillingsFromState } from '@/lib/billingComputations';
 import { computeStoreDeliveryStatus } from '@/lib/deliveryEnforcement';
+import { supabase } from '@/lib/supabase';
 
 // Compute the initial billing list from the seeded mock entities. This replaces
 // the previously hard-coded mockBillingRecords — billings are now derived from
@@ -88,9 +89,13 @@ interface AppStore {
   // Auth
   currentUser: User | null;
   isAuthenticated: boolean;
+  /** True while restoring an existing Supabase session at app boot. */
+  authLoading: boolean;
   login: (email: string, password: string) => Promise<boolean>;
-  logout: () => void;
+  logout: () => Promise<void>;
   switchRole: (role: UserRole) => void;
+  /** Re-hydrate currentUser from Supabase session; call once at app mount. */
+  restoreSession: () => Promise<void>;
 
   // Plants
   plants: Plant[];
@@ -242,32 +247,67 @@ export const useStore = create<AppStore>((set, get) => {
     set({ billingRecords: nextBillings, stores: nextStores });
   };
 
+  // Match a Supabase-authenticated email to the local demo user profile.
+  // Phase 1 keeps user profile data (role, distributorId, etc.) in mockData;
+  // Supabase only verifies credentials. Phase 2 will migrate profiles to a
+  // Postgres "users" table and replace this lookup.
+  const findProfileByEmail = (email: string | undefined | null): User | null => {
+    if (!email) return null;
+    return (
+      get().demoUsers.find((u) => u.email.toLowerCase() === email.toLowerCase()) ??
+      null
+    );
+  };
+
   return {
   // ─── Auth ───────────────────────────────────────────────────────
 
-  currentUser: demoUsers.find((u) => u.role === 'owner') ?? null,
-  isAuthenticated: true, // auto-login as Owner for demo
+  // Boot with no session; restoreSession() re-hydrates from Supabase on mount.
+  currentUser: null,
+  isAuthenticated: false,
+  authLoading: true,
 
-  login: async (email: string, _password: string): Promise<boolean> => {
-    await delay(600);
-    const user = get().demoUsers.find(
-      (u) => u.email.toLowerCase() === email.toLowerCase(),
-    );
-    if (user) {
-      set({ currentUser: user, isAuthenticated: true });
-      return true;
+  login: async (email: string, password: string): Promise<boolean> => {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
+    if (error || !data.session) {
+      return false;
     }
-    return false;
+    const profile = findProfileByEmail(data.user?.email);
+    if (!profile) {
+      // Supabase auth succeeded but no matching local profile — sign out
+      // to keep the two layers in sync. Phase 2 removes this branch.
+      await supabase.auth.signOut();
+      return false;
+    }
+    set({ currentUser: profile, isAuthenticated: true, authLoading: false });
+    return true;
   },
 
-  logout: () => {
-    set({ currentUser: null, isAuthenticated: false });
+  logout: async (): Promise<void> => {
+    await supabase.auth.signOut();
+    set({ currentUser: null, isAuthenticated: false, authLoading: false });
   },
 
   switchRole: (role: UserRole) => {
+    // Dev-only helper: does NOT change the Supabase session, only the local
+    // profile. Useful for previewing role dashboards without re-logging in.
     const user = get().demoUsers.find((u) => u.role === role);
     if (user) {
-      set({ currentUser: user, isAuthenticated: true });
+      set({ currentUser: user, isAuthenticated: true, authLoading: false });
+    }
+  },
+
+  restoreSession: async (): Promise<void> => {
+    const { data } = await supabase.auth.getSession();
+    const sessionEmail = data.session?.user?.email;
+    const profile = findProfileByEmail(sessionEmail);
+    if (profile) {
+      set({ currentUser: profile, isAuthenticated: true, authLoading: false });
+    } else {
+      set({ currentUser: null, isAuthenticated: false, authLoading: false });
     }
   },
 

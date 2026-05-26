@@ -26,9 +26,12 @@ const demoRoles: DemoRole[] = [
 
 // ── Component ──────────────────────────────────────────────────
 
+// Shared password seeded for all demo accounts (see supabase/seed/01_demo_users.sql).
+const DEMO_PASSWORD = '111111';
+
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { login, switchRole, demoUsers } = useStore();
+  const { login, demoUsers } = useStore();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -54,9 +57,23 @@ export default function LoginPage() {
     }
   };
 
-  const handleDemoLogin = (role: UserRole) => {
-    switchRole(role);
-    navigate('/dashboard');
+  const handleDemoLogin = async (role: UserRole) => {
+    const user = demoUsers.find((u) => u.role === role);
+    if (!user) return;
+    setLoading(true);
+    setError('');
+    try {
+      const success = await login(user.email, DEMO_PASSWORD);
+      if (success) {
+        navigate('/dashboard');
+      } else {
+        setError(
+          `Demo login failed. Make sure the seed SQL has been run for ${user.email}.`,
+        );
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -156,8 +173,9 @@ export default function LoginPage() {
               return (
                 <button
                   key={role}
-                  onClick={() => handleDemoLogin(role)}
-                  className="flex flex-col items-center gap-1 p-2.5 rounded-lg border border-gray-200 hover:border-zapp-orange/40 hover:bg-zapp-cream/50 cursor-pointer bg-white transition-all text-center group"
+                  onClick={() => { void handleDemoLogin(role); }}
+                  disabled={loading}
+                  className="flex flex-col items-center gap-1 p-2.5 rounded-lg border border-gray-200 hover:border-zapp-orange/40 hover:bg-zapp-cream/50 cursor-pointer bg-white transition-all text-center group disabled:opacity-50 disabled:cursor-not-allowed"
                   title={user?.name ?? label}
                 >
                   <span

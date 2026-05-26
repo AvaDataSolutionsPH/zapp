@@ -54,6 +54,7 @@ import {
 import { computeBillingsFromState } from '@/lib/billingComputations';
 import { computeStoreDeliveryStatus } from '@/lib/deliveryEnforcement';
 import { supabase } from '@/lib/supabase';
+import { hydrateAll } from '@/services/db';
 
 // Compute the initial billing list from the seeded mock entities. This replaces
 // the previously hard-coded mockBillingRecords — billings are now derived from
@@ -91,11 +92,15 @@ interface AppStore {
   isAuthenticated: boolean;
   /** True while restoring an existing Supabase session at app boot. */
   authLoading: boolean;
+  /** Where the entity slices currently come from: mock seed or Supabase DB. */
+  dataSource: 'mock' | 'db';
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
   switchRole: (role: UserRole) => void;
   /** Re-hydrate currentUser from Supabase session; call once at app mount. */
   restoreSession: () => Promise<void>;
+  /** Fetch all entity tables from Supabase; falls back to mock on error. */
+  hydrateFromDB: () => Promise<void>;
 
   // Plants
   plants: Plant[];
@@ -266,6 +271,7 @@ export const useStore = create<AppStore>((set, get) => {
   currentUser: null,
   isAuthenticated: false,
   authLoading: true,
+  dataSource: 'mock',
 
   login: async (email: string, password: string): Promise<boolean> => {
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -283,6 +289,9 @@ export const useStore = create<AppStore>((set, get) => {
       return false;
     }
     set({ currentUser: profile, isAuthenticated: true, authLoading: false });
+    // Fire-and-forget DB hydration. If the schema isn't migrated yet (or
+    // network fails) the store keeps the mock data and stays usable.
+    void get().hydrateFromDB();
     return true;
   },
 
@@ -306,8 +315,59 @@ export const useStore = create<AppStore>((set, get) => {
     const profile = findProfileByEmail(sessionEmail);
     if (profile) {
       set({ currentUser: profile, isAuthenticated: true, authLoading: false });
+      // Hydrate from DB after restoring an existing session, so a reload
+      // doesn't drop the user back to mock data.
+      void get().hydrateFromDB();
     } else {
       set({ currentUser: null, isAuthenticated: false, authLoading: false });
+    }
+  },
+
+  hydrateFromDB: async (): Promise<void> => {
+    try {
+      const data = await hydrateAll();
+      // Replace the entity slices with DB data, then recompute the derived
+      // billing + delivery status slices the same way they were computed
+      // from mock data at module load.
+      const nextBillings = computeBillingsFromState({
+        endingInventories: data.endingInventories,
+        specialOrders: data.specialOrders,
+        packagingOrders: data.packagingOrders,
+        deliveries: data.deliveries,
+        stores: data.stores,
+        payments: data.payments,
+      });
+      const nextStores = data.stores.map((st) => ({
+        ...st,
+        deliveryStatus: computeStoreDeliveryStatus(st.id, nextBillings, data.payments),
+      }));
+      set({
+        plants: data.plants,
+        skus: data.skus,
+        packagingCatalog: data.packagingCatalog,
+        distributors: data.distributors,
+        subPartnerDistributors: data.subPartnerDistributors,
+        areaSupervisors: data.areaSupervisors,
+        demoUsers: data.users,
+        stores: nextStores,
+        applications: data.applications,
+        deliveries: data.deliveries,
+        beginningInventories: data.beginningInventories,
+        endingInventories: data.endingInventories,
+        payments: data.payments,
+        packagingOrders: data.packagingOrders,
+        forecasts: data.forecasts,
+        referralCodes: data.referralCodes,
+        salesMetrics: data.salesMetrics,
+        notifications: data.notifications,
+        specialOrders: data.specialOrders,
+        billingRecords: nextBillings,
+        dataSource: 'db',
+      });
+    } catch (err) {
+      // Schema not migrated yet, network failed, or permissive RLS not
+      // applied. Leave the store on the mock slices so the app still works.
+      console.warn('[useStore] hydrateFromDB failed — staying on mock data:', err);
     }
   },
 

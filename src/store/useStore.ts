@@ -63,6 +63,10 @@ import {
   // Aliased because the Zustand action is also named updateDelivery —
   // keeps both call sites readable without renaming the public action.
   updateDelivery as updateDeliveryDB,
+  insertBeginningInventory,
+  updateBeginningInventory,
+  insertEndingInventory,
+  updateEndingInventory,
 } from '@/services/dbWrite';
 
 // Compute the initial billing list from the seeded mock entities. This replaces
@@ -155,28 +159,32 @@ interface AppStore {
   // Beginning Inventory
   beginningInventories: BeginningInventory[];
   addBeginningInventory: (inv: BeginningInventory) => void;
-  confirmBeginningInventory: (id: string, items: InventoryItem[]) => void;
+  confirmBeginningInventory: (id: string, items: InventoryItem[]) => Promise<void>;
 
   // Ending Inventory
   endingInventories: EndingInventory[];
   addEndingInventory: (inv: EndingInventory) => void;
-  confirmEndingInventory: (id: string, items: InventoryItem[]) => void;
+  confirmEndingInventory: (id: string, items: InventoryItem[]) => Promise<void>;
 
   // Ending Inventory Review (state machine)
-  approveEndingInventory: (id: string, reviewerId: string, comment?: string) => void;
-  markEndingInventoryNeedsReview: (id: string, reviewerId: string, comment: string) => void;
+  approveEndingInventory: (id: string, reviewerId: string, comment?: string) => Promise<void>;
+  markEndingInventoryNeedsReview: (
+    id: string,
+    reviewerId: string,
+    comment: string,
+  ) => Promise<void>;
   requestEndingInventoryCorrection: (
     id: string,
     reviewerId: string,
     corrections: EndingInventoryCorrectionItem[],
     reason: string,
-  ) => void;
+  ) => Promise<void>;
   resubmitEndingInventory: (
     id: string,
     items: InventoryItem[],
     submitterId: string,
     comment?: string,
-  ) => void;
+  ) => Promise<void>;
 
   // Billing
   billingRecords: BillingRecord[];
@@ -647,19 +655,45 @@ export const useStore = create<AppStore>((set, get) => {
   beginningInventories: mockBeginningInventories,
 
   addBeginningInventory: (inv: BeginningInventory) => {
+    // Optimistic in-memory insert. Background-persist when DB is the
+    // source of truth; rollback on failure.
     set((s) => ({
       beginningInventories: [...s.beginningInventories, inv],
     }));
+    if (get().dataSource !== 'db') return;
+    void insertBeginningInventory(inv).catch((err) => {
+      console.error('[useStore] addBeginningInventory DB write failed, rolling back:', err);
+      set((s) => ({
+        beginningInventories: s.beginningInventories.filter((b) => b.id !== inv.id),
+      }));
+    });
   },
 
-  confirmBeginningInventory: (id: string, items: InventoryItem[]) => {
+  confirmBeginningInventory: async (id: string, items: InventoryItem[]) => {
+    const prev = get().beginningInventories.find((b) => b.id === id);
+    if (!prev) return;
+    const updated: BeginningInventory = {
+      ...prev,
+      confirmedItems: items,
+      status: 'confirmed',
+    };
     set((s) => ({
       beginningInventories: s.beginningInventories.map((bi) =>
-        bi.id === id
-          ? { ...bi, confirmedItems: items, status: 'confirmed' as const }
-          : bi,
+        bi.id === id ? updated : bi,
       ),
     }));
+    if (get().dataSource !== 'db') return;
+    try {
+      await updateBeginningInventory(updated);
+    } catch (err) {
+      console.error('[useStore] confirmBeginningInventory DB write failed, rolling back:', err);
+      set((s) => ({
+        beginningInventories: s.beginningInventories.map((bi) =>
+          bi.id === id ? prev : bi,
+        ),
+      }));
+      throw err;
+    }
   },
 
   // ─── Ending Inventory ─────────────────────────────────────────
@@ -667,26 +701,52 @@ export const useStore = create<AppStore>((set, get) => {
   endingInventories: mockEndingInventories,
 
   addEndingInventory: (inv: EndingInventory) => {
+    // Optimistic in-memory insert. Background-persist when DB is the
+    // source of truth; rollback on failure.
     set((s) => ({
       endingInventories: [...s.endingInventories, inv],
     }));
+    if (get().dataSource !== 'db') return;
+    void insertEndingInventory(inv).catch((err) => {
+      console.error('[useStore] addEndingInventory DB write failed, rolling back:', err);
+      set((s) => ({
+        endingInventories: s.endingInventories.filter((e) => e.id !== inv.id),
+      }));
+    });
   },
 
-  confirmEndingInventory: (id: string, items: InventoryItem[]) => {
+  confirmEndingInventory: async (id: string, items: InventoryItem[]) => {
+    const prev = get().endingInventories.find((e) => e.id === id);
+    if (!prev) return;
+    const updated: EndingInventory = {
+      ...prev,
+      unsoldItems: items,
+      status: 'confirmed',
+    };
     set((s) => ({
       endingInventories: s.endingInventories.map((ei) =>
-        ei.id === id
-          ? { ...ei, unsoldItems: items, status: 'confirmed' as const }
-          : ei,
+        ei.id === id ? updated : ei,
       ),
     }));
+    if (get().dataSource !== 'db') return;
+    try {
+      await updateEndingInventory(updated);
+    } catch (err) {
+      console.error('[useStore] confirmEndingInventory DB write failed, rolling back:', err);
+      set((s) => ({
+        endingInventories: s.endingInventories.map((ei) =>
+          ei.id === id ? prev : ei,
+        ),
+      }));
+      throw err;
+    }
   },
 
   // ─── Ending Inventory Review (state machine) ──────────────────
 
-  approveEndingInventory: (id, reviewerId, comment) => {
-    const ei = get().endingInventories.find((e) => e.id === id);
-    if (!ei || ei.status === 'approved') return;
+  approveEndingInventory: async (id, reviewerId, comment) => {
+    const prevEI = get().endingInventories.find((e) => e.id === id);
+    if (!prevEI || prevEI.status === 'approved') return;
 
     const now = new Date().toISOString();
     const review: EndingInventoryReview = {
@@ -696,35 +756,52 @@ export const useStore = create<AppStore>((set, get) => {
       performedAt: now,
       comment,
     };
+    const updatedEI: EndingInventory = {
+      ...prevEI,
+      status: 'approved',
+      revisions: [...(prevEI.revisions ?? []), review],
+      reviewedBy: reviewerId,
+      reviewedAt: now,
+    };
 
     set((s) => ({
       endingInventories: s.endingInventories.map((e) =>
-        e.id === id
-          ? {
-              ...e,
-              status: 'approved' as const,
-              revisions: [...(e.revisions ?? []), review],
-              reviewedBy: reviewerId,
-              reviewedAt: now,
-            }
-          : e,
+        e.id === id ? updatedEI : e,
       ),
     }));
 
+    // Notification side effect — still in-memory; Chunk 5 wires
+    // notifications to Supabase. Approved EIs feed the billing layer,
+    // so we recompute synchronously before the DB write — keeps the UI
+    // and billing slice consistent during the optimistic window.
     get().addNotification({
       title: 'Ending Inventory Approved',
-      message: `Your ending inventory dated ${ei.date} has been approved.`,
+      message: `Your ending inventory dated ${prevEI.date} has been approved.`,
       type: 'inventory_review',
-      targetStoreId: ei.storeId,
+      targetStoreId: prevEI.storeId,
     });
-
-    // Approved EIs feed the billing layer — recompute so billings reflect.
     recomputeBillings();
+
+    if (get().dataSource !== 'db') return;
+    try {
+      await updateEndingInventory(updatedEI);
+    } catch (err) {
+      console.error('[useStore] approveEndingInventory DB write failed, rolling back:', err);
+      set((s) => ({
+        endingInventories: s.endingInventories.map((e) =>
+          e.id === id ? prevEI : e,
+        ),
+      }));
+      // Re-run the billing cascade against the restored EI state so
+      // billing rows + delivery statuses revert in lockstep.
+      recomputeBillings();
+      throw err;
+    }
   },
 
-  markEndingInventoryNeedsReview: (id, reviewerId, comment) => {
-    const ei = get().endingInventories.find((e) => e.id === id);
-    if (!ei || ei.status === 'approved') return;
+  markEndingInventoryNeedsReview: async (id, reviewerId, comment) => {
+    const prevEI = get().endingInventories.find((e) => e.id === id);
+    if (!prevEI || prevEI.status === 'approved') return;
 
     const now = new Date().toISOString();
     const review: EndingInventoryReview = {
@@ -734,32 +811,44 @@ export const useStore = create<AppStore>((set, get) => {
       performedAt: now,
       comment,
     };
+    const updatedEI: EndingInventory = {
+      ...prevEI,
+      status: 'needs_review',
+      revisions: [...(prevEI.revisions ?? []), review],
+      reviewedBy: reviewerId,
+      reviewedAt: now,
+    };
 
     set((s) => ({
       endingInventories: s.endingInventories.map((e) =>
-        e.id === id
-          ? {
-              ...e,
-              status: 'needs_review' as const,
-              revisions: [...(e.revisions ?? []), review],
-              reviewedBy: reviewerId,
-              reviewedAt: now,
-            }
-          : e,
+        e.id === id ? updatedEI : e,
       ),
     }));
 
     get().addNotification({
       title: 'Ending Inventory Needs Review',
-      message: `Reviewer asked for clarification on your ending inventory dated ${ei.date}: ${comment}`,
+      message: `Reviewer asked for clarification on your ending inventory dated ${prevEI.date}: ${comment}`,
       type: 'inventory_review',
-      targetStoreId: ei.storeId,
+      targetStoreId: prevEI.storeId,
     });
+
+    if (get().dataSource !== 'db') return;
+    try {
+      await updateEndingInventory(updatedEI);
+    } catch (err) {
+      console.error('[useStore] markEndingInventoryNeedsReview DB write failed, rolling back:', err);
+      set((s) => ({
+        endingInventories: s.endingInventories.map((e) =>
+          e.id === id ? prevEI : e,
+        ),
+      }));
+      throw err;
+    }
   },
 
-  requestEndingInventoryCorrection: (id, reviewerId, corrections, reason) => {
-    const ei = get().endingInventories.find((e) => e.id === id);
-    if (!ei || ei.status === 'approved') return;
+  requestEndingInventoryCorrection: async (id, reviewerId, corrections, reason) => {
+    const prevEI = get().endingInventories.find((e) => e.id === id);
+    if (!prevEI || prevEI.status === 'approved') return;
 
     const now = new Date().toISOString();
     const review: EndingInventoryReview = {
@@ -770,32 +859,44 @@ export const useStore = create<AppStore>((set, get) => {
       reason,
       corrections,
     };
+    const updatedEI: EndingInventory = {
+      ...prevEI,
+      status: 'correction_required',
+      revisions: [...(prevEI.revisions ?? []), review],
+      reviewedBy: reviewerId,
+      reviewedAt: now,
+    };
 
     set((s) => ({
       endingInventories: s.endingInventories.map((e) =>
-        e.id === id
-          ? {
-              ...e,
-              status: 'correction_required' as const,
-              revisions: [...(e.revisions ?? []), review],
-              reviewedBy: reviewerId,
-              reviewedAt: now,
-            }
-          : e,
+        e.id === id ? updatedEI : e,
       ),
     }));
 
     get().addNotification({
       title: 'Ending Inventory Needs Correction',
-      message: `Reviewer requested specific corrections for your ending inventory dated ${ei.date}. Please review and resubmit.`,
+      message: `Reviewer requested specific corrections for your ending inventory dated ${prevEI.date}. Please review and resubmit.`,
       type: 'inventory_review',
-      targetStoreId: ei.storeId,
+      targetStoreId: prevEI.storeId,
     });
+
+    if (get().dataSource !== 'db') return;
+    try {
+      await updateEndingInventory(updatedEI);
+    } catch (err) {
+      console.error('[useStore] requestEndingInventoryCorrection DB write failed, rolling back:', err);
+      set((s) => ({
+        endingInventories: s.endingInventories.map((e) =>
+          e.id === id ? prevEI : e,
+        ),
+      }));
+      throw err;
+    }
   },
 
-  resubmitEndingInventory: (id, items, submitterId, comment) => {
-    const ei = get().endingInventories.find((e) => e.id === id);
-    if (!ei || ei.status === 'approved') return;
+  resubmitEndingInventory: async (id, items, submitterId, comment) => {
+    const prevEI = get().endingInventories.find((e) => e.id === id);
+    if (!prevEI || prevEI.status === 'approved') return;
 
     const now = new Date().toISOString();
     const review: EndingInventoryReview = {
@@ -805,19 +906,31 @@ export const useStore = create<AppStore>((set, get) => {
       performedAt: now,
       comment,
     };
+    const updatedEI: EndingInventory = {
+      ...prevEI,
+      unsoldItems: items,
+      status: 'pending_review',
+      revisions: [...(prevEI.revisions ?? []), review],
+    };
 
     set((s) => ({
       endingInventories: s.endingInventories.map((e) =>
-        e.id === id
-          ? {
-              ...e,
-              unsoldItems: items,
-              status: 'pending_review' as const,
-              revisions: [...(e.revisions ?? []), review],
-            }
-          : e,
+        e.id === id ? updatedEI : e,
       ),
     }));
+
+    if (get().dataSource !== 'db') return;
+    try {
+      await updateEndingInventory(updatedEI);
+    } catch (err) {
+      console.error('[useStore] resubmitEndingInventory DB write failed, rolling back:', err);
+      set((s) => ({
+        endingInventories: s.endingInventories.map((e) =>
+          e.id === id ? prevEI : e,
+        ),
+      }));
+      throw err;
+    }
   },
 
   // ─── Billing ──────────────────────────────────────────────────

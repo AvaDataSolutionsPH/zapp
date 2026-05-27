@@ -24,6 +24,7 @@ import {
   EmptyState,
   StatusBadge,
 } from '@/components/ui';
+import { useToast } from '@/components/ui/Toast';
 import type { SelectOption, UploadedFile } from '@/components/ui';
 import type { AIResult, EndingInventory, InventoryItem } from '@/types';
 import { InventoryReviewDetailDrawer } from './InventoryReviewDetailDrawer';
@@ -60,6 +61,7 @@ export default function EndingInventoryPage() {
     currentUser,
     resubmitEndingInventory,
   } = useStore();
+  const { addToast } = useToast();
 
   // Deliveries that have been delivered (or have beginning inventory)
   const eligibleDeliveries = useMemo(
@@ -241,10 +243,10 @@ export default function EndingInventoryPage() {
   };
 
   // Save (new submission or resubmit)
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!delivery || !currentUser) return;
     setSaveLoading(true);
-    setTimeout(() => {
+    try {
       const items: InventoryItem[] = unsoldRows.map((r) => ({
         skuId: r.skuId,
         skuName: r.skuName,
@@ -256,12 +258,13 @@ export default function EndingInventoryPage() {
       }));
 
       if (resubmittingEI) {
-        resubmitEndingInventory(
+        await resubmitEndingInventory(
           resubmittingEI.id,
           items,
           currentUser.id,
           notes || undefined,
         );
+        addToast('success', 'Ending inventory resubmitted for review.');
       } else {
         const id = `ei-${Date.now().toString(36)}`;
         const now = new Date().toISOString();
@@ -287,12 +290,16 @@ export default function EndingInventoryPage() {
             },
           ],
         });
+        addToast('success', 'Ending inventory submitted for review.');
       }
 
-      setSaveLoading(false);
       setShowSave(false);
       setSubmitted(true);
-    }, 600);
+    } catch {
+      addToast('error', 'Failed to save ending inventory. Please try again.');
+    } finally {
+      setSaveLoading(false);
+    }
   };
 
   // Summaries

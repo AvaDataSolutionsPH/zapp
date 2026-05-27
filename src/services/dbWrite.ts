@@ -10,7 +10,13 @@
 // optimistic in-memory update.
 
 import { supabase } from '@/lib/supabase';
-import type { Store, Application, Delivery } from '@/types';
+import type {
+  Store,
+  Application,
+  Delivery,
+  BeginningInventory,
+  EndingInventory,
+} from '@/types';
 
 // ── Mappers (TS camelCase → DB snake_case) ────────────────────
 // Kept duplicate of scripts/seed-from-mock.ts mappers on purpose:
@@ -38,6 +44,38 @@ const mapStoreToDB = (s: Store) => ({
   email: s.email,
   created_at: s.createdAt,
   delivery_status: s.deliveryStatus,
+});
+
+const mapBeginningInventoryToDB = (b: BeginningInventory) => ({
+  id: b.id,
+  delivery_id: b.deliveryId,
+  store_id: b.storeId,
+  date: b.date,
+  dr_image_url: b.drImageUrl,
+  // TEXT[] column — pass array through.
+  crate_image_urls: b.crateImageUrls,
+  // JSONB columns — nested camelCase keys stored as-is.
+  ai_results: b.aiResults,
+  confirmed_items: b.confirmedItems,
+  status: b.status,
+  notes: b.notes ?? null,
+});
+
+const mapEndingInventoryToDB = (e: EndingInventory) => ({
+  id: e.id,
+  delivery_id: e.deliveryId,
+  store_id: e.storeId,
+  date: e.date,
+  crate_image_urls: e.crateImageUrls,
+  unsold_items: e.unsoldItems,
+  ai_results: e.aiResults,
+  status: e.status,
+  notes: e.notes ?? null,
+  submitted_at: e.submittedAt ?? null,
+  original_unsold_items: e.originalUnsoldItems ?? null,
+  revisions: e.revisions ?? null,
+  reviewed_by: e.reviewedBy ?? null,
+  reviewed_at: e.reviewedAt ?? null,
 });
 
 const mapDeliveryToDB = (d: Delivery) => ({
@@ -122,5 +160,35 @@ export async function updateDelivery(delivery: Delivery): Promise<void> {
     .from('deliveries')
     .update(mapDeliveryToDB(delivery) as never)
     .eq('id', delivery.id);
+  if (error) throw error;
+}
+
+export async function insertBeginningInventory(bi: BeginningInventory): Promise<void> {
+  const { error } = await supabase
+    .from('beginning_inventories')
+    .insert(mapBeginningInventoryToDB(bi) as never);
+  if (error) throw error;
+}
+
+export async function updateBeginningInventory(bi: BeginningInventory): Promise<void> {
+  const { error } = await supabase
+    .from('beginning_inventories')
+    .update(mapBeginningInventoryToDB(bi) as never)
+    .eq('id', bi.id);
+  if (error) throw error;
+}
+
+export async function insertEndingInventory(ei: EndingInventory): Promise<void> {
+  const { error } = await supabase
+    .from('ending_inventories')
+    .insert(mapEndingInventoryToDB(ei) as never);
+  if (error) throw error;
+}
+
+export async function updateEndingInventory(ei: EndingInventory): Promise<void> {
+  const { error } = await supabase
+    .from('ending_inventories')
+    .update(mapEndingInventoryToDB(ei) as never)
+    .eq('id', ei.id);
   if (error) throw error;
 }

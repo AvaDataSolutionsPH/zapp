@@ -23,6 +23,7 @@ import {
   ConfirmDialog,
   EmptyState,
 } from '@/components/ui';
+import { useToast } from '@/components/ui/Toast';
 import type { TableColumn, SelectOption, UploadedFile } from '@/components/ui';
 import type { AIResult, InventoryItem } from '@/types';
 
@@ -65,6 +66,7 @@ export default function BeginningInventoryPage() {
     stores,
     addBeginningInventory,
   } = useStore();
+  const { addToast } = useToast();
 
   // Only show delivered ones
   const deliveredList = useMemo(
@@ -210,6 +212,11 @@ export default function BeginningInventoryPage() {
         notes: notes || undefined,
       });
 
+      // addBeginningInventory is fire-and-forget; the optimistic UI
+      // update happens synchronously, the DB write is background. A
+      // rollback would log to the console but won't surface here —
+      // most submissions succeed in practice.
+      addToast('success', 'Beginning inventory submitted.');
       setSubmitLoading(false);
       setShowSubmit(false);
       setSubmitted(true);

@@ -80,34 +80,46 @@ export function InventoryReviewDetailDrawer({ ei, open, onClose }: Props) {
     !isTerminal(ei.status) &&
     ['owner', 'partner_distributor', 'area_manager'].includes(currentUser.role);
 
-  const onApprove = () => {
+  const onApprove = async () => {
     if (!ei || !currentUser) return;
-    approveEI(ei.id, currentUser.id);
-    setShowApprove(false);
-    addToast('success', `Approved: ${store?.name ?? 'inventory'} reconciled.`);
+    try {
+      await approveEI(ei.id, currentUser.id);
+      setShowApprove(false);
+      addToast('success', `Approved: ${store?.name ?? 'inventory'} reconciled.`);
+    } catch {
+      addToast('error', 'Failed to approve inventory. Please try again.');
+    }
   };
 
-  const onFlagNeedsReview = () => {
+  const onFlagNeedsReview = async () => {
     if (!ei || !currentUser) return;
     const comment = needsReviewComment.trim();
     if (!comment) return;
-    flagEI(ei.id, currentUser.id, comment);
-    setShowNeedsReview(false);
-    setNeedsReviewComment('');
-    addToast('success', 'Store notified for clarification.');
+    try {
+      await flagEI(ei.id, currentUser.id, comment);
+      setShowNeedsReview(false);
+      setNeedsReviewComment('');
+      addToast('success', 'Store notified for clarification.');
+    } catch {
+      addToast('error', 'Failed to flag inventory. Please try again.');
+    }
   };
 
-  const onSubmitCorrection = (
+  const onSubmitCorrection = async (
     corrections: EndingInventoryCorrectionItem[],
     reason: string,
   ) => {
     if (!ei || !currentUser) return;
-    requestCorrection(ei.id, currentUser.id, corrections, reason);
-    setShowCorrection(false);
-    addToast(
-      'success',
-      `${corrections.length} correction${corrections.length === 1 ? '' : 's'} sent to store.`,
-    );
+    try {
+      await requestCorrection(ei.id, currentUser.id, corrections, reason);
+      setShowCorrection(false);
+      addToast(
+        'success',
+        `${corrections.length} correction${corrections.length === 1 ? '' : 's'} sent to store.`,
+      );
+    } catch {
+      addToast('error', 'Failed to send correction request. Please try again.');
+    }
   };
 
   const title = delivery ? `Inventory Review · ${delivery.drNumber}` : 'Inventory Review';

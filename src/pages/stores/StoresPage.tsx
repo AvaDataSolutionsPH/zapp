@@ -237,6 +237,7 @@ export default function StoresPage() {
         columns={columns}
         data={paged}
         keyExtractor={(row) => row.id}
+        onRowClick={(row) => navigate(`/stores/${row.id}`)}
         emptyMessage="No stores found matching your filters."
         pagination={{
           page,

@@ -55,7 +55,15 @@ import { computeBillingsFromState } from '@/lib/billingComputations';
 import { computeStoreDeliveryStatus } from '@/lib/deliveryEnforcement';
 import { supabase } from '@/lib/supabase';
 import { hydrateAll } from '@/services/db';
-import { insertStore, insertApplication, updateApplication } from '@/services/dbWrite';
+import {
+  insertStore,
+  insertApplication,
+  updateApplication,
+  insertDelivery,
+  // Aliased because the Zustand action is also named updateDelivery —
+  // keeps both call sites readable without renaming the public action.
+  updateDelivery as updateDeliveryDB,
+} from '@/services/dbWrite';
 
 // Compute the initial billing list from the seeded mock entities. This replaces
 // the previously hard-coded mockBillingRecords — billings are now derived from
@@ -142,7 +150,7 @@ interface AppStore {
   // Deliveries
   deliveries: Delivery[];
   addDelivery: (delivery: Delivery) => void;
-  updateDelivery: (id: string, updates: Partial<Delivery>) => void;
+  updateDelivery: (id: string, updates: Partial<Delivery>) => Promise<void>;
 
   // Beginning Inventory
   beginningInventories: BeginningInventory[];
@@ -597,15 +605,41 @@ export const useStore = create<AppStore>((set, get) => {
   deliveries: mockDeliveries,
 
   addDelivery: (delivery: Delivery) => {
+    // Optimistic in-memory insert. Background-persist when DB is the
+    // current source of truth; roll the row out on failure so the UI
+    // stays consistent with what's actually in Supabase.
     set((s) => ({ deliveries: [...s.deliveries, delivery] }));
+    if (get().dataSource !== 'db') return;
+    void insertDelivery(delivery).catch((err) => {
+      console.error('[useStore] addDelivery DB write failed, rolling back:', err);
+      set((s) => ({
+        deliveries: s.deliveries.filter((d) => d.id !== delivery.id),
+      }));
+    });
   },
 
-  updateDelivery: (id: string, updates: Partial<Delivery>) => {
+  updateDelivery: async (id: string, updates: Partial<Delivery>) => {
+    const prev = get().deliveries.find((d) => d.id === id);
+    if (!prev) return;
+    const merged: Delivery = { ...prev, ...updates };
+
+    // Optimistic UI update. Background write replaces the full row
+    // using the merged shape so JSONB items / numeric totals stay in
+    // sync with the in-memory copy. On failure we restore the snapshot
+    // and re-throw so the caller can surface an error toast.
     set((s) => ({
-      deliveries: s.deliveries.map((d) =>
-        d.id === id ? { ...d, ...updates } : d,
-      ),
+      deliveries: s.deliveries.map((d) => (d.id === id ? merged : d)),
     }));
+    if (get().dataSource !== 'db') return;
+    try {
+      await updateDeliveryDB(merged);
+    } catch (err) {
+      console.error('[useStore] updateDelivery DB write failed, rolling back:', err);
+      set((s) => ({
+        deliveries: s.deliveries.map((d) => (d.id === id ? prev : d)),
+      }));
+      throw err;
+    }
   },
 
   // ─── Beginning Inventory ───────────────────────────────────────

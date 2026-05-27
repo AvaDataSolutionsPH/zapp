@@ -10,7 +10,7 @@
 // optimistic in-memory update.
 
 import { supabase } from '@/lib/supabase';
-import type { Store, Application } from '@/types';
+import type { Store, Application, Delivery } from '@/types';
 
 // ── Mappers (TS camelCase → DB snake_case) ────────────────────
 // Kept duplicate of scripts/seed-from-mock.ts mappers on purpose:
@@ -38,6 +38,22 @@ const mapStoreToDB = (s: Store) => ({
   email: s.email,
   created_at: s.createdAt,
   delivery_status: s.deliveryStatus,
+});
+
+const mapDeliveryToDB = (d: Delivery) => ({
+  id: d.id,
+  store_id: d.storeId,
+  plant_id: d.plantId,
+  date: d.date,
+  status: d.status,
+  dr_number: d.drNumber,
+  // JSONB column — pass the items array straight through; nested
+  // camelCase keys (skuId, drPrice, etc.) are stored verbatim and
+  // read back the same way by transformRow in db.ts (it only touches
+  // top-level keys).
+  items: d.items,
+  total_dr_cost: d.totalDRCost,
+  total_srp: d.totalSRP,
 });
 
 const mapApplicationToDB = (a: Application) => ({
@@ -91,5 +107,20 @@ export async function updateApplication(app: Application): Promise<void> {
     .from('applications')
     .update(mapApplicationToDB(app) as never)
     .eq('id', app.id);
+  if (error) throw error;
+}
+
+export async function insertDelivery(delivery: Delivery): Promise<void> {
+  const { error } = await supabase
+    .from('deliveries')
+    .insert(mapDeliveryToDB(delivery) as never);
+  if (error) throw error;
+}
+
+export async function updateDelivery(delivery: Delivery): Promise<void> {
+  const { error } = await supabase
+    .from('deliveries')
+    .update(mapDeliveryToDB(delivery) as never)
+    .eq('id', delivery.id);
   if (error) throw error;
 }

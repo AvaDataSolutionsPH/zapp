@@ -307,6 +307,7 @@ export default function DeliveriesPage() {
           columns={columns}
           data={paged}
           keyExtractor={(row) => row.id}
+          onRowClick={(row) => setSelectedDelivery(row)}
           emptyMessage="No deliveries found matching your filters."
           pagination={{
             page,

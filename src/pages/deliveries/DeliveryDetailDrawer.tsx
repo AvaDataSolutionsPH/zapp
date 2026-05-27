@@ -13,6 +13,7 @@ import {
   Table,
   ConfirmDialog,
 } from '@/components/ui';
+import { useToast } from '@/components/ui/Toast';
 import type { TableColumn } from '@/components/ui';
 import type { Delivery, DeliveryItem } from '@/types';
 
@@ -24,6 +25,7 @@ interface DeliveryDetailDrawerProps {
 export default function DeliveryDetailDrawer({ delivery, onClose }: DeliveryDetailDrawerProps) {
   const navigate = useNavigate();
   const { stores, plants, updateDelivery } = useStore();
+  const { addToast } = useToast();
   const [showMarkDelivered, setShowMarkDelivered] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
@@ -34,13 +36,20 @@ export default function DeliveryDetailDrawer({ delivery, onClose }: DeliveryDeta
   const store = stores.find((s) => s.id === delivery.storeId);
   const plant = plants.find((p) => p.id === delivery.plantId);
 
-  const handleMarkDelivered = () => {
+  const handleMarkDelivered = async () => {
     setActionLoading(true);
-    setTimeout(() => {
-      updateDelivery(delivery.id, { status: 'delivered' });
-      setActionLoading(false);
+    try {
+      await updateDelivery(delivery.id, { status: 'delivered' });
+      addToast(
+        'success',
+        `DR ${delivery.drNumber} marked as delivered to ${store?.name ?? 'store'}.`,
+      );
       setShowMarkDelivered(false);
-    }, 500);
+    } catch {
+      addToast('error', 'Failed to mark delivery as delivered. Please try again.');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const itemColumns: TableColumn<DeliveryItem>[] = [

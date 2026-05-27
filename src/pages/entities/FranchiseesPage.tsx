@@ -182,6 +182,7 @@ export default function FranchiseesPage() {
         columns={columns}
         data={paged}
         keyExtractor={(row) => row.id}
+        onRowClick={(row) => navigate(`/stores/${row.id}`)}
         emptyMessage="No franchisees found."
         pagination={{
           page,

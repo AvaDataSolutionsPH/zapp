@@ -472,6 +472,7 @@ export default function BillingPage() {
         columns={columns}
         data={paged}
         keyExtractor={(row) => row.id}
+        onRowClick={(row) => setSelectedBilling(row)}
         emptyMessage="No billing records found matching your filters."
         pagination={{
           page,

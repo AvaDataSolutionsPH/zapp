@@ -325,6 +325,7 @@ export default function PaymentsPage() {
           columns={columns}
           data={paged}
           keyExtractor={(row) => row.id}
+          onRowClick={(row) => setVerifyPayment(row)}
           emptyMessage="No payments found matching your filters."
           pagination={{
             page,

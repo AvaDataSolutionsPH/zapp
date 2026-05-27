@@ -22,6 +22,55 @@ interface ToastContextValue {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Sound (Web Audio — no asset files needed)                          */
+/* ------------------------------------------------------------------ */
+
+// Two-tone rising chime for success, falling tone for error, single
+// soft beep for info / warning. Synthesized via Web Audio API so we
+// don't ship any audio assets. Browsers gate audio behind a user
+// gesture — addToast is always called from a click handler, so the
+// gesture is satisfied.
+const TONES: Record<ToastVariant, number[]> = {
+  success: [523.25, 783.99], // C5 → G5
+  error: [415.3, 311.13],    // G#4 → D#4
+  warning: [659.25],          // E5
+  info: [523.25],             // C5
+};
+
+type WindowWithWebkit = Window & { webkitAudioContext?: typeof AudioContext };
+
+let sharedAudioCtx: AudioContext | null = null;
+function getAudioContext(): AudioContext | null {
+  if (typeof window === 'undefined') return null;
+  if (sharedAudioCtx) return sharedAudioCtx;
+  const Ctor =
+    window.AudioContext ?? (window as WindowWithWebkit).webkitAudioContext;
+  if (!Ctor) return null;
+  sharedAudioCtx = new Ctor();
+  return sharedAudioCtx;
+}
+
+function playToastSound(variant: ToastVariant): void {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  const sequence = TONES[variant];
+  sequence.forEach((freq, i) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    const start = ctx.currentTime + i * 0.11;
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(0.18, start + 0.01);
+    gain.gain.linearRampToValueAtTime(0, start + 0.18);
+    osc.start(start);
+    osc.stop(start + 0.2);
+  });
+}
+
+/* ------------------------------------------------------------------ */
 /*  Context                                                            */
 /* ------------------------------------------------------------------ */
 
@@ -54,6 +103,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     (variant: ToastVariant, message: string, duration = 4000) => {
       const id = `toast-${++toastCounter}`;
       setToasts((prev) => [...prev, { id, variant, message, duration }]);
+      playToastSound(variant);
     },
     []
   );
@@ -127,7 +177,7 @@ function ToastContainer() {
   return (
     <div
       aria-live="polite"
-      className="fixed bottom-4 right-4 z-[100] flex flex-col-reverse gap-2"
+      className="fixed top-4 right-4 z-[100] flex flex-col-reverse gap-2"
     >
       {toasts.map((t) => (
         <Toast key={t.id} toast={t} onRemove={() => removeToast(t.id)} />

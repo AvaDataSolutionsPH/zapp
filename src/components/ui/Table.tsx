@@ -36,6 +36,13 @@ interface TableProps<T> {
   loading?: boolean;
   emptyMessage?: string;
   className?: string;
+  /**
+   * Optional. When provided, the entire row becomes clickable / keyboard-
+   * activatable (Enter / Space) and navigates via this handler. Interactive
+   * children inside cells (buttons, links) must still call
+   * `e.stopPropagation()` so they don't double-fire.
+   */
+  onRowClick?: (row: T) => void;
 }
 
 /* ------------------------------------------------------------------ */
@@ -116,6 +123,7 @@ export function Table<T>({
   loading = false,
   emptyMessage = 'No data found.',
   className,
+  onRowClick,
 }: TableProps<T>) {
   const handleSort = (key: string, sortable?: boolean) => {
     if (sortable && onSort) onSort(key);
@@ -165,17 +173,41 @@ export function Table<T>({
                 </td>
               </tr>
             ) : (
-              data.map((row, idx) => (
-                <tr key={keyExtractor(row, idx)} className="hover:bg-gray-50 transition-colors">
-                  {columns.map((col) => (
-                    <td key={col.key} className={clsx('px-4 py-3 text-gray-700', col.className)}>
-                      {col.render
-                        ? col.render(row, idx)
-                        : String((row as Record<string, unknown>)[col.key] ?? '')}
-                    </td>
-                  ))}
-                </tr>
-              ))
+              data.map((row, idx) => {
+                const clickable = !!onRowClick;
+                return (
+                  <tr
+                    key={keyExtractor(row, idx)}
+                    className={clsx(
+                      'transition-colors',
+                      clickable
+                        ? 'cursor-pointer hover:bg-zapp-orange/5 focus:bg-zapp-orange/5 focus:outline-none'
+                        : 'hover:bg-gray-50',
+                    )}
+                    onClick={clickable ? () => onRowClick(row) : undefined}
+                    onKeyDown={
+                      clickable
+                        ? (e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              onRowClick(row);
+                            }
+                          }
+                        : undefined
+                    }
+                    role={clickable ? 'button' : undefined}
+                    tabIndex={clickable ? 0 : undefined}
+                  >
+                    {columns.map((col) => (
+                      <td key={col.key} className={clsx('px-4 py-3 text-gray-700', col.className)}>
+                        {col.render
+                          ? col.render(row, idx)
+                          : String((row as Record<string, unknown>)[col.key] ?? '')}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

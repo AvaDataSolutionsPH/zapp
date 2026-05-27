@@ -333,6 +333,7 @@ export default function ApplicationsPage() {
         keyExtractor={(row) => row.id}
         loading={loading}
         emptyMessage="No applications found matching your filters."
+        onRowClick={(row) => navigate(`/applications/${row.id}`)}
         pagination={{
           page,
           pageSize: PAGE_SIZE,

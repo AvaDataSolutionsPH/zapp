@@ -55,6 +55,7 @@ import { computeBillingsFromState } from '@/lib/billingComputations';
 import { computeStoreDeliveryStatus } from '@/lib/deliveryEnforcement';
 import { supabase } from '@/lib/supabase';
 import { hydrateAll } from '@/services/db';
+import { insertStore, insertApplication, updateApplication } from '@/services/dbWrite';
 
 // Compute the initial billing list from the seeded mock entities. This replaces
 // the previously hard-coded mockBillingRecords — billings are now derived from
@@ -123,7 +124,7 @@ interface AppStore {
     action: 'approved' | 'declined',
     reviewerId: string,
     notes?: string,
-  ) => void;
+  ) => Promise<void>;
 
   // Distributors
   distributors: Distributor[];
@@ -384,7 +385,15 @@ export const useStore = create<AppStore>((set, get) => {
   stores: initialStores,
 
   addStore: (store: Store) => {
+    // Optimistic in-memory insert. Background-persist when DB is the
+    // current source of truth; roll the row out on failure so the UI
+    // stays consistent with what's actually in Supabase.
     set((s) => ({ stores: [...s.stores, store] }));
+    if (get().dataSource !== 'db') return;
+    void insertStore(store).catch((err) => {
+      console.error('[useStore] addStore DB write failed, rolling back:', err);
+      set((s) => ({ stores: s.stores.filter((st) => st.id !== store.id) }));
+    });
   },
 
   updateStore: (id: string, updates: Partial<Store>) => {
@@ -435,15 +444,38 @@ export const useStore = create<AppStore>((set, get) => {
         },
       ],
     };
+    // Optimistic in-memory insert so the UI updates immediately.
     set((s) => ({ applications: [...s.applications, newApp] }));
+
+    // Persist when DB is the active source of truth. Caller awaits
+    // this Promise, so we re-throw on failure (after rolling back the
+    // optimistic row) and let the form surface the error to the user.
+    if (get().dataSource !== 'db') return;
+    try {
+      await insertApplication(newApp);
+    } catch (err) {
+      console.error('[useStore] submitApplication DB write failed, rolling back:', err);
+      set((s) => ({
+        applications: s.applications.filter((a) => a.id !== newApp.id),
+      }));
+      throw err;
+    }
   },
 
-  reviewApplication: (
+  reviewApplication: async (
     id: string,
     action: 'approved' | 'declined',
     reviewerId: string,
     notes?: string,
   ) => {
+    const state = get();
+    const targetApp = state.applications.find((a) => a.id === id);
+    if (!targetApp) return;
+
+    // Snapshot for rollback if either DB write fails.
+    const prevApplications = state.applications;
+    const prevStores = state.stores;
+
     const now = new Date().toISOString();
     const auditEntry: AuditEntry = {
       id: `al-${uid()}`,
@@ -453,50 +485,99 @@ export const useStore = create<AppStore>((set, get) => {
       details: notes ?? `Application ${action}`,
     };
 
-    set((s) => {
-      const updatedApps = s.applications.map((app) => {
-        if (app.id !== id) return app;
-        return {
-          ...app,
-          status: action as Application['status'],
-          reviewedBy: reviewerId,
-          reviewedAt: now,
-          notes: notes ?? app.notes,
-          auditLog: [...app.auditLog, auditEntry],
-        };
-      });
+    const updatedApp: Application = {
+      ...targetApp,
+      status: action as Application['status'],
+      reviewedBy: reviewerId,
+      reviewedAt: now,
+      notes: notes ?? targetApp.notes,
+      auditLog: [...targetApp.auditLog, auditEntry],
+    };
+    const updatedApps = state.applications.map((a) => (a.id === id ? updatedApp : a));
 
-      // When approved, create a new Store from the application
-      let updatedStores = s.stores;
-      if (action === 'approved') {
-        const approvedApp = updatedApps.find((a) => a.id === id);
-        if (approvedApp) {
-          const newStore: Store = {
-            id: `store-${uid()}`,
-            name: approvedApp.storeName,
-            businessName: approvedApp.storeName,
-            ownerName: approvedApp.fullName,
-            address: approvedApp.address,
-            lat: approvedApp.lat,
-            lng: approvedApp.lng,
-            plantId: approvedApp.assignedPlantId,
-            distributorId: approvedApp.assignedDistributorId,
-            areaSupervisorId: approvedApp.assignedAreaSupervisorId ?? '',
-            franchiseType: approvedApp.referralType === 'distributor' ? 'distributor' : 'direct',
-            status: 'pending',
-            province: '',
-            area: '',
-            phone: approvedApp.mobile,
-            email: approvedApp.email,
-            createdAt: now,
-            deliveryStatus: 'active',
-          };
-          updatedStores = [...s.stores, newStore];
-        }
+    // Compute the new Store outside the set callback so the background
+    // writer can reference it.
+    let newStore: Store | null = null;
+    let updatedStores = state.stores;
+    if (action === 'approved') {
+      // The DB requires a non-null area_supervisor_id with an FK to
+      // area_supervisors.id. If the application didn't capture an area
+      // supervisor (e.g. distributor referral with no AS auto-assign),
+      // fall back to the first AS in the same plant — keeps the new
+      // store routable. A future enhancement adds an explicit "assign
+      // area supervisor" step before approval.
+      let resolvedAreaSupId = updatedApp.assignedAreaSupervisorId ?? '';
+      if (!resolvedAreaSupId) {
+        const fallbackAS =
+          state.areaSupervisors.find((as) => as.plantId === updatedApp.assignedPlantId) ??
+          state.areaSupervisors[0];
+        resolvedAreaSupId = fallbackAS?.id ?? '';
       }
 
-      return { applications: updatedApps, stores: updatedStores };
-    });
+      newStore = {
+        id: `store-${uid()}`,
+        name: updatedApp.storeName,
+        businessName: updatedApp.storeName,
+        ownerName: updatedApp.fullName,
+        address: updatedApp.address,
+        lat: updatedApp.lat,
+        lng: updatedApp.lng,
+        plantId: updatedApp.assignedPlantId,
+        distributorId: updatedApp.assignedDistributorId,
+        areaSupervisorId: resolvedAreaSupId,
+        franchiseType: updatedApp.referralType === 'distributor' ? 'distributor' : 'direct',
+        status: 'pending',
+        province: '',
+        area: '',
+        phone: updatedApp.mobile,
+        email: updatedApp.email,
+        createdAt: now,
+        deliveryStatus: 'active',
+      };
+      updatedStores = [...state.stores, newStore];
+    }
+
+    // Optimistic UI update.
+    set({ applications: updatedApps, stores: updatedStores });
+
+    if (get().dataSource !== 'db') return;
+
+    // Background writes. UPDATE the application first, then INSERT the
+    // store on approval. If the store insert fails AFTER the app update
+    // succeeded, we run a compensating rollback (re-update the app back
+    // to its previous shape) so the DB doesn't end up with an approved
+    // application that has no matching store. The compensating write
+    // is best-effort — if it also fails, we log loudly so it can be
+    // fixed manually. Future revision: wrap both writes in a Postgres
+    // function (RPC) for true atomicity.
+    try {
+      await updateApplication(updatedApp);
+    } catch (err) {
+      console.error('[useStore] reviewApplication: app UPDATE failed, rolling back:', err);
+      set({ applications: prevApplications, stores: prevStores });
+      throw err;
+    }
+
+    if (newStore) {
+      try {
+        await insertStore(newStore);
+      } catch (storeErr) {
+        console.error(
+          '[useStore] reviewApplication: store INSERT failed, compensating app UPDATE:',
+          storeErr,
+        );
+        try {
+          await updateApplication(targetApp);
+        } catch (compErr) {
+          console.error(
+            '[useStore] reviewApplication: COMPENSATING rollback ALSO failed — application is now orphaned in DB (approved without matching store). Manual fix required.',
+            compErr,
+          );
+        }
+        set({ applications: prevApplications, stores: prevStores });
+        throw storeErr;
+      }
+    }
   },
 
   // ─── Distributors ──────────────────────────────────────────────

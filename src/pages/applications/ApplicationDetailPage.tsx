@@ -22,9 +22,9 @@ import {
   Badge,
   StatusBadge,
   Modal,
-  ConfirmDialog,
   EmptyState,
 } from '@/components/ui';
+import { useToast } from '@/components/ui/Toast';
 
 export default function ApplicationDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -42,6 +42,8 @@ export default function ApplicationDetailPage() {
     () => applications.find((a) => a.id === id),
     [applications, id],
   );
+
+  const { addToast } = useToast();
 
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [previewTitle, setPreviewTitle] = useState('');
@@ -73,19 +75,31 @@ export default function ApplicationDetailPage() {
 
   const isPending = application.status === 'pending';
 
-  const handleAction = (action: 'approved' | 'declined') => {
+  const handleAction = async (action: 'approved' | 'declined') => {
     setActionLoading(true);
-    setTimeout(() => {
-      reviewApplication(
+    try {
+      await reviewApplication(
         application.id,
         action,
         currentUser?.id ?? 'system',
         notes || undefined,
       );
-      setActionLoading(false);
+      addToast(
+        action === 'approved' ? 'success' : 'info',
+        action === 'approved'
+          ? `Application from ${application.fullName} approved — store created.`
+          : `Application from ${application.fullName} declined.`,
+      );
       setShowApprove(false);
       setShowDecline(false);
-    }, 600);
+    } catch {
+      addToast(
+        'error',
+        `Failed to ${action === 'approved' ? 'approve' : 'decline'} application. Please try again.`,
+      );
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const openPreview = (url: string, title: string) => {
@@ -281,27 +295,17 @@ export default function ApplicationDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Reviewer Notes */}
-      <Card>
-        <CardHeader>
-          <h2 className="text-lg font-semibold text-gray-900">Reviewer Notes</h2>
-        </CardHeader>
-        <CardContent>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Add notes about this application..."
-            rows={3}
-            disabled={!isPending}
-            className="block w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-zapp-orange/30 focus:border-zapp-orange disabled:bg-gray-50 disabled:text-gray-500"
-          />
-          {application.notes && !isPending && (
-            <p className="text-sm text-gray-600 mt-2">
-              <span className="font-medium">Previous note:</span> {application.notes}
-            </p>
-          )}
-        </CardContent>
-      </Card>
+      {/* Reviewer Notes (read-only when already reviewed) */}
+      {!isPending && application.notes && (
+        <Card>
+          <CardHeader>
+            <h2 className="text-lg font-semibold text-gray-900">Reviewer Notes</h2>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-gray-700 whitespace-pre-wrap">{application.notes}</p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Audit Timeline */}
       <Card>
@@ -367,28 +371,109 @@ export default function ApplicationDetailPage() {
         )}
       </Modal>
 
-      {/* Approve Dialog */}
-      <ConfirmDialog
+      {/* Approve Dialog (notes textarea inline) */}
+      <Modal
         open={showApprove}
-        onClose={() => setShowApprove(false)}
-        onConfirm={() => handleAction('approved')}
+        onClose={() => !actionLoading && setShowApprove(false)}
         title="Approve Application"
-        message={`Are you sure you want to approve the application from "${application.fullName}"? This will create a new franchise store account.`}
-        confirmLabel="Approve"
-        loading={actionLoading}
-      />
+        size="md"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => setShowApprove(false)}
+              disabled={actionLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              iconLeft={<CheckCircle2 size={16} />}
+              onClick={() => handleAction('approved')}
+              loading={actionLoading}
+            >
+              Approve
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-700">
+            Approve the application from{' '}
+            <span className="font-semibold text-gray-900">{application.fullName}</span>? This
+            will create a new franchise store account.
+          </p>
+          <div>
+            <label
+              htmlFor="approve-notes"
+              className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5"
+            >
+              Reviewer Notes (optional)
+            </label>
+            <textarea
+              id="approve-notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Add a note for the audit log..."
+              rows={3}
+              disabled={actionLoading}
+              className="block w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-zapp-orange/30 focus:border-zapp-orange disabled:bg-gray-50"
+            />
+          </div>
+        </div>
+      </Modal>
 
-      {/* Decline Dialog */}
-      <ConfirmDialog
+      {/* Decline Dialog (notes textarea inline) */}
+      <Modal
         open={showDecline}
-        onClose={() => setShowDecline(false)}
-        onConfirm={() => handleAction('declined')}
+        onClose={() => !actionLoading && setShowDecline(false)}
         title="Decline Application"
-        message={`Are you sure you want to decline the application from "${application.fullName}"? This action cannot be undone.`}
-        confirmLabel="Decline"
-        danger
-        loading={actionLoading}
-      />
+        size="md"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => setShowDecline(false)}
+              disabled={actionLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              iconLeft={<XCircle size={16} />}
+              onClick={() => handleAction('declined')}
+              loading={actionLoading}
+            >
+              Decline
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-700">
+            Decline the application from{' '}
+            <span className="font-semibold text-gray-900">{application.fullName}</span>? This
+            action cannot be undone.
+          </p>
+          <div>
+            <label
+              htmlFor="decline-notes"
+              className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5"
+            >
+              Reason / Reviewer Notes (optional)
+            </label>
+            <textarea
+              id="decline-notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Explain why this application is declined..."
+              rows={3}
+              disabled={actionLoading}
+              className="block w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-zapp-orange/30 focus:border-zapp-orange disabled:bg-gray-50"
+            />
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

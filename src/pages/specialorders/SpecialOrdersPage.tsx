@@ -11,6 +11,7 @@ import {
   Stat,
   Select,
 } from '@/components/ui';
+import { useToast } from '@/components/ui/Toast';
 import type { TableColumn, SelectOption } from '@/components/ui';
 import type { SpecialOrder } from '@/types';
 
@@ -24,6 +25,7 @@ export default function SpecialOrdersPage() {
     addSpecialOrder,
     currentUser,
   } = useStore();
+  const { addToast } = useToast();
 
   const [page, setPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
@@ -109,6 +111,10 @@ export default function SpecialOrdersPage() {
       notes: formNotes || undefined,
       createdAt: new Date().toISOString(),
     });
+    addToast(
+      'success',
+      `Special order recorded. SRP total: P${totalSRPVal.toLocaleString()}.`,
+    );
 
     // Reset form
     setShowForm(false);

@@ -17,6 +17,7 @@ import {
   StatusBadge,
   Stat,
 } from '@/components/ui';
+import { useToast } from '@/components/ui/Toast';
 import type { TableColumn, SelectOption, Tab } from '@/components/ui';
 import type { Delivery } from '@/types';
 import DeliveryDetailDrawer from './DeliveryDetailDrawer';
@@ -41,6 +42,7 @@ export default function DeliveriesPage() {
     requestStopDelivery,
     resumeDelivery,
   } = useStore();
+  const { addToast } = useToast();
 
   const allDeliveries = getDeliveriesForCurrentUser();
 
@@ -242,14 +244,20 @@ export default function DeliveriesPage() {
                     <div>
                       {issue.deliveryStatus === 'hold' ? (
                         <button
-                          onClick={() => resumeDelivery(issue.storeId)}
+                          onClick={() => {
+                            resumeDelivery(issue.storeId);
+                            addToast('success', `Delivery resumed for ${issue.storeName}.`);
+                          }}
                           className="inline-flex items-center gap-1 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 transition-colors cursor-pointer border-none"
                         >
                           <Play size={12} /> Resume Delivery
                         </button>
                       ) : issue.level === 'hold' ? (
                         <button
-                          onClick={() => requestStopDelivery(issue.storeId)}
+                          onClick={() => {
+                            requestStopDelivery(issue.storeId);
+                            addToast('warning', `Delivery placed on hold for ${issue.storeName}.`);
+                          }}
                           className="inline-flex items-center gap-1 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 transition-colors cursor-pointer border-none"
                         >
                           <Ban size={12} /> Request Stop Delivery

@@ -24,6 +24,7 @@ import {
   EmptyState,
   Stat,
 } from '@/components/ui';
+import { useToast } from '@/components/ui/Toast';
 import type { TableColumn, Tab } from '@/components/ui';
 import type { PackagingItem, PackagingOrder } from '@/types';
 
@@ -66,6 +67,7 @@ export default function PackagingPage() {
     deliveries,
     submitPackagingOrder,
   } = useStore();
+  const { addToast } = useToast();
 
   const [activeTab, setActiveTab] = useState('catalog');
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -186,11 +188,15 @@ export default function PackagingPage() {
         })),
         totalAmount: cartTotal,
       });
+      addToast(
+        'success',
+        `Packaging order submitted. Total: P${cartTotal.toLocaleString()}.`,
+      );
       setCart([]);
       setSubmitted(true);
       setTimeout(() => setSubmitted(false), 3000);
     } catch {
-      // handle error
+      addToast('error', 'Failed to submit packaging order. Please try again.');
     } finally {
       setSubmitting(false);
     }

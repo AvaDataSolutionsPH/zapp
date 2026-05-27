@@ -17,6 +17,11 @@ import type {
   BeginningInventory,
   EndingInventory,
   Payment,
+  PackagingOrder,
+  Forecast,
+  ReferralCode,
+  SpecialOrder,
+  Notification,
 } from '@/types';
 
 // ── Mappers (TS camelCase → DB snake_case) ────────────────────
@@ -45,6 +50,60 @@ const mapStoreToDB = (s: Store) => ({
   email: s.email,
   created_at: s.createdAt,
   delivery_status: s.deliveryStatus,
+});
+
+const mapPackagingOrderToDB = (p: PackagingOrder) => ({
+  id: p.id,
+  store_id: p.storeId,
+  items: p.items,
+  total_amount: p.totalAmount,
+  status: p.status,
+  ordered_at: p.orderedAt,
+  delivery_id: p.deliveryId ?? null,
+});
+
+const mapForecastToDB = (f: Forecast) => ({
+  id: f.id,
+  store_id: f.storeId,
+  date: f.date,
+  items: f.items,
+  created_by: f.createdBy,
+  status: f.status,
+});
+
+const mapReferralCodeToDB = (r: ReferralCode) => ({
+  id: r.id,
+  code: r.code,
+  type: r.type,
+  distributor_id: r.distributorId ?? null,
+  area_supervisor_id: r.areaSupervisorId ?? null,
+  plant_id: r.plantId,
+  status: r.status,
+  created_at: r.createdAt,
+  usage_count: r.usageCount,
+});
+
+const mapSpecialOrderToDB = (s: SpecialOrder) => ({
+  id: s.id,
+  store_id: s.storeId,
+  date: s.date,
+  items: s.items,
+  total_dr: s.totalDR,
+  total_srp: s.totalSRP,
+  status: s.status,
+  notes: s.notes ?? null,
+  created_at: s.createdAt,
+});
+
+const mapNotificationToDB = (n: Notification) => ({
+  id: n.id,
+  title: n.title,
+  message: n.message,
+  type: n.type,
+  read: n.read,
+  created_at: n.createdAt,
+  target_role: n.targetRole ?? null,
+  target_store_id: n.targetStoreId ?? null,
 });
 
 const mapPaymentToDB = (p: Payment) => ({
@@ -223,5 +282,58 @@ export async function updatePayment(payment: Payment): Promise<void> {
     .from('payments')
     .update(mapPaymentToDB(payment) as never)
     .eq('id', payment.id);
+  if (error) throw error;
+}
+
+export async function updateStore(store: Store): Promise<void> {
+  const { error } = await supabase
+    .from('stores')
+    .update(mapStoreToDB(store) as never)
+    .eq('id', store.id);
+  if (error) throw error;
+}
+
+export async function insertPackagingOrder(po: PackagingOrder): Promise<void> {
+  const { error } = await supabase
+    .from('packaging_orders')
+    .insert(mapPackagingOrderToDB(po) as never);
+  if (error) throw error;
+}
+
+// Forecasts use upsert because saveForecast can both create a brand
+// new forecast or revise an existing one for the same store/date.
+export async function upsertForecast(f: Forecast): Promise<void> {
+  const { error } = await supabase
+    .from('forecasts')
+    .upsert(mapForecastToDB(f) as never);
+  if (error) throw error;
+}
+
+export async function insertReferralCode(r: ReferralCode): Promise<void> {
+  const { error } = await supabase
+    .from('referral_codes')
+    .insert(mapReferralCodeToDB(r) as never);
+  if (error) throw error;
+}
+
+export async function insertSpecialOrder(s: SpecialOrder): Promise<void> {
+  const { error } = await supabase
+    .from('special_orders')
+    .insert(mapSpecialOrderToDB(s) as never);
+  if (error) throw error;
+}
+
+export async function insertNotification(n: Notification): Promise<void> {
+  const { error } = await supabase
+    .from('notifications')
+    .insert(mapNotificationToDB(n) as never);
+  if (error) throw error;
+}
+
+export async function updateNotification(n: Notification): Promise<void> {
+  const { error } = await supabase
+    .from('notifications')
+    .update(mapNotificationToDB(n) as never)
+    .eq('id', n.id);
   if (error) throw error;
 }

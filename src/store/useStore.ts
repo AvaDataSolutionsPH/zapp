@@ -69,6 +69,13 @@ import {
   updateEndingInventory,
   insertPayment,
   updatePayment,
+  updateStore as updateStoreDB,
+  insertPackagingOrder,
+  upsertForecast,
+  insertReferralCode,
+  insertSpecialOrder,
+  insertNotification,
+  updateNotification,
 } from '@/services/dbWrite';
 
 // Compute the initial billing list from the seeded mock entities. This replaces
@@ -423,19 +430,35 @@ export const useStore = create<AppStore>((set, get) => {
   // ─── Delivery Enforcement ─────────────────────────────────────
 
   requestStopDelivery: (storeId: string) => {
+    const prev = get().stores.find((st) => st.id === storeId);
+    if (!prev) return;
+    const updated: Store = { ...prev, deliveryStatus: 'hold' };
     set((s) => ({
-      stores: s.stores.map((st) =>
-        st.id === storeId ? { ...st, deliveryStatus: 'hold' as const } : st,
-      ),
+      stores: s.stores.map((st) => (st.id === storeId ? updated : st)),
     }));
+    if (get().dataSource !== 'db') return;
+    void updateStoreDB(updated).catch((err) => {
+      console.error('[useStore] requestStopDelivery DB write failed, rolling back:', err);
+      set((s) => ({
+        stores: s.stores.map((st) => (st.id === storeId ? prev : st)),
+      }));
+    });
   },
 
   resumeDelivery: (storeId: string) => {
+    const prev = get().stores.find((st) => st.id === storeId);
+    if (!prev) return;
+    const updated: Store = { ...prev, deliveryStatus: 'active' };
     set((s) => ({
-      stores: s.stores.map((st) =>
-        st.id === storeId ? { ...st, deliveryStatus: 'active' as const } : st,
-      ),
+      stores: s.stores.map((st) => (st.id === storeId ? updated : st)),
     }));
+    if (get().dataSource !== 'db') return;
+    void updateStoreDB(updated).catch((err) => {
+      console.error('[useStore] resumeDelivery DB write failed, rolling back:', err);
+      set((s) => ({
+        stores: s.stores.map((st) => (st.id === storeId ? prev : st)),
+      }));
+    });
   },
 
   // ─── Applications ──────────────────────────────────────────────
@@ -1026,6 +1049,15 @@ export const useStore = create<AppStore>((set, get) => {
 
     // Packaging totals flow into Zapp Billing for the matching cutoff.
     recomputeBillings();
+
+    if (get().dataSource !== 'db') return;
+    void insertPackagingOrder(newOrder).catch((err) => {
+      console.error('[useStore] submitPackagingOrder DB write failed, rolling back:', err);
+      set((s) => ({
+        packagingOrders: s.packagingOrders.filter((p) => p.id !== newOrder.id),
+      }));
+      recomputeBillings();
+    });
   },
 
   // ─── Forecasts ────────────────────────────────────────────────
@@ -1033,6 +1065,7 @@ export const useStore = create<AppStore>((set, get) => {
   forecasts: mockForecasts,
 
   saveForecast: (forecast: Forecast) => {
+    const prev = get().forecasts.find((f) => f.id === forecast.id);
     set((s) => {
       const exists = s.forecasts.some((f) => f.id === forecast.id);
       if (exists) {
@@ -1043,6 +1076,23 @@ export const useStore = create<AppStore>((set, get) => {
         };
       }
       return { forecasts: [...s.forecasts, forecast] };
+    });
+
+    if (get().dataSource !== 'db') return;
+    // upsert handles both create and update in a single DB call.
+    void upsertForecast(forecast).catch((err) => {
+      console.error('[useStore] saveForecast DB write failed, rolling back:', err);
+      if (prev) {
+        // Was an update — restore previous shape.
+        set((s) => ({
+          forecasts: s.forecasts.map((f) => (f.id === forecast.id ? prev : f)),
+        }));
+      } else {
+        // Was an insert — drop the new row.
+        set((s) => ({
+          forecasts: s.forecasts.filter((f) => f.id !== forecast.id),
+        }));
+      }
     });
   },
 
@@ -1067,6 +1117,14 @@ export const useStore = create<AppStore>((set, get) => {
       usageCount: 0,
     };
     set((s) => ({ referralCodes: [...s.referralCodes, newCode] }));
+
+    if (get().dataSource !== 'db') return;
+    void insertReferralCode(newCode).catch((err) => {
+      console.error('[useStore] addReferralCode DB write failed, rolling back:', err);
+      set((s) => ({
+        referralCodes: s.referralCodes.filter((r) => r.id !== newCode.id),
+      }));
+    });
   },
 
   // ─── Sales / Analytics ────────────────────────────────────────
@@ -1078,11 +1136,19 @@ export const useStore = create<AppStore>((set, get) => {
   notifications: mockNotifications,
 
   markNotificationRead: (id: string) => {
+    const prev = get().notifications.find((n) => n.id === id);
+    if (!prev || prev.read) return;
+    const updated: Notification = { ...prev, read: true };
     set((s) => ({
-      notifications: s.notifications.map((n) =>
-        n.id === id ? { ...n, read: true } : n,
-      ),
+      notifications: s.notifications.map((n) => (n.id === id ? updated : n)),
     }));
+    if (get().dataSource !== 'db') return;
+    void updateNotification(updated).catch((err) => {
+      console.error('[useStore] markNotificationRead DB write failed, rolling back:', err);
+      set((s) => ({
+        notifications: s.notifications.map((n) => (n.id === id ? prev : n)),
+      }));
+    });
   },
 
   addNotification: (notif) => {
@@ -1093,6 +1159,13 @@ export const useStore = create<AppStore>((set, get) => {
       createdAt: new Date().toISOString(),
     };
     set((s) => ({ notifications: [newNotif, ...s.notifications] }));
+    if (get().dataSource !== 'db') return;
+    void insertNotification(newNotif).catch((err) => {
+      console.error('[useStore] addNotification DB write failed, rolling back:', err);
+      set((s) => ({
+        notifications: s.notifications.filter((n) => n.id !== newNotif.id),
+      }));
+    });
   },
 
   // ─── UI State ─────────────────────────────────────────────────
@@ -1120,6 +1193,15 @@ export const useStore = create<AppStore>((set, get) => {
 
     // Special Orders are always sold and flow directly into billing totals.
     recomputeBillings();
+
+    if (get().dataSource !== 'db') return;
+    void insertSpecialOrder(newOrder).catch((err) => {
+      console.error('[useStore] addSpecialOrder DB write failed, rolling back:', err);
+      set((s) => ({
+        specialOrders: s.specialOrders.filter((so) => so.id !== newOrder.id),
+      }));
+      recomputeBillings();
+    });
   },
 
   // ─── Filtered Data Helpers ────────────────────────────────────

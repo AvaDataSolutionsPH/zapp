@@ -67,6 +67,8 @@ import {
   updateBeginningInventory,
   insertEndingInventory,
   updateEndingInventory,
+  insertPayment,
+  updatePayment,
 } from '@/services/dbWrite';
 
 // Compute the initial billing list from the seeded mock entities. This replaces
@@ -198,7 +200,7 @@ interface AppStore {
     action: 'verified' | 'rejected',
     verifiedBy: string,
     reason?: string,
-  ) => void;
+  ) => Promise<void>;
 
   // Packaging
   packagingCatalog: PackagingItem[];
@@ -956,30 +958,52 @@ export const useStore = create<AppStore>((set, get) => {
       status: 'submitted',
       submittedAt: new Date().toISOString(),
     };
+    // Optimistic in-memory insert. Background-persist when DB is the
+    // source of truth; rollback on failure.
     set((s) => ({ payments: [...s.payments, newPayment] }));
+    if (get().dataSource !== 'db') return;
+    void insertPayment(newPayment).catch((err) => {
+      console.error('[useStore] submitPayment DB write failed, rolling back:', err);
+      set((s) => ({ payments: s.payments.filter((p) => p.id !== newPayment.id) }));
+    });
   },
 
-  verifyPayment: (
+  verifyPayment: async (
     id: string,
     action: 'verified' | 'rejected',
     verifiedBy: string,
     reason?: string,
   ) => {
+    const prevPayment = get().payments.find((p) => p.id === id);
+    if (!prevPayment) return;
+    const updatedPayment: Payment = {
+      ...prevPayment,
+      status: action as Payment['status'],
+      verifiedBy,
+      rejectedReason: action === 'rejected' ? reason : prevPayment.rejectedReason,
+    };
+
     set((s) => ({
-      payments: s.payments.map((p) =>
-        p.id === id
-          ? {
-              ...p,
-              status: action as Payment['status'],
-              verifiedBy,
-              rejectedReason: action === 'rejected' ? reason : p.rejectedReason,
-            }
-          : p,
-      ),
+      payments: s.payments.map((p) => (p.id === id ? updatedPayment : p)),
     }));
 
-    // Payment status affects billing.status (paid / issued / overdue).
+    // Payment status affects billing.status (paid / issued / overdue),
+    // so we recompute synchronously before the DB write to keep the UI
+    // consistent during the optimistic window.
     recomputeBillings();
+
+    if (get().dataSource !== 'db') return;
+    try {
+      await updatePayment(updatedPayment);
+    } catch (err) {
+      console.error('[useStore] verifyPayment DB write failed, rolling back:', err);
+      set((s) => ({
+        payments: s.payments.map((p) => (p.id === id ? prevPayment : p)),
+      }));
+      // Restore the prior billing state in lockstep with the payment.
+      recomputeBillings();
+      throw err;
+    }
   },
 
   // ─── Packaging ────────────────────────────────────────────────

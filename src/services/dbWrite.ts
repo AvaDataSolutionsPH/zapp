@@ -16,6 +16,7 @@ import type {
   Delivery,
   BeginningInventory,
   EndingInventory,
+  Payment,
 } from '@/types';
 
 // ── Mappers (TS camelCase → DB snake_case) ────────────────────
@@ -44,6 +45,23 @@ const mapStoreToDB = (s: Store) => ({
   email: s.email,
   created_at: s.createdAt,
   delivery_status: s.deliveryStatus,
+});
+
+const mapPaymentToDB = (p: Payment) => ({
+  id: p.id,
+  // billing_id is plain TEXT (no FK) because billings are computed
+  // client-side and don't exist as a DB table — see Phase 2A schema.
+  billing_id: p.billingId,
+  store_id: p.storeId,
+  amount: p.amount,
+  method: p.method,
+  reference_number: p.referenceNumber,
+  date_paid: p.datePaid,
+  proof_url: p.proofUrl ?? null,
+  status: p.status,
+  verified_by: p.verifiedBy ?? null,
+  rejected_reason: p.rejectedReason ?? null,
+  submitted_at: p.submittedAt,
 });
 
 const mapBeginningInventoryToDB = (b: BeginningInventory) => ({
@@ -190,5 +208,20 @@ export async function updateEndingInventory(ei: EndingInventory): Promise<void> 
     .from('ending_inventories')
     .update(mapEndingInventoryToDB(ei) as never)
     .eq('id', ei.id);
+  if (error) throw error;
+}
+
+export async function insertPayment(payment: Payment): Promise<void> {
+  const { error } = await supabase
+    .from('payments')
+    .insert(mapPaymentToDB(payment) as never);
+  if (error) throw error;
+}
+
+export async function updatePayment(payment: Payment): Promise<void> {
+  const { error } = await supabase
+    .from('payments')
+    .update(mapPaymentToDB(payment) as never)
+    .eq('id', payment.id);
   if (error) throw error;
 }

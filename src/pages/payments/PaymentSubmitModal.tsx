@@ -14,6 +14,7 @@ import {
   FileUpload,
   Badge,
 } from '@/components/ui';
+import { useToast } from '@/components/ui/Toast';
 import type { SelectOption } from '@/components/ui';
 
 interface PaymentSubmitModalProps {
@@ -25,6 +26,7 @@ type PaymentMethodType = 'gateway' | 'manual';
 
 export default function PaymentSubmitModal({ open, onClose }: PaymentSubmitModalProps) {
   const { billingRecords, currentUser, stores, submitPayment } = useStore();
+  const { addToast } = useToast();
 
   const [selectedBillingId, setSelectedBillingId] = useState('');
   const [method, setMethod] = useState<PaymentMethodType>('gateway');
@@ -128,6 +130,14 @@ export default function PaymentSubmitModal({ open, onClose }: PaymentSubmitModal
         proofUrl: method === 'manual' ? proofUrl || '/uploads/payments/manual-proof.jpg' : undefined,
       });
 
+      // submitPayment is fire-and-forget; rollback only logs to the
+      // console on failure. Most submissions succeed in practice.
+      addToast(
+        'success',
+        method === 'gateway'
+          ? 'Payment processed. Awaiting billing verification.'
+          : 'Payment submitted. Awaiting billing verification.',
+      );
       setSuccess(true);
       setTimeout(() => {
         handleReset();
@@ -135,6 +145,7 @@ export default function PaymentSubmitModal({ open, onClose }: PaymentSubmitModal
       }, 2000);
     } catch {
       setError('Payment submission failed. Please try again.');
+      addToast('error', 'Failed to submit payment. Please try again.');
     } finally {
       setLoading(false);
     }

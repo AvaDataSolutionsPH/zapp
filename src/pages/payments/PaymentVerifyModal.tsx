@@ -15,6 +15,7 @@ import {
   Card,
   CardContent,
 } from '@/components/ui';
+import { useToast } from '@/components/ui/Toast';
 import type { Payment } from '@/types';
 
 // ── Image Viewer ────────────────────────────────────────────────────────
@@ -63,6 +64,7 @@ interface PaymentVerifyModalProps {
 
 export default function PaymentVerifyModal({ open, onClose, payment }: PaymentVerifyModalProps) {
   const { verifyPayment, currentUser, billingRecords, stores } = useStore();
+  const { addToast } = useToast();
 
   const [action, setAction] = useState<'verified' | 'rejected' | null>(null);
   const [rejectReason, setRejectReason] = useState('');
@@ -90,15 +92,18 @@ export default function PaymentVerifyModal({ open, onClose, payment }: PaymentVe
     if (!payment || !currentUser) return;
     setLoading(true);
     try {
-      await new Promise((r) => setTimeout(r, 600));
-      verifyPayment(payment.id, 'verified', currentUser.id);
+      await verifyPayment(payment.id, 'verified', currentUser.id);
+      addToast(
+        'success',
+        `Payment from ${store?.name ?? 'store'} verified. Billing marked paid.`,
+      );
       setSuccess(true);
       setTimeout(() => {
         handleReset();
         onClose();
       }, 1500);
     } catch {
-      // handle error
+      addToast('error', 'Failed to verify payment. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -108,15 +113,15 @@ export default function PaymentVerifyModal({ open, onClose, payment }: PaymentVe
     if (!payment || !currentUser || !rejectReason.trim()) return;
     setLoading(true);
     try {
-      await new Promise((r) => setTimeout(r, 600));
-      verifyPayment(payment.id, 'rejected', currentUser.id, rejectReason);
+      await verifyPayment(payment.id, 'rejected', currentUser.id, rejectReason);
+      addToast('info', `Payment from ${store?.name ?? 'store'} rejected.`);
       setSuccess(true);
       setTimeout(() => {
         handleReset();
         onClose();
       }, 1500);
     } catch {
-      // handle error
+      addToast('error', 'Failed to reject payment. Please try again.');
     } finally {
       setLoading(false);
     }

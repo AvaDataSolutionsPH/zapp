@@ -25,6 +25,7 @@ import {
   EmptyState,
 } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
+import { useStorageUrl } from '@/lib/useStorageUrl';
 
 export default function ApplicationDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -44,6 +45,14 @@ export default function ApplicationDetailPage() {
   );
 
   const { addToast } = useToast();
+
+  // Resolve any Supabase storage refs into renderable URLs. Public
+  // bucket refs resolve to a permanent public URL; private bucket
+  // refs resolve to a fresh signed URL each render. Legacy mock
+  // URLs (e.g. https://placehold.co/...) pass through unchanged.
+  const storePhotoUrl = useStorageUrl(application?.storePhotoUrl);
+  const govIdUrl = useStorageUrl(application?.govIdUrl);
+  const proofOfBillingUrl = useStorageUrl(application?.proofOfBillingUrl);
 
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [previewTitle, setPreviewTitle] = useState('');
@@ -260,9 +269,9 @@ export default function ApplicationDetailPage() {
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {[
-              { label: 'Store Photo', url: application.storePhotoUrl, icon: <FileImage size={20} /> },
-              { label: 'Government ID', url: application.govIdUrl, icon: <IdCard size={20} /> },
-              { label: 'Proof of Billing', url: application.proofOfBillingUrl, icon: <Receipt size={20} /> },
+              { label: 'Store Photo', url: storePhotoUrl, icon: <FileImage size={20} /> },
+              { label: 'Government ID', url: govIdUrl, icon: <IdCard size={20} /> },
+              { label: 'Proof of Billing', url: proofOfBillingUrl, icon: <Receipt size={20} /> },
             ].map((doc) => (
               <button
                 key={doc.label}

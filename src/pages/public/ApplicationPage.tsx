@@ -39,6 +39,7 @@ import {
 import type { SelectOption, UploadedFile } from '@/components/ui';
 import { useStore } from '@/store/useStore';
 import { referralService } from '@/services/api';
+import { uploadFile, buildObjectPath, deleteFile, parseStorageRef } from '@/services/storage';
 import type { ReferralCode, Distributor, AreaSupervisor, Plant } from '@/types';
 
 // ── Philippine provinces & cities for selects ─────────────────
@@ -314,7 +315,45 @@ export default function ApplicationPage() {
 
     setSubmitting(true);
 
+    // Scope ID used as a path prefix in Storage. The store action
+    // generates the actual application ID, so we mint a temporary
+    // one here just for path grouping. If the submit fails after
+    // uploads we clean the orphaned objects up below.
+    const scopeId = `pending-${Date.now().toString(36)}`;
+    const uploadedRefs: string[] = [];
+
     try {
+      // Store photo → public bucket (low-sensitivity, embedded
+      // directly in <img src>). Gov ID + Proof of billing → private
+      // bucket; renderers fetch a fresh signed URL via useStorageUrl.
+      const storePhotoFile = form.storePhoto[0]?.file;
+      const govIdFile = form.govId[0]?.file;
+      const proofFile = form.proofOfBilling[0]?.file;
+      if (!storePhotoFile || !govIdFile || !proofFile) {
+        throw new Error('Missing required upload');
+      }
+
+      const storePhotoUpload = await uploadFile(
+        'zapp-public',
+        buildObjectPath('store-photo', scopeId, storePhotoFile),
+        storePhotoFile,
+      );
+      uploadedRefs.push(storePhotoUpload.storageRef);
+
+      const govIdUpload = await uploadFile(
+        'zapp-private',
+        buildObjectPath('gov-id', scopeId, govIdFile),
+        govIdFile,
+      );
+      uploadedRefs.push(govIdUpload.storageRef);
+
+      const proofUpload = await uploadFile(
+        'zapp-private',
+        buildObjectPath('proof-of-billing', scopeId, proofFile),
+        proofFile,
+      );
+      uploadedRefs.push(proofUpload.storageRef);
+
       await submitApplication({
         fullName: form.fullName,
         mobile: form.mobile,
@@ -323,9 +362,9 @@ export default function ApplicationPage() {
         address: `${form.address}, ${form.city}, ${form.province}`,
         lat: parseFloat(form.lat) || 0,
         lng: parseFloat(form.lng) || 0,
-        storePhotoUrl: form.storePhoto[0]?.preview ?? '/mock/store-photo.jpg',
-        govIdUrl: form.govId[0]?.preview ?? '/mock/gov-id.jpg',
-        proofOfBillingUrl: form.proofOfBilling[0]?.preview ?? '/mock/billing-proof.jpg',
+        storePhotoUrl: storePhotoUpload.storageRef,
+        govIdUrl: govIdUpload.storageRef,
+        proofOfBillingUrl: proofUpload.storageRef,
         referralCode: form.referralCode,
         referralType: referralInfo.referral.type,
         assignedDistributorId: referralInfo.distributor?.id,
@@ -333,7 +372,16 @@ export default function ApplicationPage() {
         assignedPlantId: referralInfo.referral.plantId,
       });
       setShowSuccess(true);
-    } catch {
+    } catch (err) {
+      // Best-effort cleanup of any files we managed to upload before
+      // failing — keeps the Storage buckets tidy.
+      for (const ref of uploadedRefs) {
+        const parsed = parseStorageRef(ref);
+        if (parsed) {
+          deleteFile(parsed.bucket, parsed.path).catch(() => undefined);
+        }
+      }
+      console.error('[ApplicationPage] submission failed:', err);
       setErrors({ consent: 'Submission failed. Please try again.' });
     } finally {
       setSubmitting(false);

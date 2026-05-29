@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { aiService } from '@/services/api';
+import { isGeminiConfigured, geminiAnalyzeDR } from '@/services/aiService';
 import {
   Card,
   CardHeader,
@@ -65,6 +66,7 @@ export default function BeginningInventoryPage() {
   const {
     deliveries,
     stores,
+    skus,
     addBeginningInventory,
   } = useStore();
   const { addToast } = useToast();
@@ -116,10 +118,27 @@ export default function BeginningInventoryPage() {
     if (!delivery) return;
     setAiProcessing(true);
     try {
-      const [ocr, crates] = await Promise.all([
-        aiService.processOCR('mock-dr-image'),
-        aiService.estimateCrates(['mock-crate-1', 'mock-crate-2']),
-      ]);
+      // Real OCR via Gemini when configured + a DR file is present;
+      // otherwise fall back to the legacy mock so the demo still works
+      // without an API key. On Gemini failure (network, rate, schema)
+      // we surface a warning toast and still fall back so the user can
+      // complete the BI submission flow.
+      const drFile = drFiles[0]?.file;
+      let ocr: AIResult[];
+      if (isGeminiConfigured() && drFile) {
+        try {
+          ocr = await geminiAnalyzeDR(drFile, skus);
+          addToast('success', `AI extracted ${ocr.length} line item(s) from DR.`);
+        } catch (err) {
+          console.error('[BeginningInventoryPage] Gemini DR OCR failed:', err);
+          addToast('warning', 'AI extraction failed — using mock estimates.');
+          ocr = await aiService.processOCR('mock-dr-image');
+        }
+      } else {
+        ocr = await aiService.processOCR('mock-dr-image');
+      }
+
+      const crates = await aiService.estimateCrates(['mock-crate-1', 'mock-crate-2']);
       setOcrResults(ocr);
       setCrateResults(crates);
 
@@ -161,7 +180,7 @@ export default function BeginningInventoryPage() {
     } finally {
       setAiProcessing(false);
     }
-  }, [delivery]);
+  }, [delivery, drFiles, skus, addToast]);
 
   // Update confirmed row
   const updateRow = (skuId: string, field: keyof ConfirmedRow, value: number | boolean) => {

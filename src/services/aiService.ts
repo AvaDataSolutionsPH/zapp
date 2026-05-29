@@ -9,8 +9,8 @@
 // (SDK init, env-var gate, file → base64 helper, ping). The
 // actual prompt + JSON-schema logic lands in 2D-2 + 2D-3.
 
-import { GoogleGenAI } from '@google/genai';
-import type { AIResult, SKU } from '@/types';
+import { GoogleGenAI, Type } from '@google/genai';
+import type { AIResult, ConfidenceLevel, SKU } from '@/types';
 
 // ── Config ──────────────────────────────────────────────────────────
 
@@ -96,13 +96,153 @@ export async function pingGemini(): Promise<string> {
   return response.text ?? '';
 }
 
-// ── Phase 2D-2: DR slip OCR (stub) ──────────────────────────────────
+// ── Phase 2D-2: DR slip OCR ─────────────────────────────────────────
+//
+// Sends the uploaded DR image to Gemini Vision with a structured JSON
+// schema and the in-app SKU catalog, then maps the response into the
+// existing AIResult shape so the BeginningInventoryPage consumer is
+// unchanged. Fuzzy matching is delegated to the model — we provide the
+// catalog and ask it to pick the closest match (or null) per line.
+//
+// The returned AIResult[] guarantees: type='ocr_dr', confidence set,
+// extractedValue present (qty as integer). skuId is set when the model
+// found a clean match; otherwise it's omitted and skuName carries the
+// raw printed description so the reviewer can manually map.
+
+const CONFIDENCE_VALUES: ConfidenceLevel[] = ['high', 'medium', 'low'];
+
+function normalizeConfidence(value: unknown): ConfidenceLevel {
+  return CONFIDENCE_VALUES.includes(value as ConfidenceLevel)
+    ? (value as ConfidenceLevel)
+    : 'low';
+}
+
+interface DRLineItem {
+  rawDescription: string;
+  quantity: number;
+  matchedSkuId?: string | null;
+  confidence: string;
+  matchReason?: string | null;
+}
+
+interface DRResponse {
+  drNumber?: string | null;
+  drDate?: string | null;
+  lineItems: DRLineItem[];
+}
+
+const DR_RESPONSE_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    drNumber: { type: Type.STRING, nullable: true },
+    drDate: { type: Type.STRING, nullable: true },
+    lineItems: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          rawDescription: { type: Type.STRING },
+          quantity: { type: Type.INTEGER },
+          matchedSkuId: { type: Type.STRING, nullable: true },
+          confidence: {
+            type: Type.STRING,
+            enum: ['high', 'medium', 'low'],
+          },
+          matchReason: { type: Type.STRING, nullable: true },
+        },
+        required: ['rawDescription', 'quantity', 'confidence'],
+      },
+    },
+  },
+  required: ['lineItems'],
+};
+
+function buildDRPrompt(skus: SKU[]): string {
+  const catalog = skus
+    .map((s) => `- ${s.id}: ${s.name} (${s.category})`)
+    .join('\n');
+
+  return `You are reading a printed Delivery Receipt (DR) from a Philippine donut distribution business.
+
+Task: extract every product line item printed on the receipt. Ignore header rows, totals, signatures, and any non-line-item content.
+
+For each line item, return:
+- rawDescription: the exact product name/code as printed on the slip
+- quantity: the order quantity (integer; truncate decimals to the integer part)
+- matchedSkuId: best match from the catalog below, or null if no clean match
+- confidence: "high" (clear name match), "medium" (partial / category match / synonym), or "low" (uncertain guess)
+- matchReason: short explanation (e.g. "exact name match", "no chocolate-ring entry in catalog, matched on chocolate")
+
+Catalog of valid SKUs (try to map each rawDescription to one of these):
+${catalog}
+
+Matching rules:
+- Match liberally on category words: any "chocolate ___" → likely sku-02; any "bavarian ___" → likely sku-03.
+- Set matchedSkuId to null when no reasonable match exists rather than forcing one.
+- Codes printed on the slip (like 10-digit material codes) are NOT in this catalog — use the text description for matching.
+
+Also extract from the header if present:
+- drNumber: the DR number
+- drDate: the DR date
+
+Return JSON only matching the provided schema. No prose.`;
+}
 
 export async function geminiAnalyzeDR(
-  _file: File,
-  _skus: SKU[],
+  file: File,
+  skus: SKU[],
 ): Promise<AIResult[]> {
-  throw new Error('geminiAnalyzeDR not implemented — wired in Phase 2D-2');
+  const ai = getClient();
+  const { data, mimeType } = await fileToBase64(file);
+
+  const response = await ai.models.generateContent({
+    model: GEMINI_MODEL,
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          { text: buildDRPrompt(skus) },
+          { inlineData: { data, mimeType } },
+        ],
+      },
+    ],
+    config: {
+      responseMimeType: 'application/json',
+      responseJsonSchema: DR_RESPONSE_SCHEMA,
+    },
+  });
+
+  const raw = response.text ?? '';
+  let parsed: DRResponse;
+  try {
+    parsed = JSON.parse(raw) as DRResponse;
+  } catch (err) {
+    throw new Error(
+      `Gemini returned non-JSON for DR OCR. First 200 chars: ${raw.slice(0, 200)}`,
+      { cause: err },
+    );
+  }
+
+  const skuById = new Map(skus.map((s) => [s.id, s]));
+
+  return parsed.lineItems.map((line, idx): AIResult => {
+    const matchedSku = line.matchedSkuId ? skuById.get(line.matchedSkuId) : undefined;
+    const confidence = normalizeConfidence(line.confidence);
+    return {
+      id: `ocr-${Date.now().toString(36)}-${idx}`,
+      type: 'ocr_dr',
+      skuId: matchedSku?.id,
+      skuName: matchedSku?.name ?? line.rawDescription,
+      extractedValue: Math.max(0, Math.floor(line.quantity || 0)),
+      confidence,
+      warning:
+        !matchedSku && line.rawDescription
+          ? `No catalog match for "${line.rawDescription}"`
+          : line.matchReason && confidence !== 'high'
+            ? line.matchReason
+            : undefined,
+    };
+  });
 }
 
 // ── Phase 2D-3: Crate counting (stub) ───────────────────────────────

@@ -14,7 +14,11 @@ import type { AIResult, ConfidenceLevel, SKU } from '@/types';
 
 // ── Config ──────────────────────────────────────────────────────────
 
-const GEMINI_MODEL = 'gemini-flash-latest';
+// Pinned to the stable 2.5 Flash release rather than the `-latest`
+// moving alias. The alias periodically routes to whichever model is
+// freshest and during high-traffic windows that pool gets saturated
+// before the pinned stable models do.
+const GEMINI_MODEL = 'gemini-2.5-flash';
 
 // Vite exposes only `VITE_*` env vars to the browser bundle. Missing
 // or empty value = AI features stay off; consumers fall back to the
@@ -78,6 +82,37 @@ export async function fileToBase64(file: File): Promise<{ data: string; mimeType
     reader.onerror = () => reject(reader.error ?? new Error('FileReader error'));
     reader.readAsDataURL(file);
   });
+}
+
+// ── Retry helper ────────────────────────────────────────────────────
+//
+// Gemini Free Tier sporadically returns HTTP 503 UNAVAILABLE when the
+// shared inference pool is saturated. The Google API itself recommends
+// retrying — most 503s recover within a few seconds. We retry up to
+// `maxAttempts` times with exponential backoff (1s, 2s, 4s) and only
+// for the specific transient codes; everything else throws immediately
+// so the caller's fallback path runs without an extra delay.
+
+const TRANSIENT_PATTERNS = ['503', 'UNAVAILABLE', '429', 'RESOURCE_EXHAUSTED'];
+
+function isTransient(err: unknown): boolean {
+  const msg = String((err as { message?: string })?.message ?? err);
+  return TRANSIENT_PATTERNS.some((p) => msg.includes(p));
+}
+
+async function retryOnTransient<T>(fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (!isTransient(err) || attempt === maxAttempts) throw err;
+      const delayMs = 1000 * Math.pow(2, attempt - 1);
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+  throw lastErr;
 }
 
 // ── Connectivity check ──────────────────────────────────────────────
@@ -195,22 +230,24 @@ export async function geminiAnalyzeDR(
   const ai = getClient();
   const { data, mimeType } = await fileToBase64(file);
 
-  const response = await ai.models.generateContent({
-    model: GEMINI_MODEL,
-    contents: [
-      {
-        role: 'user',
-        parts: [
-          { text: buildDRPrompt(skus) },
-          { inlineData: { data, mimeType } },
-        ],
+  const response = await retryOnTransient(() =>
+    ai.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: buildDRPrompt(skus) },
+            { inlineData: { data, mimeType } },
+          ],
+        },
+      ],
+      config: {
+        responseMimeType: 'application/json',
+        responseJsonSchema: DR_RESPONSE_SCHEMA,
       },
-    ],
-    config: {
-      responseMimeType: 'application/json',
-      responseJsonSchema: DR_RESPONSE_SCHEMA,
-    },
-  });
+    }),
+  );
 
   const raw = response.text ?? '';
   let parsed: DRResponse;
@@ -245,11 +282,168 @@ export async function geminiAnalyzeDR(
   });
 }
 
-// ── Phase 2D-3: Crate counting (stub) ───────────────────────────────
+// ── Phase 2D-3: Crate counting ──────────────────────────────────────
+//
+// Sends one or more top-down crate photos to Gemini Vision with the
+// SKU catalog and asks the model to identify visible donut types and
+// tally counts per type. When multiple crate images are uploaded we
+// send them all in a single multimodal request so the model sums
+// across crates in one round-trip (cheaper + lower latency than N
+// separate calls).
+//
+// Identification is best-effort: without reference photos of each SKU,
+// the model leans on the catalog name + category as hints (e.g.
+// "Bavarian Cream → filled donut with cream peeking out", "Classic
+// Glazed → shiny clear glaze"). Demo-grade accuracy — the human
+// reviewer is the final source of truth in our workflow.
+
+interface CrateLineItem {
+  matchedSkuId?: string | null;
+  rawDescription: string;
+  count: number;
+  confidence: string;
+  matchReason?: string | null;
+}
+
+interface CrateResponse {
+  totalDonuts?: number;
+  lineItems: CrateLineItem[];
+}
+
+const CRATE_RESPONSE_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    totalDonuts: { type: Type.INTEGER, nullable: true },
+    lineItems: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          matchedSkuId: { type: Type.STRING, nullable: true },
+          rawDescription: { type: Type.STRING },
+          count: { type: Type.INTEGER },
+          confidence: {
+            type: Type.STRING,
+            enum: ['high', 'medium', 'low'],
+          },
+          matchReason: { type: Type.STRING, nullable: true },
+        },
+        required: ['rawDescription', 'count', 'confidence'],
+      },
+    },
+  },
+  required: ['lineItems'],
+};
+
+function buildCratePrompt(skus: SKU[], imageCount: number): string {
+  const catalog = skus
+    .map((s) => `- ${s.id}: ${s.name} (${s.category})`)
+    .join('\n');
+
+  const imageNote =
+    imageCount > 1
+      ? `You are looking at ${imageCount} crate photos. Sum the count across all photos per SKU (each photo shows a different crate; do NOT assume any donut appears in multiple photos).`
+      : `You are looking at one crate photo.`;
+
+  return `You are counting donuts in a Philippine donut distributor's crate(s) for an inventory check.
+
+${imageNote}
+
+Task: identify each visible donut and assign it to one SKU from the catalog below. Then aggregate counts per SKU.
+
+For each SKU you see, return:
+- matchedSkuId: the catalog id (sku-XX), or null if you cannot confidently identify the type
+- rawDescription: short visual description of what you see (e.g. "shiny clear-glaze rings")
+- count: integer count of donuts of this type across all images
+- confidence: "high" (clearly identified), "medium" (likely but uncertain), "low" (guess)
+- matchReason: brief visual cue (e.g. "white sprinkles + chocolate base", "ube purple filling visible")
+
+Donut catalog:
+${catalog}
+
+Identification hints (without reference photos, use these visual associations):
+- "Classic Glazed": shiny clear/light glaze coating, ring shape
+- "Chocolate Ring": brown/dark chocolate coating, ring shape, no toppings
+- "Bavarian Cream": round (no hole), powdered sugar or chocolate top, cream-filled
+- "Ube Cheese": purple/violet glaze, often with cheese chunks
+- "Strawberry Sprinkle": pink glaze with multicolor sprinkles
+- "Cookies & Cream": white glaze with crushed cookie pieces
+- "Matcha Glazed": green glaze, ring shape
+- "Salted Caramel": amber/golden caramel coating with salt flakes
+- "Cinnamon Sugar": dusted with brown cinnamon sugar
+- "Pandan Cream": light green glaze, filled
+- "Mango Graham": yellow glaze with graham crumbs
+- "Double Choco": dark chocolate with chocolate drizzle/chips
+- "Lemon Twist": yellow glaze, twisted shape
+- "Red Velvet": deep red with cream cheese drizzle
+
+Rules:
+- If a donut clearly doesn't match any SKU, set matchedSkuId to null and describe what you see.
+- Skip empty slots / crate background / hands / non-donut objects.
+- Return JSON only matching the schema. No prose.`;
+}
 
 export async function geminiCountCrate(
-  _file: File,
-  _skus: SKU[],
+  files: File[],
+  skus: SKU[],
 ): Promise<AIResult[]> {
-  throw new Error('geminiCountCrate not implemented — wired in Phase 2D-3');
+  if (files.length === 0) {
+    throw new Error('geminiCountCrate requires at least one crate image');
+  }
+
+  const ai = getClient();
+  const encoded = await Promise.all(files.map((f) => fileToBase64(f)));
+
+  const response = await retryOnTransient(() =>
+    ai.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: buildCratePrompt(skus, files.length) },
+            ...encoded.map((e) => ({
+              inlineData: { data: e.data, mimeType: e.mimeType },
+            })),
+          ],
+        },
+      ],
+      config: {
+        responseMimeType: 'application/json',
+        responseJsonSchema: CRATE_RESPONSE_SCHEMA,
+      },
+    }),
+  );
+
+  const raw = response.text ?? '';
+  let parsed: CrateResponse;
+  try {
+    parsed = JSON.parse(raw) as CrateResponse;
+  } catch (err) {
+    throw new Error(
+      `Gemini returned non-JSON for crate count. First 200 chars: ${raw.slice(0, 200)}`,
+      { cause: err },
+    );
+  }
+
+  const skuById = new Map(skus.map((s) => [s.id, s]));
+
+  return parsed.lineItems.map((line, idx): AIResult => {
+    const matchedSku = line.matchedSkuId ? skuById.get(line.matchedSkuId) : undefined;
+    const confidence = normalizeConfidence(line.confidence);
+    return {
+      id: `crate-${Date.now().toString(36)}-${idx}`,
+      type: 'crate_estimate',
+      skuId: matchedSku?.id,
+      skuName: matchedSku?.name ?? line.rawDescription,
+      estimatedValue: Math.max(0, Math.floor(line.count || 0)),
+      confidence,
+      warning:
+        !matchedSku && line.rawDescription
+          ? `Unidentified: "${line.rawDescription}"`
+          : line.matchReason && confidence !== 'high'
+            ? line.matchReason
+            : undefined,
+    };
+  });
 }

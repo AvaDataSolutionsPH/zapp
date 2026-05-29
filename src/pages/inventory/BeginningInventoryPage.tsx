@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { aiService } from '@/services/api';
-import { isGeminiConfigured, geminiAnalyzeDR } from '@/services/aiService';
+import { isGeminiConfigured, geminiAnalyzeDR, geminiCountCrate } from '@/services/aiService';
 import {
   Card,
   CardHeader,
@@ -118,27 +118,70 @@ export default function BeginningInventoryPage() {
     if (!delivery) return;
     setAiProcessing(true);
     try {
-      // Real OCR via Gemini when configured + a DR file is present;
-      // otherwise fall back to the legacy mock so the demo still works
-      // without an API key. On Gemini failure (network, rate, schema)
-      // we surface a warning toast and still fall back so the user can
-      // complete the BI submission flow.
+      // Both OCR and crate counting can be real Gemini calls when the
+      // env var is set; each is independently gated and independently
+      // falls back to the legacy mock on failure so a single broken
+      // path never blocks the BI submission flow. We run them in
+      // parallel via Promise.all so total latency = max of the two
+      // round-trips rather than the sum. Toasts are deferred until
+      // after BOTH calls settle so the spinner-vs-toast UI stays
+      // coherent (no toast firing while the loader is still spinning).
       const drFile = drFiles[0]?.file;
-      let ocr: AIResult[];
-      if (isGeminiConfigured() && drFile) {
-        try {
-          ocr = await geminiAnalyzeDR(drFile, skus);
-          addToast('success', `AI extracted ${ocr.length} line item(s) from DR.`);
-        } catch (err) {
-          console.error('[BeginningInventoryPage] Gemini DR OCR failed:', err);
-          addToast('warning', 'AI extraction failed — using mock estimates.');
-          ocr = await aiService.processOCR('mock-dr-image');
-        }
-      } else {
-        ocr = await aiService.processOCR('mock-dr-image');
+      const crateRealFiles = crateFiles.map((f) => f.file).filter(Boolean) as File[];
+      const useGemini = isGeminiConfigured();
+
+      type Outcome = { results: AIResult[]; source: 'gemini' | 'mock'; gemFailed?: boolean };
+
+      const ocrPromise: Promise<Outcome> = useGemini && drFile
+        ? geminiAnalyzeDR(drFile, skus).then(
+            (results) => ({ results, source: 'gemini' } as Outcome),
+            async (err) => {
+              console.error('[BeginningInventoryPage] Gemini DR OCR failed:', err);
+              const results = await aiService.processOCR('mock-dr-image');
+              return { results, source: 'mock', gemFailed: true } as Outcome;
+            },
+          )
+        : aiService.processOCR('mock-dr-image').then(
+            (results) => ({ results, source: 'mock' } as Outcome),
+          );
+
+      const cratePromise: Promise<Outcome> = useGemini && crateRealFiles.length > 0
+        ? geminiCountCrate(crateRealFiles, skus).then(
+            (results) => ({ results, source: 'gemini' } as Outcome),
+            async (err) => {
+              console.error('[BeginningInventoryPage] Gemini crate count failed:', err);
+              const results = await aiService.estimateCrates(['mock-crate-1', 'mock-crate-2']);
+              return { results, source: 'mock', gemFailed: true } as Outcome;
+            },
+          )
+        : aiService.estimateCrates(['mock-crate-1', 'mock-crate-2']).then(
+            (results) => ({ results, source: 'mock' } as Outcome),
+          );
+
+      const [ocrOutcome, crateOutcome] = await Promise.all([ocrPromise, cratePromise]);
+      const ocr = ocrOutcome.results;
+      const crates = crateOutcome.results;
+
+      // Fire toasts now that both pipelines have settled. Order is
+      // success-first then failures so the user reads positive news
+      // before the warnings.
+      if (ocrOutcome.source === 'gemini') {
+        addToast('success', `AI extracted ${ocr.length} line item(s) from DR.`);
+      }
+      if (crateOutcome.source === 'gemini') {
+        const totalDonuts = crates.reduce((sum, r) => sum + (r.estimatedValue ?? 0), 0);
+        addToast(
+          'success',
+          `AI counted ${totalDonuts} donut(s) across ${crateRealFiles.length} crate(s).`,
+        );
+      }
+      if (ocrOutcome.gemFailed) {
+        addToast('warning', 'AI extraction failed — using mock estimates.');
+      }
+      if (crateOutcome.gemFailed) {
+        addToast('warning', 'Crate counting failed — using mock estimates.');
       }
 
-      const crates = await aiService.estimateCrates(['mock-crate-1', 'mock-crate-2']);
       setOcrResults(ocr);
       setCrateResults(crates);
 
@@ -180,7 +223,7 @@ export default function BeginningInventoryPage() {
     } finally {
       setAiProcessing(false);
     }
-  }, [delivery, drFiles, skus, addToast]);
+  }, [delivery, drFiles, crateFiles, skus, addToast]);
 
   // Update confirmed row
   const updateRow = (skuId: string, field: keyof ConfirmedRow, value: number | boolean) => {

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { aiService } from '@/services/api';
+import { isGeminiConfigured, geminiCountCrate } from '@/services/aiService';
 import {
   Card,
   CardHeader,
@@ -57,6 +58,7 @@ export default function EndingInventoryPage() {
   const {
     deliveries,
     stores,
+    skus,
     addEndingInventory,
     endingInventories,
     currentUser,
@@ -159,7 +161,43 @@ export default function EndingInventoryPage() {
   const processAI = useCallback(async () => {
     setAiProcessing(true);
     try {
-      const results = await aiService.estimateCrates(['mock-end-crate']);
+      // Real crate counting via Gemini when configured + at least one
+      // crate photo was uploaded; otherwise fall back to the legacy
+      // mock so the EI submission flow still completes without a key.
+      // The model returns per-SKU unsold counts which then get merged
+      // into the existing unsoldRows state by skuId. Toasts fire AFTER
+      // the awaited promise settles, never mid-spinner.
+      const crateRealFiles = crateFiles.map((f) => f.file).filter(Boolean) as File[];
+      let results: AIResult[];
+      let geminiFailed = false;
+      let usedGemini = false;
+      if (isGeminiConfigured() && crateRealFiles.length > 0) {
+        try {
+          results = await geminiCountCrate(crateRealFiles, skus);
+          usedGemini = true;
+        } catch (err) {
+          console.error('[EndingInventoryPage] Gemini crate count failed:', err);
+          geminiFailed = true;
+          results = await aiService.estimateCrates(['mock-end-crate']);
+        }
+      } else {
+        results = await aiService.estimateCrates(['mock-end-crate']);
+      }
+
+      if (usedGemini) {
+        const totalUnsold = results.reduce(
+          (sum, r) => sum + (r.estimatedValue ?? 0),
+          0,
+        );
+        addToast(
+          'success',
+          `AI counted ${totalUnsold} unsold donut(s) across ${crateRealFiles.length} crate(s).`,
+        );
+      }
+      if (geminiFailed) {
+        addToast('warning', 'AI counting failed — using mock estimates.');
+      }
+
       setUnsoldRows((prev) =>
         prev.map((r) => {
           const aiItem = results.find((ai) => ai.skuId === r.skuId);
@@ -178,7 +216,7 @@ export default function EndingInventoryPage() {
     } finally {
       setAiProcessing(false);
     }
-  }, []);
+  }, [crateFiles, skus, addToast]);
 
   const toggleUseAI = (skuId: string) => {
     setUnsoldRows((prev) =>

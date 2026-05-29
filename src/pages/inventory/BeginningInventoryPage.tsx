@@ -24,6 +24,7 @@ import {
   EmptyState,
 } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
+import { uploadFile, buildObjectPath, deleteFile, parseStorageRef } from '@/services/storage';
 import type { TableColumn, SelectOption, UploadedFile } from '@/components/ui';
 import type { AIResult, InventoryItem } from '@/types';
 
@@ -184,10 +185,14 @@ export default function BeginningInventoryPage() {
   };
 
   // Submit
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!delivery) return;
     setSubmitLoading(true);
-    setTimeout(() => {
+
+    const id = `bi-${Date.now().toString(36)}`;
+    const uploadedRefs: string[] = [];
+
+    try {
       const items: InventoryItem[] = confirmedRows.map((r) => ({
         skuId: r.skuId,
         skuName: r.skuName,
@@ -198,14 +203,40 @@ export default function BeginningInventoryPage() {
         manualOverride: r.manualOverride,
       }));
 
-      const id = `bi-${Date.now().toString(36)}`;
+      // Upload DR slip + crate photos to the private bucket. Both
+      // contain internal operational data (DR line items, crate
+      // counts) and shouldn't be exposed via permanent public URLs.
+      const drFile = drFiles[0]?.file;
+      if (!drFile) {
+        throw new Error('Missing DR image upload');
+      }
+      const drUpload = await uploadFile(
+        'zapp-private',
+        buildObjectPath('bi-dr', id, drFile),
+        drFile,
+      );
+      uploadedRefs.push(drUpload.storageRef);
+
+      const crateUploads = await Promise.all(
+        crateFiles
+          .filter((f) => !!f.file)
+          .map((f) =>
+            uploadFile(
+              'zapp-private',
+              buildObjectPath('bi-crate', id, f.file),
+              f.file,
+            ),
+          ),
+      );
+      for (const upload of crateUploads) uploadedRefs.push(upload.storageRef);
+
       addBeginningInventory({
         id,
         deliveryId: delivery.id,
         storeId: delivery.storeId,
         date: new Date().toISOString().slice(0, 10),
-        drImageUrl: 'mock-dr-image',
-        crateImageUrls: crateFiles.map((f) => f.preview ?? 'mock'),
+        drImageUrl: drUpload.storageRef,
+        crateImageUrls: crateUploads.map((u) => u.storageRef),
         aiResults: [...ocrResults, ...crateResults, ...discrepancies],
         confirmedItems: items,
         status: 'confirmed',
@@ -217,10 +248,22 @@ export default function BeginningInventoryPage() {
       // rollback would log to the console but won't surface here —
       // most submissions succeed in practice.
       addToast('success', 'Beginning inventory submitted.');
-      setSubmitLoading(false);
       setShowSubmit(false);
       setSubmitted(true);
-    }, 600);
+    } catch (err) {
+      // Clean up any objects we managed to upload before failing so
+      // the bucket doesn't accumulate orphans.
+      for (const ref of uploadedRefs) {
+        const parsed = parseStorageRef(ref);
+        if (parsed) {
+          deleteFile(parsed.bucket, parsed.path).catch(() => undefined);
+        }
+      }
+      console.error('[BeginningInventoryPage] submit failed:', err);
+      addToast('error', 'Failed to submit beginning inventory. Please try again.');
+    } finally {
+      setSubmitLoading(false);
+    }
   };
 
   // OCR Results columns

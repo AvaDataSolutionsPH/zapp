@@ -25,6 +25,7 @@ import {
   StatusBadge,
 } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
+import { uploadFile, buildObjectPath, deleteFile, parseStorageRef } from '@/services/storage';
 import type { SelectOption, UploadedFile } from '@/components/ui';
 import type { AIResult, EndingInventory, InventoryItem } from '@/types';
 import { InventoryReviewDetailDrawer } from './InventoryReviewDetailDrawer';
@@ -246,6 +247,9 @@ export default function EndingInventoryPage() {
   const handleSave = async () => {
     if (!delivery || !currentUser) return;
     setSaveLoading(true);
+
+    const uploadedRefs: string[] = [];
+
     try {
       const items: InventoryItem[] = unsoldRows.map((r) => ({
         skuId: r.skuId,
@@ -258,6 +262,8 @@ export default function EndingInventoryPage() {
       }));
 
       if (resubmittingEI) {
+        // Resubmit only updates unsoldItems + status; the original
+        // crate photos stay attached. No uploads needed here.
         await resubmitEndingInventory(
           resubmittingEI.id,
           items,
@@ -268,12 +274,30 @@ export default function EndingInventoryPage() {
       } else {
         const id = `ei-${Date.now().toString(36)}`;
         const now = new Date().toISOString();
+
+        // Upload crate photos to the private bucket before persisting
+        // the EI row. Storage refs are stored in crate_image_urls;
+        // the reviewer drawer resolves them to signed URLs at render
+        // time via useStorageUrl.
+        const crateUploads = await Promise.all(
+          crateFiles
+            .filter((f) => !!f.file)
+            .map((f) =>
+              uploadFile(
+                'zapp-private',
+                buildObjectPath('ei-crate', id, f.file),
+                f.file,
+              ),
+            ),
+        );
+        for (const upload of crateUploads) uploadedRefs.push(upload.storageRef);
+
         addEndingInventory({
           id,
           deliveryId: delivery.id,
           storeId: delivery.storeId,
           date: now.slice(0, 10),
-          crateImageUrls: crateFiles.map((f) => f.preview ?? 'mock'),
+          crateImageUrls: crateUploads.map((u) => u.storageRef),
           unsoldItems: items,
           aiResults: [],
           status: 'pending_review',
@@ -296,6 +320,14 @@ export default function EndingInventoryPage() {
       setShowSave(false);
       setSubmitted(true);
     } catch {
+      // Clean up any orphaned uploads from the new-submission path
+      // so the bucket doesn't accumulate dead files.
+      for (const ref of uploadedRefs) {
+        const parsed = parseStorageRef(ref);
+        if (parsed) {
+          deleteFile(parsed.bucket, parsed.path).catch(() => undefined);
+        }
+      }
       addToast('error', 'Failed to save ending inventory. Please try again.');
     } finally {
       setSaveLoading(false);

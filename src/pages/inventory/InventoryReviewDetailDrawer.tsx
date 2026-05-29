@@ -28,7 +28,35 @@ import {
   computeEndingInventory,
   type EndingInventoryComputation,
 } from '@/lib/inventoryComputations';
+import { useStorageUrl } from '@/lib/useStorageUrl';
 import { CorrectionRequestForm } from './CorrectionRequestForm';
+
+// Small wrapper so each crate ref can have its own useStorageUrl
+// call without breaking the hook-rules constraint that hooks can't
+// run inside a loop. Renders the resolved image or a placeholder
+// tile while the signed URL is being fetched / if it fails.
+function CrateImageTile({ refOrUrl, label }: { refOrUrl: string; label: string }) {
+  const resolved = useStorageUrl(refOrUrl);
+  return (
+    <div className="aspect-square rounded-lg border border-gray-200 bg-gray-100 overflow-hidden flex items-center justify-center">
+      {resolved ? (
+        <img
+          src={resolved}
+          alt={label}
+          className="h-full w-full object-cover"
+          onError={(e) => {
+            (e.target as HTMLImageElement).style.display = 'none';
+          }}
+        />
+      ) : (
+        <div className="text-center px-2 text-xs text-gray-500">
+          <ImageIcon size={20} className="mx-auto mb-1 text-gray-400" />
+          {label}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface Props {
   ei: EndingInventory | null;
@@ -313,21 +341,13 @@ export function InventoryReviewDetailDrawer({ ei, open, onClose }: Props) {
               <CardContent>
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                   {ei.crateImageUrls.map((url, idx) => (
-                    <div
+                    <CrateImageTile
                       key={url}
-                      className="aspect-square rounded-lg border border-gray-200 bg-gray-100 flex items-center justify-center text-xs text-gray-500"
-                    >
-                      <div className="text-center px-2">
-                        <ImageIcon size={20} className="mx-auto mb-1 text-gray-400" />
-                        Crate {idx + 1}
-                        <p className="text-[10px] font-mono truncate mt-1">{url.split('/').pop()}</p>
-                      </div>
-                    </div>
+                      refOrUrl={url}
+                      label={`Crate ${idx + 1}`}
+                    />
                   ))}
                 </div>
-                <p className="text-xs text-gray-400 mt-3 italic">
-                  Mock prototype — paths reference placeholder image locations.
-                </p>
               </CardContent>
             </Card>
           )}

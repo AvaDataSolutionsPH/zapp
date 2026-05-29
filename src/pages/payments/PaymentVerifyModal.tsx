@@ -16,24 +16,54 @@ import {
   CardContent,
 } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
+import { useStorageUrl } from '@/lib/useStorageUrl';
 import type { Payment } from '@/types';
 
 // ── Image Viewer ────────────────────────────────────────────────────────
 
-function ProofViewer({ url, onExpand }: { url: string; onExpand: () => void }) {
+function ProofViewer({
+  resolvedUrl,
+  rawRef,
+  onExpand,
+}: {
+  resolvedUrl: string | undefined;
+  rawRef: string;
+  onExpand: () => void;
+}) {
   return (
     <button
       onClick={onExpand}
-      className="w-full rounded-lg border border-gray-200 bg-gray-50 h-48 flex flex-col items-center justify-center gap-2 hover:bg-gray-100 transition-colors cursor-pointer"
+      className="w-full rounded-lg border border-gray-200 bg-gray-50 h-48 overflow-hidden flex flex-col items-center justify-center gap-2 hover:bg-gray-100 transition-colors cursor-pointer"
     >
-      <ImageIcon size={36} className="text-gray-400" />
-      <span className="text-sm text-gray-500">Click to view proof image</span>
-      <span className="text-xs text-gray-400 truncate max-w-[200px]">{url}</span>
+      {resolvedUrl ? (
+        <img
+          src={resolvedUrl}
+          alt="Payment proof"
+          className="h-full w-full object-contain"
+          onError={(e) => {
+            (e.target as HTMLImageElement).style.display = 'none';
+          }}
+        />
+      ) : (
+        <>
+          <ImageIcon size={36} className="text-gray-400" />
+          <span className="text-sm text-gray-500">Click to view proof image</span>
+          <span className="text-xs text-gray-400 truncate max-w-[200px]">{rawRef}</span>
+        </>
+      )}
     </button>
   );
 }
 
-function ExpandedImageModal({ url, onClose }: { url: string; onClose: () => void }) {
+function ExpandedImageModal({
+  resolvedUrl,
+  rawRef,
+  onClose,
+}: {
+  resolvedUrl: string | undefined;
+  rawRef: string;
+  onClose: () => void;
+}) {
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-8 bg-black/70 backdrop-blur-sm" onClick={onClose}>
       <div className="relative max-w-3xl w-full" onClick={(e) => e.stopPropagation()}>
@@ -41,12 +71,20 @@ function ExpandedImageModal({ url, onClose }: { url: string; onClose: () => void
           <X size={18} />
         </button>
         <div className="bg-white rounded-xl p-2 shadow-2xl">
-          <div className="bg-gray-100 rounded-lg h-96 flex items-center justify-center">
-            <div className="text-center text-gray-400">
-              <ImageIcon size={48} className="mx-auto mb-2" />
-              <p className="text-sm">{url}</p>
-              <p className="text-xs mt-1">Payment proof image placeholder</p>
-            </div>
+          <div className="bg-gray-100 rounded-lg h-96 overflow-hidden flex items-center justify-center">
+            {resolvedUrl ? (
+              <img
+                src={resolvedUrl}
+                alt="Payment proof"
+                className="h-full w-full object-contain"
+              />
+            ) : (
+              <div className="text-center text-gray-400">
+                <ImageIcon size={48} className="mx-auto mb-2" />
+                <p className="text-sm">{rawRef}</p>
+                <p className="text-xs mt-1">Loading proof image…</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -76,6 +114,12 @@ export default function PaymentVerifyModal({ open, onClose, payment }: PaymentVe
     () => (payment ? billingRecords.find((b) => b.id === payment.billingId) : null),
     [payment, billingRecords],
   );
+
+  // Resolve the persisted storage ref into a renderable URL (signed for
+  // private buckets, public for public). Legacy mock strings pass
+  // through unchanged so older seeded payments still render their
+  // placeholder URL.
+  const resolvedProofUrl = useStorageUrl(payment?.proofUrl);
 
   const store = useMemo(
     () => (payment ? stores.find((s) => s.id === payment.storeId) : null),
@@ -266,7 +310,11 @@ export default function PaymentVerifyModal({ open, onClose, payment }: PaymentVe
             {payment.proofUrl ? (
               <div>
                 <label className="text-sm font-medium text-gray-700 block mb-2">Payment Proof</label>
-                <ProofViewer url={payment.proofUrl} onExpand={() => setShowProof(true)} />
+                <ProofViewer
+                  resolvedUrl={resolvedProofUrl}
+                  rawRef={payment.proofUrl}
+                  onExpand={() => setShowProof(true)}
+                />
               </div>
             ) : (
               <div className="bg-gray-50 rounded-lg px-4 py-3 text-center text-sm text-gray-400">
@@ -300,7 +348,11 @@ export default function PaymentVerifyModal({ open, onClose, payment }: PaymentVe
 
       {/* Expanded proof image modal */}
       {showProof && payment.proofUrl && (
-        <ExpandedImageModal url={payment.proofUrl} onClose={() => setShowProof(false)} />
+        <ExpandedImageModal
+          resolvedUrl={resolvedProofUrl}
+          rawRef={payment.proofUrl}
+          onClose={() => setShowProof(false)}
+        />
       )}
     </>
   );

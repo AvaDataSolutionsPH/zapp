@@ -16,6 +16,12 @@ import {
 } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import type { SelectOption } from '@/components/ui';
+import {
+  uploadFile,
+  buildObjectPath,
+  deleteFile,
+  parseStorageRef,
+} from '@/services/storage';
 
 interface PaymentSubmitModalProps {
   open: boolean;
@@ -33,7 +39,7 @@ export default function PaymentSubmitModal({ open, onClose }: PaymentSubmitModal
   const [amount, setAmount] = useState('');
   const [referenceNumber, setReferenceNumber] = useState('');
   const [datePaid, setDatePaid] = useState(new Date().toISOString().slice(0, 10));
-  const [proofUrl, setProofUrl] = useState('');
+  const [proofFile, setProofFile] = useState<File | null>(null);
   const [cardNumber, setCardNumber] = useState('');
   const [cardExpiry, setCardExpiry] = useState('');
   const [cardCvv, setCardCvv] = useState('');
@@ -112,10 +118,30 @@ export default function PaymentSubmitModal({ open, onClose }: PaymentSubmitModal
     setLoading(true);
     setError('');
 
+    let uploadedRef: string | null = null;
+
     try {
       // Simulate processing delay for gateway
       if (method === 'gateway') {
         await new Promise((r) => setTimeout(r, 2000));
+      }
+
+      // Manual flow: upload the proof image to the private bucket
+      // first. If this fails we bail before the in-memory mutation so
+      // we never end up with a payment row pointing at a missing file.
+      let proofRef: string | undefined;
+      if (method === 'manual') {
+        if (!proofFile) {
+          throw new Error('Missing payment proof upload');
+        }
+        const scopeId = `pay-${Date.now().toString(36)}`;
+        const upload = await uploadFile(
+          'zapp-private',
+          buildObjectPath('payment-proof', scopeId, proofFile),
+          proofFile,
+        );
+        uploadedRef = upload.storageRef;
+        proofRef = upload.storageRef;
       }
 
       submitPayment({
@@ -127,7 +153,7 @@ export default function PaymentSubmitModal({ open, onClose }: PaymentSubmitModal
           ? `GW-${Date.now().toString(36).toUpperCase()}`
           : referenceNumber,
         datePaid,
-        proofUrl: method === 'manual' ? proofUrl || '/uploads/payments/manual-proof.jpg' : undefined,
+        proofUrl: proofRef,
       });
 
       // submitPayment is fire-and-forget; rollback only logs to the
@@ -144,6 +170,12 @@ export default function PaymentSubmitModal({ open, onClose }: PaymentSubmitModal
         onClose();
       }, 2000);
     } catch {
+      // Best-effort cleanup of an orphaned upload when the in-memory
+      // mutation throws synchronously (rare — submitPayment is void).
+      if (uploadedRef) {
+        const parsed = parseStorageRef(uploadedRef);
+        if (parsed) deleteFile(parsed.bucket, parsed.path).catch(() => undefined);
+      }
       setError('Payment submission failed. Please try again.');
       addToast('error', 'Failed to submit payment. Please try again.');
     } finally {
@@ -157,7 +189,7 @@ export default function PaymentSubmitModal({ open, onClose }: PaymentSubmitModal
     setAmount('');
     setReferenceNumber('');
     setDatePaid(new Date().toISOString().slice(0, 10));
-    setProofUrl('');
+    setProofFile(null);
     setCardNumber('');
     setCardExpiry('');
     setCardCvv('');
@@ -322,9 +354,7 @@ export default function PaymentSubmitModal({ open, onClose }: PaymentSubmitModal
               <FileUpload
                 accept="image/*,.pdf"
                 onChange={(files) => {
-                  if (files.length > 0) {
-                    setProofUrl(files[0].preview ?? `/uploads/payments/proof-${Date.now()}.jpg`);
-                  }
+                  setProofFile(files.length > 0 ? files[0].file : null);
                 }}
               />
               <Input

@@ -60,6 +60,23 @@ const SKIP_KEYWORDS = [
   'serial',
   'po no',
   'order no',
+  'uom',
+  'tax category',
+  'shipped',
+  'reference',
+  'acknowledgement',
+  // Company-address header on a real ZAPP DR (e.g. "110 Mindanao Ave.,
+  // Brgy. Bahay Toro, Quezon City"). These tokens never appear in a
+  // donut product name, so skipping any line containing one drops the
+  // address row without risking a real line item.
+  'corp',
+  'ave',
+  'brgy',
+  'quezon',
+  'mindanao',
+  'bahay',
+  'toro',
+  'city',
 ];
 
 // ── Text normalisation + tokenising ─────────────────────────────────
@@ -84,6 +101,7 @@ export interface ParsedDRLine {
   rawLine: string;
   description: string; // alphabetic portion, for fuzzy matching
   quantity: number;
+  code?: string; // 10-digit product code if printed on the line
 }
 
 /**
@@ -110,9 +128,15 @@ export function parseDRLines(rawText: string): ParsedDRLine[] {
     const lower = line.toLowerCase();
     if (SKIP_KEYWORDS.some((kw) => lower.includes(kw))) continue;
 
+    // A real ZAPP DR prints the 10-digit SAP/material code in the first
+    // column. When present it's the most reliable match signal (an exact
+    // catalog id), so capture it before anything else.
+    const codeMatch = line.match(/(?<!\d)(\d{10})(?!\d)/);
+    const code = codeMatch ? codeMatch[1] : undefined;
+
     // First standalone integer (not part of a decimal) = quantity.
     // Capped at 3 digits: a single delivery line is never 1000+ units,
-    // and the cap also rejects long serial/DR codes (e.g. "8583-0042")
+    // and the cap also rejects long serial/DR/product codes (10+ digits)
     // so a header row never leaks in as a bogus line item.
     const qtyMatch = line.match(/(?<![.\d])(\d{1,3})(?![.\d])/);
     if (!qtyMatch) continue;
@@ -127,7 +151,7 @@ export function parseDRLines(rawText: string): ParsedDRLine[] {
     const letters = description.replace(/[^a-zA-Z]/g, '');
     if (letters.length < 3) continue; // need a real word to match on
 
-    out.push({ rawLine: line, description, quantity });
+    out.push({ rawLine: line, description, quantity, code });
   }
 
   return out;
@@ -224,10 +248,20 @@ export async function tesseractAnalyzeDR(file: File, skus: SKU[]): Promise<AIRes
 
   const lines = parseDRLines(text);
   const stamp = Date.now().toString(36);
+  const skuById = new Map(skus.map((s) => [s.id, s]));
 
   return lines.map((line, idx): AIResult => {
-    const { sku, score } = fuzzyMatchSku(line.description, skus);
-    const confidence = scoreToConfidence(score, ocrConfidence);
+    // Prefer an exact match on the printed 10-digit code; it's
+    // unambiguous and beats fuzzy name matching (some product names
+    // differ only by a prefix, e.g. "Choco Butternut" vs "Zapp Its!
+    // Choco Butternut"). Fall back to fuzzy name matching otherwise.
+    const codeSku = line.code ? skuById.get(line.code) : undefined;
+    const fuzzy = codeSku ? undefined : fuzzyMatchSku(line.description, skus);
+    const sku = codeSku ?? fuzzy?.sku;
+    const confidence: ConfidenceLevel = codeSku
+      ? 'high'
+      : scoreToConfidence(fuzzy?.score ?? 0, ocrConfidence);
+
     return {
       id: `ocr-tess-${stamp}-${idx}`,
       type: 'ocr_dr',

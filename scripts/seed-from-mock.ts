@@ -80,14 +80,28 @@ const CLEAR_ORDER = [
   'plants',
 ];
 
+// Most tables have a TEXT `id` PK we can filter on to "delete all"
+// (Supabase requires a WHERE clause on delete). `sales_metrics` is the
+// exception — it has a COMPOSITE PK (store_id, date, period) and NO `id`
+// column, so filtering on `id` throws "column id does not exist". Map any
+// such table to a column that actually exists.
+const CLEAR_KEY_COLUMN: Record<string, string> = {
+  sales_metrics: 'store_id',
+};
+
 async function clearAll(): Promise<void> {
   for (const table of CLEAR_ORDER) {
-    const { error } = await supabase.from(table).delete().neq('id', '__NEVER_MATCHES__');
+    const keyCol = CLEAR_KEY_COLUMN[table] ?? 'id';
+    const { error } = await supabase.from(table).delete().neq(keyCol, '__NEVER_MATCHES__');
+    // Only ignore "table does not exist" (a not-yet-migrated table is fine
+    // to skip). Any other error — including a missing column or an FK
+    // violation — must fail loud so a half-cleared DB isn't mistaken for a
+    // clean one (which previously cascaded into duplicate-key seed errors).
     if (error && !error.message.includes('does not exist')) {
       console.error(`  ✗ ${table}: ${error.message}`);
-    } else {
-      console.log(`  ✓ cleared ${table}`);
+      throw error;
     }
+    console.log(`  ✓ cleared ${table}`);
   }
 }
 

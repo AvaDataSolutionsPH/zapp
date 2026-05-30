@@ -37,24 +37,87 @@ export const plants: Plant[] = [
 
 // ─── SKUs ────────────────────────────────────────────────────
 
+// Real ZAPP Donuts catalog (sourced from the client's actual Delivery
+// Receipt — UberDeli Corp DR# 858368251 — plus in-store price-tag photos
+// for SRP). The `id` IS the real 10-digit SAP/material code printed on the
+// DR's Code column, so OCR can match a scanned DR line to a SKU by exact
+// code (most reliable signal) before falling back to fuzzy name matching.
+// DR prices are 4-decimal VAT-inclusive exactly as printed; SRP is the
+// rack price tag (rounded peso). Names are Title-Cased for the UI; the
+// matcher is tolerant of the "ZP "/"ZAPP " prefixes printed on the slip.
 export const skus: SKU[] = [
-  { id: 'sku-01', name: 'Classic Glazed', category: 'Classic', drPrice: 12, srpPrice: 20, unit: 'pc' },
-  { id: 'sku-02', name: 'Chocolate Ring', category: 'Classic', drPrice: 12, srpPrice: 20, unit: 'pc' },
-  { id: 'sku-03', name: 'Bavarian Cream', category: 'Filled', drPrice: 14, srpPrice: 25, unit: 'pc' },
-  { id: 'sku-04', name: 'Ube Cheese', category: 'Filled', drPrice: 14, srpPrice: 25, unit: 'pc' },
-  { id: 'sku-05', name: 'Strawberry Sprinkle', category: 'Premium', drPrice: 15, srpPrice: 28, unit: 'pc' },
-  { id: 'sku-06', name: 'Cookies & Cream', category: 'Premium', drPrice: 15, srpPrice: 28, unit: 'pc' },
-  { id: 'sku-07', name: 'Matcha Glazed', category: 'Premium', drPrice: 16, srpPrice: 30, unit: 'pc' },
-  { id: 'sku-08', name: 'Salted Caramel', category: 'Premium', drPrice: 16, srpPrice: 30, unit: 'pc' },
-  { id: 'sku-09', name: 'Cinnamon Sugar', category: 'Classic', drPrice: 12, srpPrice: 20, unit: 'pc' },
-  { id: 'sku-10', name: 'Pandan Cream', category: 'Filled', drPrice: 14, srpPrice: 25, unit: 'pc' },
-  { id: 'sku-11', name: 'Mango Graham', category: 'Premium', drPrice: 16, srpPrice: 30, unit: 'pc' },
-  { id: 'sku-12', name: 'Double Choco', category: 'Premium', drPrice: 15, srpPrice: 28, unit: 'pc' },
-  { id: 'sku-13', name: 'Lemon Twist', category: 'Classic', drPrice: 12, srpPrice: 20, unit: 'pc' },
-  { id: 'sku-14', name: 'Red Velvet', category: 'Premium', drPrice: 16, srpPrice: 30, unit: 'pc' },
-  { id: 'sku-15', name: 'Caramel Macchiato', category: 'Premium', drPrice: 17, srpPrice: 32, unit: 'pc' },
-  { id: 'sku-16', name: 'Blueberry Burst', category: 'Filled', drPrice: 15, srpPrice: 28, unit: 'pc' },
+  { id: '2000017949', name: 'Chocolate Zprinkles', category: 'Premium', drPrice: 20.44, srpPrice: 28, unit: 'pc' },
+  { id: '2000015696', name: 'Zapp Its! Choco Butternut', category: 'Classic', drPrice: 6.5632, srpPrice: 9, unit: 'pc' },
+  { id: '2000015695', name: 'Choco Butternut', category: 'Classic', drPrice: 20.44, srpPrice: 28, unit: 'pc' },
+  { id: '2000000519', name: 'Zapp Its!', category: 'Classic', drPrice: 6.5632, srpPrice: 9, unit: 'pc' },
+  { id: '2000000538', name: 'Bavarian - Classic', category: 'Filled', drPrice: 18.2448, srpPrice: 25, unit: 'pc' },
+  { id: '2000000520', name: 'Bavarian - Choco', category: 'Filled', drPrice: 18.2448, srpPrice: 25, unit: 'pc' },
+  { id: '2000000521', name: 'Strawberry Filled', category: 'Filled', drPrice: 18.2448, srpPrice: 25, unit: 'pc' },
+  { id: '2000020575', name: 'Dobol Bav - Classic, Chocolate', category: 'Premium', drPrice: 21.0, srpPrice: 28, unit: 'pc' },
+  { id: '2000020576', name: 'Dobol Bav - Classic, Strawberry', category: 'Premium', drPrice: 21.0, srpPrice: 28, unit: 'pc' },
 ];
+
+// ─── Legacy SKU remap (16 mock SKUs → 9 real products) ───────
+//
+// The demo data (deliveries, forecasts, inventories, special orders) was
+// authored against the old sku-01…sku-16 mock catalog. Rather than hand-
+// edit ~116 embedded references (error-prone), we map each legacy id to a
+// real product code and rewrite the demo data programmatically at module
+// load via `realSku()` + the deep-remap pass at the bottom of this file.
+// Mapping is by rough flavor/category affinity; exact pairing is
+// cosmetic since this is demo data. All 9 real products are covered.
+const LEGACY_SKU_REMAP: Record<string, string> = {
+  'sku-01': '2000000519', // Classic Glazed      → Zapp Its!
+  'sku-02': '2000015695', // Chocolate Ring      → Choco Butternut
+  'sku-03': '2000000538', // Bavarian Cream      → Bavarian - Classic
+  'sku-04': '2000000520', // Ube Cheese          → Bavarian - Choco
+  'sku-05': '2000000521', // Strawberry Sprinkle → Strawberry Filled
+  'sku-06': '2000017949', // Cookies & Cream     → Chocolate Zprinkles
+  'sku-07': '2000000538', // Matcha Glazed       → Bavarian - Classic
+  'sku-08': '2000015695', // Salted Caramel      → Choco Butternut
+  'sku-09': '2000015696', // Cinnamon Sugar      → Zapp Its! Choco Butternut
+  'sku-10': '2000000520', // Pandan Cream        → Bavarian - Choco
+  'sku-11': '2000000521', // Mango Graham        → Strawberry Filled
+  'sku-12': '2000020575', // Double Choco        → Dobol Bav - Classic, Chocolate
+  'sku-13': '2000000519', // Lemon Twist         → Zapp Its!
+  'sku-14': '2000020576', // Red Velvet          → Dobol Bav - Classic, Strawberry
+  'sku-15': '2000020575', // Caramel Macchiato   → Dobol Bav - Classic, Chocolate
+  'sku-16': '2000020576', // Blueberry Burst     → Dobol Bav - Classic, Strawberry
+};
+
+/**
+ * Resolve a legacy `sku-XX` id (or an already-real code) to the real SKU.
+ * Falls back to the first catalog entry if an id is somehow unknown so the
+ * demo never crashes on a stray reference.
+ */
+function realSku(legacyOrCode: string): SKU {
+  const code = LEGACY_SKU_REMAP[legacyOrCode] ?? legacyOrCode;
+  return skus.find((s) => s.id === code) ?? skus[0];
+}
+
+/**
+ * Recursively rewrite any object carrying a `skuId` to the real catalog:
+ * remaps skuId, and (when present) skuName / drPrice / srpPrice so every
+ * denormalized copy stays consistent with the new catalog. Mutates in
+ * place; safe to run once at module load over the exported demo arrays.
+ */
+function deepRemapSkus(node: unknown): void {
+  if (Array.isArray(node)) {
+    node.forEach(deepRemapSkus);
+    return;
+  }
+  if (node && typeof node === 'object') {
+    const rec = node as Record<string, unknown>;
+    if (typeof rec.skuId === 'string') {
+      const sku = realSku(rec.skuId);
+      rec.skuId = sku.id;
+      if ('skuName' in rec) rec.skuName = sku.name;
+      if (typeof rec.drPrice === 'number') rec.drPrice = sku.drPrice;
+      if (typeof rec.srpPrice === 'number') rec.srpPrice = sku.srpPrice;
+    }
+    for (const value of Object.values(rec)) deepRemapSkus(value);
+  }
+}
 
 // ─── Distributors ────────────────────────────────────────────
 
@@ -531,8 +594,8 @@ function buildDeliveryItems(skuIds: string[], quantities: number[]): {
   totalSRP: number;
 } {
   const items: DeliveryItem[] = skuIds.map((sid, i) => {
-    const sku = skus.find((s) => s.id === sid)!;
-    return { skuId: sid, skuName: sku.name, quantity: quantities[i], drPrice: sku.drPrice, srpPrice: sku.srpPrice };
+    const sku = realSku(sid);
+    return { skuId: sku.id, skuName: sku.name, quantity: quantities[i], drPrice: sku.drPrice, srpPrice: sku.srpPrice };
   });
   const totalDRCost = items.reduce((s, it) => s + it.quantity * it.drPrice, 0);
   const totalSRP = items.reduce((s, it) => s + it.quantity * it.srpPrice, 0);
@@ -1341,6 +1404,28 @@ export const specialOrders: SpecialOrder[] = [
     createdAt: '2026-03-19T08:00:00Z',
   },
 ];
+
+// ─── Real-catalog normalization pass ────────────────────────
+//
+// Rewrite every legacy sku-XX reference embedded in the demo data to the
+// real 9-product catalog (see LEGACY_SKU_REMAP / deepRemapSkus above).
+// Deliveries already resolve through realSku() in buildDeliveryItems, but
+// they're included here too for idempotent safety. Forecast items, BI/EI
+// inventory items, AI results, EI revisions/corrections, and special-order
+// line items are all normalized in place so no view ever shows an old
+// mock product name.
+deepRemapSkus(deliveries);
+deepRemapSkus(beginningInventories);
+deepRemapSkus(endingInventories);
+deepRemapSkus(specialOrders);
+deepRemapSkus(forecasts);
+
+// Special-order header totals were authored from the old mock prices;
+// recompute from the now-real line-item prices so the headers reconcile.
+for (const so of specialOrders) {
+  so.totalDR = so.items.reduce((sum, it) => sum + it.quantity * it.drPrice, 0);
+  so.totalSRP = so.items.reduce((sum, it) => sum + it.quantity * it.srpPrice, 0);
+}
 
 // ─── Aliases (used by store & api) ──────────────────────────
 

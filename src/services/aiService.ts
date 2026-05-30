@@ -212,9 +212,9 @@ Catalog of valid SKUs (try to map each rawDescription to one of these):
 ${catalog}
 
 Matching rules:
-- Match liberally on category words: any "chocolate ___" → likely sku-02; any "bavarian ___" → likely sku-03.
+- Match liberally on category/flavor words (e.g. any "chocolate ___", any "bavarian ___") to the closest catalog name.
+- The catalog id IS the real 10-digit product code printed in the slip's Code column. If a line shows a 10-digit code that exactly equals a catalog id, match to that id directly — it is the most reliable signal.
 - Set matchedSkuId to null when no reasonable match exists rather than forcing one.
-- Codes printed on the slip (like 10-digit material codes) are NOT in this catalog — use the text description for matching.
 
 Also extract from the header if present:
 - drNumber: the DR number

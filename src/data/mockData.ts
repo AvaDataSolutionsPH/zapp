@@ -52,7 +52,7 @@ export const skus: SKU[] = [
   { id: '2000000519', name: 'Zapp Its!', category: 'Classic', drPrice: 6.5632, srpPrice: 9, unit: 'pc' },
   { id: '2000000538', name: 'Bavarian - Classic', category: 'Filled', drPrice: 18.2448, srpPrice: 25, unit: 'pc' },
   { id: '2000000520', name: 'Bavarian - Choco', category: 'Filled', drPrice: 18.2448, srpPrice: 25, unit: 'pc' },
-  { id: '2000000521', name: 'Strawberry Filled', category: 'Filled', drPrice: 18.2448, srpPrice: 25, unit: 'pc' },
+  { id: '2000000521', name: 'Strawberry Zprinkles', category: 'Filled', drPrice: 18.2448, srpPrice: 25, unit: 'pc' },
   { id: '2000020575', name: 'Dobol Bav - Classic, Chocolate', category: 'Premium', drPrice: 21.0, srpPrice: 28, unit: 'pc' },
   { id: '2000020576', name: 'Dobol Bav - Classic, Strawberry', category: 'Premium', drPrice: 21.0, srpPrice: 28, unit: 'pc' },
 ];
@@ -71,13 +71,13 @@ const LEGACY_SKU_REMAP: Record<string, string> = {
   'sku-02': '2000015695', // Chocolate Ring      → Choco Butternut
   'sku-03': '2000000538', // Bavarian Cream      → Bavarian - Classic
   'sku-04': '2000000520', // Ube Cheese          → Bavarian - Choco
-  'sku-05': '2000000521', // Strawberry Sprinkle → Strawberry Filled
+  'sku-05': '2000000521', // Strawberry Sprinkle → Strawberry Zprinkles
   'sku-06': '2000017949', // Cookies & Cream     → Chocolate Zprinkles
   'sku-07': '2000000538', // Matcha Glazed       → Bavarian - Classic
   'sku-08': '2000015695', // Salted Caramel      → Choco Butternut
   'sku-09': '2000015696', // Cinnamon Sugar      → Zapp Its! Choco Butternut
   'sku-10': '2000000520', // Pandan Cream        → Bavarian - Choco
-  'sku-11': '2000000521', // Mango Graham        → Strawberry Filled
+  'sku-11': '2000000521', // Mango Graham        → Strawberry Zprinkles
   'sku-12': '2000020575', // Double Choco        → Dobol Bav - Classic, Chocolate
   'sku-13': '2000000519', // Lemon Twist         → Zapp Its!
   'sku-14': '2000020576', // Red Velvet          → Dobol Bav - Classic, Strawberry

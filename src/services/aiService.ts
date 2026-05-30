@@ -352,34 +352,37 @@ ${imageNote}
 Task: identify each visible donut and assign it to one SKU from the catalog below. Then aggregate counts per SKU.
 
 For each SKU you see, return:
-- matchedSkuId: the catalog id (sku-XX), or null if you cannot confidently identify the type
-- rawDescription: short visual description of what you see (e.g. "shiny clear-glaze rings")
+- matchedSkuId: the catalog id (the 10-digit product code), or null if you cannot confidently identify the type
+- rawDescription: short visual description of what you see (e.g. "chocolate-glazed rings with rainbow sprinkles")
 - count: integer count of donuts of this type across all images
 - confidence: "high" (clearly identified), "medium" (likely but uncertain), "low" (guess)
-- matchReason: brief visual cue (e.g. "white sprinkles + chocolate base", "ube purple filling visible")
+- matchReason: brief visual cue (e.g. "ring + chocolate glaze + multicolor sprinkles")
 
 Donut catalog:
 ${catalog}
 
-Identification hints (without reference photos, use these visual associations):
-- "Classic Glazed": shiny clear/light glaze coating, ring shape
-- "Chocolate Ring": brown/dark chocolate coating, ring shape, no toppings
-- "Bavarian Cream": round (no hole), powdered sugar or chocolate top, cream-filled
-- "Ube Cheese": purple/violet glaze, often with cheese chunks
-- "Strawberry Sprinkle": pink glaze with multicolor sprinkles
-- "Cookies & Cream": white glaze with crushed cookie pieces
-- "Matcha Glazed": green glaze, ring shape
-- "Salted Caramel": amber/golden caramel coating with salt flakes
-- "Cinnamon Sugar": dusted with brown cinnamon sugar
-- "Pandan Cream": light green glaze, filled
-- "Mango Graham": yellow glaze with graham crumbs
-- "Double Choco": dark chocolate with chocolate drizzle/chips
-- "Lemon Twist": yellow glaze, twisted shape
-- "Red Velvet": deep red with cream cheese drizzle
+Identification hints — these are the ONLY products that exist. Match by these
+real visual associations (the codes below are the matchedSkuId to return):
+- 2000017949 "Chocolate Zprinkles": RING shape, glossy chocolate glaze, topped with multicolor (rainbow) sprinkles.
+- 2000000521 "Strawberry Zprinkles": RING shape, bright red/pink glaze, topped with multicolor sprinkles. (Distinguish from Chocolate Zprinkles by the RED glaze vs CHOCOLATE glaze — both are sprinkled rings.) Note: the printed DR may call this "Strawberry Filled" — same product, same code.
+- 2000015695 "Choco Butternut": RING shape, coated in brown/tan crumb (butternut/sesame-like) coating, NO glossy glaze, no sprinkles.
+- 2000015696 "Zapp Its! Choco Butternut": SMALL / mini version of the brown crumb-coated donut (bite-size, often round balls or small rings).
+- 2000000519 "Zapp Its!": SMALL / mini plain donut dusted with powdered sugar, no filling dollop visible, no glaze.
+- 2000000538 "Bavarian - Classic": ROUND/SQUARE filled donut dusted with powdered sugar, ONE filling spot (pale yellow custard).
+- 2000000520 "Bavarian - Choco": ROUND/SQUARE filled donut dusted with powdered sugar, ONE filling spot (dark chocolate).
+- 2000020575 "Dobol Bav - Classic, Chocolate": SQUARE powdered-sugar donut with TWO filling dollops — one pale-yellow custard AND one dark chocolate.
+- 2000020576 "Dobol Bav - Classic, Strawberry": SQUARE powdered-sugar donut with TWO filling dollops — one pale-yellow custard AND one red strawberry jam.
+
+Key disambiguation:
+- RING + sprinkles → Chocolate Zprinkles (chocolate glaze) or Strawberry Filled (red glaze).
+- RING + brown crumb coat, no glaze → Choco Butternut (or its mini, Zapp Its! Choco Butternut, if clearly smaller).
+- SQUARE + powdered sugar → a Bavarian. ONE dollop = Bavarian Classic (yellow) / Bavarian Choco (dark). TWO dollops = Dobol Bav (yellow+dark = Chocolate; yellow+red = Strawberry).
+- The "Dobol" (double) Bavarians ALWAYS show two filling holes; single Bavarians show one. Use the dollop colors to pick the flavor.
 
 Rules:
-- If a donut clearly doesn't match any SKU, set matchedSkuId to null and describe what you see.
-- Skip empty slots / crate background / hands / non-donut objects.
+- These 9 are the only valid products. If a donut clearly doesn't match any of them, set matchedSkuId to null and describe what you see — do NOT invent a flavor that isn't listed.
+- For powdered square donuts, the filling-dollop colors are the most reliable signal; count the dollops (one vs two) first, then read their colors.
+- Skip empty slots / crate background / hands / paper / non-donut objects.
 - Return JSON only matching the schema. No prose.`;
 }
 

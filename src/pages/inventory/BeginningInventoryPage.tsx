@@ -11,7 +11,8 @@ import {
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { aiService } from '@/services/api';
-import { isGeminiConfigured, geminiAnalyzeDR, geminiCountCrate } from '@/services/aiService';
+import { isGeminiConfigured, geminiCountCrate } from '@/services/aiService';
+import { tesseractAnalyzeDR } from '@/services/tesseractService';
 import {
   Card,
   CardHeader,
@@ -130,13 +131,21 @@ export default function BeginningInventoryPage() {
       const crateRealFiles = crateFiles.map((f) => f.file).filter(Boolean) as File[];
       const useGemini = isGeminiConfigured();
 
-      type Outcome = { results: AIResult[]; source: 'gemini' | 'mock'; gemFailed?: boolean };
+      type Outcome = {
+        results: AIResult[];
+        source: 'gemini' | 'tesseract' | 'mock';
+        gemFailed?: boolean;
+      };
 
-      const ocrPromise: Promise<Outcome> = useGemini && drFile
-        ? geminiAnalyzeDR(drFile, skus).then(
-            (results) => ({ results, source: 'gemini' } as Outcome),
+      // OCR now runs locally via Tesseract (no API call, zero cost).
+      // On any OCR/parse failure we fall back to the legacy mock so the
+      // BI flow never blocks. `gemFailed` is reused as a generic
+      // "real engine failed, using mock" flag for the deferred toast.
+      const ocrPromise: Promise<Outcome> = drFile
+        ? tesseractAnalyzeDR(drFile, skus).then(
+            (results) => ({ results, source: 'tesseract' } as Outcome),
             async (err) => {
-              console.error('[BeginningInventoryPage] Gemini DR OCR failed:', err);
+              console.error('[BeginningInventoryPage] Tesseract DR OCR failed:', err);
               const results = await aiService.processOCR('mock-dr-image');
               return { results, source: 'mock', gemFailed: true } as Outcome;
             },
@@ -165,8 +174,12 @@ export default function BeginningInventoryPage() {
       // Fire toasts now that both pipelines have settled. Order is
       // success-first then failures so the user reads positive news
       // before the warnings.
-      if (ocrOutcome.source === 'gemini') {
-        addToast('success', `AI extracted ${ocr.length} line item(s) from DR.`);
+      if (ocrOutcome.source === 'tesseract') {
+        if (ocr.length > 0) {
+          addToast('success', `OCR extracted ${ocr.length} line item(s) from DR.`);
+        } else {
+          addToast('info', 'OCR found no line items — please enter manually.');
+        }
       }
       if (crateOutcome.source === 'gemini') {
         const totalDonuts = crates.reduce((sum, r) => sum + (r.estimatedValue ?? 0), 0);
@@ -176,7 +189,7 @@ export default function BeginningInventoryPage() {
         );
       }
       if (ocrOutcome.gemFailed) {
-        addToast('warning', 'AI extraction failed — using mock estimates.');
+        addToast('warning', 'OCR failed — using mock estimates.');
       }
       if (crateOutcome.gemFailed) {
         addToast('warning', 'Crate counting failed — using mock estimates.');

@@ -237,16 +237,91 @@ export function scoreToConfidence(matchScore: number, ocrConfidence: number): Co
  * Throws on any OCR failure so the caller's mock-fallback path runs
  * (identical pattern to the Gemini branch in BeginningInventoryPage).
  */
+/**
+ * Light image enhancement for OCR: upscale small scans and apply
+ * grayscale + a mild contrast stretch. Deliberately does NOT binarize
+ * (threshold) — an earlier adaptive-threshold attempt clipped the thin
+ * strokes of the 10-digit product codes and REGRESSED matching, so we
+ * keep the grayscale continuous and only gently increase contrast. All
+ * pure canvas work; no new dependency. Returns the original File on any
+ * failure so OCR still runs.
+ */
+async function enhanceForOCR(file: File): Promise<HTMLCanvasElement | File> {
+  const bitmap = await createImageBitmap(file);
+  const longSide = Math.max(bitmap.width, bitmap.height);
+
+  // Enlarge small scans toward ~2000px (helps tiny digits); never shrink;
+  // cap at 2× so a large photo isn't needlessly blown up.
+  const scale = longSide < 2000 ? Math.min(2000 / longSide, 2) : 1;
+  const w = Math.round(bitmap.width * scale);
+  const h = Math.round(bitmap.height * scale);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return file;
+  ctx.drawImage(bitmap, 0, 0, w, h);
+
+  const img = ctx.getImageData(0, 0, w, h);
+  const d = img.data;
+  // Grayscale + mild contrast stretch around mid-gray. factor > 1 widens
+  // the gap between ink and paper without the hard 0/255 clipping that a
+  // threshold would impose, so digit strokes survive.
+  const factor = 1.4;
+  for (let i = 0; i < d.length; i += 4) {
+    const g = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+    const c = Math.max(0, Math.min(255, (g - 128) * factor + 128));
+    d[i] = d[i + 1] = d[i + 2] = c;
+  }
+  ctx.putImageData(img, 0, 0);
+  return canvas;
+}
+
+/** How many parsed lines carried a usable 10-digit product code. */
+function codeHitCount(lines: ParsedDRLine[]): number {
+  return lines.filter((l) => !!l.code).length;
+}
+
 export async function tesseractAnalyzeDR(file: File, skus: SKU[]): Promise<AIResult[]> {
   // Lazy-load the WASM engine only when OCR actually runs.
   const { recognize } = await import('tesseract.js');
 
-  const result = await recognize(file, 'eng');
-  const text = result?.data?.text ?? '';
-  // tesseract.js reports overall confidence as 0-100; normalise to 0-1.
-  const ocrConfidence = Math.max(0, Math.min(1, (result?.data?.confidence ?? 0) / 100));
+  // Pass 1: the raw image (this is the known-good baseline — 8/9 codes).
+  const rawResult = await recognize(file, 'eng');
+  const rawText = rawResult?.data?.text ?? '';
+  const rawLines = parseDRLines(rawText);
+  let bestLines = rawLines;
+  let bestConfidenceRaw = rawResult?.data?.confidence ?? 0;
 
-  const lines = parseDRLines(text);
+  // Pass 2: a lightly enhanced image. Only ADOPT it if it recovers MORE
+  // 10-digit codes than the raw pass — codes are our highest-value signal
+  // and the safest, most objective quality metric. This makes enhancement
+  // strictly non-regressive: a worse enhanced pass is simply ignored.
+  try {
+    const enhanced = await enhanceForOCR(file);
+    const enhResult = await recognize(enhanced, 'eng');
+    const enhLines = parseDRLines(enhResult?.data?.text ?? '');
+    if (codeHitCount(enhLines) > codeHitCount(rawLines)) {
+      bestLines = enhLines;
+      bestConfidenceRaw = enhResult?.data?.confidence ?? 0;
+    }
+  } catch (err) {
+    console.warn('[tesseractService] enhanced OCR pass failed; using raw', err);
+  }
+
+  // tesseract.js reports overall confidence as 0-100; normalise to 0-1.
+  const ocrConfidence = Math.max(0, Math.min(1, bestConfidenceRaw / 100));
+
+  // Noise filter: on a real ZAPP DR EVERY product line carries a 10-digit
+  // code, so when the document clearly has codes (>=3), any line WITHOUT a
+  // code is almost certainly a garbled header/footer fragment (e.g. an OCR
+  // mangle of "Dr Date" or "Code Description MDSG") that SKIP_KEYWORDS
+  // missed because the spelling came out wrong. Drop those. We gate on
+  // "has codes" so a code-less DR (grocery/plain-name test slips) is left
+  // untouched and still fuzzy-matches + shows "no catalog match".
+  const hasCodes = codeHitCount(bestLines) >= 3;
+  const lines = hasCodes ? bestLines.filter((l) => !!l.code) : bestLines;
   const stamp = Date.now().toString(36);
   const skuById = new Map(skus.map((s) => [s.id, s]));
 

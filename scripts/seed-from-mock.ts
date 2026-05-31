@@ -6,8 +6,11 @@
 // Supabase Postgres tables created by migrations/001_create_tables.sql.
 //
 // HOW TO RUN:
-//   1. Make sure .env.local has VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY
-//   2. Run migrations 001 + 002 first (Supabase dashboard → SQL Editor)
+//   1. .env.local needs VITE_SUPABASE_URL plus a key:
+//        - pre-003 DB:  VITE_SUPABASE_ANON_KEY is enough
+//        - 003 RLS live: SUPABASE_SERVICE_ROLE_KEY (bypasses RLS) is REQUIRED
+//      (service-role key stays local-only — never commit it or add to Vercel)
+//   2. Run migrations 001 + 002 (+ 003 for role-scoped RLS) in SQL Editor
 //   3. From project root:
 //        npx tsx scripts/seed-from-mock.ts
 //
@@ -47,14 +50,35 @@ import {
 } from '../src/data/mockData';
 
 const url = process.env.VITE_SUPABASE_URL;
-const key = process.env.VITE_SUPABASE_ANON_KEY;
+// After Phase 3 (003_role_scoped_rls.sql) the anon/authenticated key is
+// blocked by role-scoped policies, so seeding needs the service-role key
+// (DB admin, bypasses RLS). Keep it ONLY in .env.local (gitignored) — never
+// in client code or Vercel env. Falls back to anon for pre-003 databases.
+const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const anonKey = process.env.VITE_SUPABASE_ANON_KEY;
+const key = serviceKey ?? anonKey;
 
 if (!url || !key) {
-  console.error('Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY in .env.local');
+  console.error(
+    'Missing VITE_SUPABASE_URL and a key. Set SUPABASE_SERVICE_ROLE_KEY (preferred, ' +
+      'required once role-scoped RLS is live) or VITE_SUPABASE_ANON_KEY in .env.local',
+  );
   process.exit(1);
 }
 
-const supabase = createClient(url, key);
+if (serviceKey) {
+  console.log('🔑 Using service-role key — bypasses RLS (correct for seeding).');
+} else {
+  console.warn(
+    '⚠️  Using anon key. This works only on a DB WITHOUT role-scoped RLS (pre-003). ' +
+      'If 003_role_scoped_rls.sql is applied, add SUPABASE_SERVICE_ROLE_KEY to .env.local or seeding will fail.',
+  );
+}
+
+// Service role must not try to persist/refresh a session.
+const supabase = createClient(url, key, {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
 
 // ── Reverse-dependency order for clearing ─────────────────────
 // (leaf tables first, root tables last)

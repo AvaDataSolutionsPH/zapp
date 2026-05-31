@@ -80,7 +80,7 @@ const navSections: NavSection[] = [
       },
       {
         label: 'Stores',
-        path: '/stores',
+        path: '/stores-management',
         icon: Store,
         allowedRoles: [
           'owner',
@@ -405,13 +405,13 @@ export function Sidebar() {
                             className={clsx(
                               'shrink-0',
                               isActive
-                                ? 'text-zapp-orange'
+                                ? 'text-white'
                                 : 'text-sidebar-text',
                             )}
                           />
                           <span className="truncate">{item.label}</span>
                           {isActive && (
-                            <span className="ml-auto w-1.5 h-1.5 rounded-full bg-zapp-orange" />
+                            <span className="ml-auto w-1.5 h-1.5 rounded-full bg-white" />
                           )}
                         </button>
                       );

@@ -83,7 +83,7 @@ export default function StoreDetailPage() {
           title="Store Not Found"
           description="The store you are looking for does not exist."
           actionLabel="Back to Stores"
-          onAction={() => navigate('/stores')}
+          onAction={() => navigate('/stores-management')}
         />
       </div>
     );
@@ -119,7 +119,7 @@ export default function StoreDetailPage() {
     <div className="p-6 space-y-6">
       {/* Back */}
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="sm" iconLeft={<ArrowLeft size={16} />} onClick={() => navigate('/stores')}>
+        <Button variant="ghost" size="sm" iconLeft={<ArrowLeft size={16} />} onClick={() => navigate('/stores-management')}>
           Back
         </Button>
         <div className="flex-1">

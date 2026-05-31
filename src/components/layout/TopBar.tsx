@@ -18,7 +18,7 @@ import type { UserRole } from '@/types';
 const routeTitles: Record<string, string> = {
   '/dashboard': 'Dashboard',
   '/applications': 'Applications',
-  '/stores': 'Stores',
+  '/stores-management': 'Stores',
   '/franchisees': 'Franchisees',
   '/distributors': 'Distributors',
   '/area-managers': 'Area Supervisors',

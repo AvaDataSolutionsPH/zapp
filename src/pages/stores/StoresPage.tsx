@@ -200,7 +200,7 @@ export default function StoresPage() {
         <button
           onClick={(e) => {
             e.stopPropagation();
-            navigate(`/stores/${row.id}`);
+            navigate(`/stores-management/${row.id}`);
           }}
           className="inline-flex items-center gap-1 text-sm text-zapp-orange hover:text-zapp-orange-dark transition-colors"
         >
@@ -237,7 +237,7 @@ export default function StoresPage() {
         columns={columns}
         data={paged}
         keyExtractor={(row) => row.id}
-        onRowClick={(row) => navigate(`/stores/${row.id}`)}
+        onRowClick={(row) => navigate(`/stores-management/${row.id}`)}
         emptyMessage="No stores found matching your filters."
         pagination={{
           page,

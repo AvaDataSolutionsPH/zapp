@@ -1427,6 +1427,97 @@ for (const so of specialOrders) {
   so.totalSRP = so.items.reduce((sum, it) => sum + it.quantity * it.srpPrice, 0);
 }
 
+// ─── Coverage pass: ensure every ACTIVE store has demo data ──
+//
+// Several role-scoped views (Deliveries, the Beginning/Ending Inventory
+// "Select Delivery" dropdowns, and Forecasting) render EMPTY when the
+// signed-in user's store/plant has no underlying rows. The hand-authored
+// del-01..22 / fc-01..08 above only cover a subset of stores, so a
+// franchisee or plant_manager on an uncovered store saw a blank page.
+//
+// This additive pass generates ONE 'delivered' delivery + ONE forecast
+// for every ACTIVE store that doesn't already have each — using the real
+// 9-product catalog and deterministic values (NO Math.random, so seeds
+// stay reproducible). It never mutates or removes the existing rows, so
+// all the existing demo flows are unchanged.
+
+const PLANT_CODE_FOR_COVERAGE: Record<string, string> = {
+  'plant-01': 'DRG',
+  'plant-02': 'MNL',
+  'plant-03': 'CEB',
+};
+
+// Deterministic forecast line items over a rotating window of the real
+// catalog (different stores → different product mixes, stable per seed).
+function buildCoverageForecastItems(seedIdx: number): ForecastItem[] {
+  const pressures = ['hot', 'normal', 'weak'] as const;
+  return skus.slice(0, 6).map((sku, i) => {
+    const avg14 = 18 + ((seedIdx * 7 + i * 5) % 40);
+    const unsold = -(((seedIdx + i) % 5) + 1);
+    const dow = ((seedIdx + i) % 9) - 2;
+    const pressure = pressures[(seedIdx + i) % 3];
+    const modifier = pressure === 'hot' ? 1.15 : pressure === 'weak' ? 0.88 : 1.0;
+    const finalForecast = Math.max(0, Math.round((avg14 + unsold + dow) * modifier));
+    return {
+      skuId: sku.id,
+      skuName: sku.name,
+      avg14Day: avg14,
+      unsoldAdjustment: unsold,
+      dayOfWeekAdjustment: dow,
+      demandPressure: pressure,
+      pressureModifier: modifier,
+      finalForecast,
+      actualSold: i % 2 === 0 ? Math.max(0, finalForecast - ((seedIdx + i) % 4)) : undefined,
+    };
+  });
+}
+
+{
+  const activeStoresForCoverage = stores.filter((s) => s.status === 'active');
+
+  // 1) Deliveries — one 'delivered' delivery per active store lacking one.
+  const storesWithDelivered = new Set(
+    deliveries.filter((d) => d.status === 'delivered').map((d) => d.storeId),
+  );
+  let covIdx = 0;
+  for (const store of activeStoresForCoverage) {
+    if (storesWithDelivered.has(store.id)) continue;
+    covIdx += 1;
+    const start = covIdx % (skus.length - 3); // 0..5 → always yields 4 SKUs
+    const skuIds = skus.slice(start, start + 4).map((s) => s.id);
+    const quantities = skuIds.map((_, i) => 30 + ((covIdx * 5 + i * 7) % 40));
+    const built = buildDeliveryItems(skuIds, quantities);
+    const code = PLANT_CODE_FOR_COVERAGE[store.plantId] ?? 'DRG';
+    const seq = String(covIdx).padStart(3, '0');
+    deliveries.push({
+      id: `del-cov-${seq}`,
+      storeId: store.id,
+      plantId: store.plantId,
+      date: '2026-03-25',
+      status: 'delivered',
+      drNumber: `DR-${code}-20260325-${seq}`,
+      ...built,
+    });
+  }
+
+  // 2) Forecasts — one forecast per active store lacking one.
+  const storesWithForecast = new Set(forecasts.map((f) => f.storeId));
+  let fcIdx = 0;
+  for (const store of activeStoresForCoverage) {
+    if (storesWithForecast.has(store.id)) continue;
+    fcIdx += 1;
+    const seq = String(fcIdx).padStart(3, '0');
+    forecasts.push({
+      id: `fc-cov-${seq}`,
+      storeId: store.id,
+      date: '2026-03-25',
+      items: buildCoverageForecastItems(fcIdx),
+      createdBy: 'user-03',
+      status: 'approved',
+    });
+  }
+}
+
 // ─── Aliases (used by store & api) ──────────────────────────
 
 export const demoUsers = users;

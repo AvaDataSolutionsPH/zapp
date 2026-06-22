@@ -16,6 +16,13 @@
   --color-zapp-red: #EF4444;
   --color-zapp-blue: #3B82F6;
 
+  /* Brand red used on the public landing (deeper/richer than the app red) */
+  --color-zapp-brand-red: #E11B22;
+  --color-zapp-brand-red-dark: #C41119;
+
+  /* Display font for big headlines (matches the bold landing look) */
+  --font-display: 'Montserrat', system-ui, sans-serif;
+
   /* Sidebar */
   --color-sidebar: #1E1E2D;
   --color-sidebar-hover: #2A2A3D;

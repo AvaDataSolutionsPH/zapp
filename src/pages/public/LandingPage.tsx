@@ -9,7 +9,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Sparkles,
+  Donut,
   TrendingUp,
   Store,
   Menu,
@@ -45,12 +45,12 @@ function Section({
 }
 
 const NAV_LINKS = [
-  { label: 'Home', href: '#home' },
-  { label: 'About Us', href: '#about' },
-  { label: 'Why ZAPP Donuts', href: '#why' },
-  { label: 'Partnership', href: '#how-it-works' },
+  { label: 'HOME', href: '#home' },
+  { label: 'ABOUT US', href: '#about' },
+  { label: 'WHY ZAPP DONUTS?', href: '#why' },
+  { label: 'PARTNERSHIP', href: '#how-it-works' },
   { label: 'FAQ', href: '#faq' },
-  { label: 'Contact', href: '#contact' },
+  { label: 'CONTACT', href: '#contact' },
 ];
 
 // ── Landing Page ──────────────────────────────────────────────
@@ -86,18 +86,18 @@ export default function LandingPage() {
           </a>
 
           {/* Desktop links */}
-          <div className="hidden items-center gap-7 lg:flex">
+          <div className="hidden items-center gap-7 xl:flex">
             {NAV_LINKS.map((link, i) => (
               <a
                 key={link.href}
                 href={link.href}
-                className={`relative text-sm font-semibold transition-colors hover:text-zapp-gold ${
-                  i === 0 ? 'text-zapp-gold' : 'text-white/90'
+                className={`relative text-[13px] font-bold tracking-wide transition-colors hover:text-zapp-gold ${
+                  i === 0 ? 'text-zapp-gold' : 'text-white'
                 }`}
               >
                 {link.label}
                 {i === 0 && (
-                  <span className="absolute -bottom-1.5 left-0 h-0.5 w-full rounded bg-zapp-gold" />
+                  <span className="absolute -bottom-2 left-0 h-[3px] w-full rounded bg-zapp-gold" />
                 )}
               </a>
             ))}
@@ -106,13 +106,13 @@ export default function LandingPage() {
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate('/apply')}
-              className="hidden rounded-full bg-zapp-red px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-red-900/30 transition-all hover:bg-red-600 hover:shadow-red-900/50 sm:inline-flex"
+              className="hidden rounded-md bg-zapp-brand-red px-6 py-3 text-[13px] font-extrabold tracking-wide text-white shadow-lg shadow-black/30 transition-all hover:bg-zapp-brand-red-dark sm:inline-flex"
             >
               BECOME A STORE PARTNER
             </button>
             <button
               onClick={() => setMenuOpen((v) => !v)}
-              className="rounded-lg p-2 text-white lg:hidden"
+              className="rounded-lg p-2 text-white xl:hidden"
               aria-label="Toggle menu"
             >
               {menuOpen ? <X size={22} /> : <Menu size={22} />}
@@ -122,7 +122,7 @@ export default function LandingPage() {
 
         {/* Mobile menu */}
         {menuOpen && (
-          <div className="border-t border-white/10 bg-zapp-brown/98 px-4 py-4 lg:hidden">
+          <div className="border-t border-white/10 bg-zapp-brown/98 px-4 py-4 xl:hidden">
             <div className="flex flex-col gap-1">
               {NAV_LINKS.map((link) => (
                 <a
@@ -169,17 +169,20 @@ export default function LandingPage() {
           <div className="grid w-full gap-10 lg:grid-cols-2 lg:items-center">
             {/* Left: copy */}
             <div>
-              <h1 className="text-5xl font-black leading-[0.95] tracking-tight text-white sm:text-6xl lg:text-7xl">
-                BE PART OF
+              <h1 className="font-display text-4xl font-black uppercase leading-[0.95] tracking-tight text-white drop-shadow-[0_3px_12px_rgba(0,0,0,0.6)] sm:text-5xl lg:text-6xl">
+                Be Part of
                 <br />
-                THE SWEETEST
+                The Sweetest
                 <br />
-                <span className="text-zapp-gold drop-shadow-[0_2px_10px_rgba(255,215,0,0.3)]">
-                  BUSINESS!
+                <span className="text-zapp-gold drop-shadow-[0_2px_12px_rgba(255,215,0,0.35)]">
+                  Business!
                 </span>
               </h1>
 
-              <p className="mt-6 max-w-md text-lg leading-relaxed text-white/85">
+              {/* Red accent underline (matches the reference) */}
+              <div className="mt-5 h-1.5 w-24 rounded-full bg-zapp-brand-red" />
+
+              <p className="mt-6 max-w-md text-lg leading-relaxed text-white/90">
                 Join ZAPP Donuts and own a proven, high-demand business that
                 brings happiness in every bite.
               </p>
@@ -188,29 +191,29 @@ export default function LandingPage() {
               <div className="mt-10 grid max-w-lg grid-cols-3 gap-5">
                 {[
                   {
-                    icon: <Sparkles size={20} />,
+                    icon: <Donut size={24} />,
                     title: 'HIGH DEMAND',
                     desc: 'Loved by all ages. Perfect anytime, anywhere.',
                   },
                   {
-                    icon: <TrendingUp size={20} />,
+                    icon: <TrendingUp size={24} />,
                     title: 'PROVEN BUSINESS',
                     desc: 'Low risk, high return with fast ROI.',
                   },
                   {
-                    icon: <Store size={20} />,
+                    icon: <Store size={24} />,
                     title: 'EASY TO START',
                     desc: 'We guide you every step of the way.',
                   },
                 ].map((f) => (
                   <div key={f.title}>
-                    <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-zapp-red text-white shadow-lg shadow-red-900/50">
+                    <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-zapp-brand-red text-white shadow-lg shadow-black/40">
                       {f.icon}
                     </div>
-                    <h3 className="text-xs font-extrabold tracking-wide text-white">
+                    <h3 className="text-sm font-extrabold tracking-wide text-white">
                       {f.title}
                     </h3>
-                    <p className="mt-1 text-[11px] leading-snug text-white/65">
+                    <p className="mt-1 text-xs leading-snug text-white/75">
                       {f.desc}
                     </p>
                   </div>
@@ -219,14 +222,14 @@ export default function LandingPage() {
             </div>
 
             {/* Right: product display case */}
-            <div className="hidden justify-center lg:flex">
+            <div className="hidden justify-center lg:flex lg:justify-end">
               <div className="relative">
-                <div className="absolute inset-0 scale-110 rounded-full bg-zapp-red/25 blur-3xl" />
-                <div className="absolute -inset-4 rounded-full bg-zapp-gold/10 blur-2xl" />
+                <div className="absolute inset-0 scale-125 rounded-full bg-zapp-brand-red/25 blur-3xl" />
+                <div className="absolute -inset-6 rounded-full bg-zapp-gold/10 blur-2xl" />
                 <img
-                  src="/zapp-product.png"
+                  src="/donut-stall.png"
                   alt="ZAPP Donuts display case"
-                  className="relative w-full max-w-lg object-contain drop-shadow-[0_25px_60px_rgba(0,0,0,0.7)]"
+                  className="relative max-h-[78vh] w-auto object-contain drop-shadow-[0_25px_70px_rgba(0,0,0,0.75)]"
                 />
               </div>
             </div>
@@ -234,25 +237,25 @@ export default function LandingPage() {
         </Section>
 
         {/* ─── Red stats bar (bottom of hero) ───────────────── */}
-        <div className="absolute inset-x-0 bottom-0 z-10 bg-zapp-red">
-          <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 py-5 sm:flex-row sm:px-6 lg:px-8">
+        <div className="absolute inset-x-0 bottom-0 z-10 bg-zapp-brand-red">
+          <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 py-6 sm:flex-row sm:px-6 lg:px-8">
             <div className="flex items-center gap-4">
-              <Store size={36} className="text-white/90" strokeWidth={1.5} />
+              <Store size={44} className="text-white" strokeWidth={1.5} />
               <div>
-                <div className="text-3xl font-black leading-none text-white">
+                <div className="text-4xl font-black leading-none text-white">
                   1000+
                 </div>
-                <div className="text-xs font-bold uppercase tracking-widest text-white/80">
+                <div className="mt-1 text-sm font-bold uppercase tracking-widest text-white/90">
                   Stores Nationwide
                 </div>
               </div>
             </div>
+            <div className="hidden h-12 w-px bg-white/30 sm:block" />
             <button
               onClick={() => navigate('/apply')}
-              className="inline-flex items-center gap-2 rounded-full bg-zapp-gold px-7 py-3 text-sm font-black uppercase tracking-wide text-zapp-brown shadow-lg transition-transform hover:scale-[1.03]"
+              className="inline-flex items-center gap-2 rounded-md bg-zapp-gold px-10 py-4 text-base font-black uppercase tracking-wide text-zapp-brown shadow-lg transition-transform hover:scale-[1.02]"
             >
               Become a Store Partner
-              <ArrowRight size={18} />
             </button>
           </div>
         </div>
@@ -265,7 +268,7 @@ export default function LandingPage() {
             <span className="text-sm font-black uppercase tracking-wider text-zapp-red">
               About Us
             </span>
-            <h2 className="mt-3 text-3xl font-extrabold text-zapp-brown sm:text-4xl">
+            <h2 className="mt-3 font-display text-3xl font-extrabold text-zapp-brown sm:text-4xl">
               The Donut Brand Filipinos Love
             </h2>
             <p className="mt-4 text-lg leading-relaxed text-gray-600">
@@ -505,7 +508,7 @@ export default function LandingPage() {
         <div className="pointer-events-none absolute -bottom-20 -left-10 h-72 w-72 rounded-full border-[20px] border-zapp-gold/20" />
         <Section className="relative py-20 lg:py-24">
           <div className="text-center">
-            <h2 className="text-3xl font-black text-white sm:text-4xl lg:text-5xl">
+            <h2 className="font-display text-3xl font-black text-white sm:text-4xl lg:text-5xl">
               Ready to Join ZAPP Donuts?
             </h2>
             <p className="mx-auto mt-4 max-w-2xl text-lg text-white/85">

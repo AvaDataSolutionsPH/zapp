@@ -74,8 +74,7 @@ const NAV_LINKS = [
   { label: 'ABOUT US', href: '#about' },
   { label: 'WHY ZAPP DONUTS?', href: '#why' },
   { label: 'PARTNERSHIP', href: '#how-it-works' },
-  { label: 'FAQ', href: '#faq' },
-  { label: 'CONTACT', href: '#contact' },
+  { label: 'OUR PLANTS', href: '#plants' },
 ];
 
 // ── Landing Page ──────────────────────────────────────────────
@@ -447,7 +446,7 @@ export default function LandingPage() {
       </Section>
 
       {/* ─── Our Plants ─────────────────────────────────────── */}
-      <Section id="faq" className="bg-zapp-cream/40 py-20 lg:py-28">
+      <Section id="plants" className="bg-zapp-cream/40 py-20 lg:py-28">
         <Reveal className="text-center">
           <span className="text-sm font-black uppercase tracking-wider text-zapp-red">
             Our Plants
@@ -534,7 +533,7 @@ export default function LandingPage() {
 
       {/* ─── CTA Section ────────────────────────────────────── */}
       <div
-        id="contact"
+        id="join"
         className="relative overflow-hidden bg-zapp-red"
       >
         <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full border-[24px] border-white/10" />

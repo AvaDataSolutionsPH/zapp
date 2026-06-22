@@ -76,14 +76,22 @@ export default function LandingPage() {
             : 'bg-transparent'
         }`}
       >
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
-          <a href="#home" className="flex items-center gap-2">
+        <div className="relative mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:h-20 lg:px-8">
+          {/* Logo is absolutely positioned + vertically centered on the nav
+              row so it can stay large and overflow below the bar WITHOUT
+              forcing the navbar itself to grow taller. */}
+          <a
+            href="#home"
+            className="absolute left-4 top-1/2 -translate-y-1/2 sm:left-6 lg:left-8"
+          >
             <img
               src="/zapp-logo.png"
               alt="ZAPP Donuts"
-              className="h-24 w-auto drop-shadow-[0_2px_6px_rgba(0,0,0,0.5)] sm:h-32 lg:h-40"
+              className="h-24 w-auto drop-shadow-[0_2px_6px_rgba(0,0,0,0.5)] sm:h-28 lg:h-36"
             />
           </a>
+          {/* Spacer reserving room for the overflowing logo */}
+          <div className="w-28 shrink-0 sm:w-32 lg:w-40" aria-hidden />
 
           {/* Desktop links */}
           <div className="hidden items-center gap-7 xl:flex">

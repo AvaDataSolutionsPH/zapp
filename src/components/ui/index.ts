@@ -20,3 +20,4 @@ export { Skeleton } from './Skeleton';
 export { ConfirmDialog } from './ConfirmDialog';
 export { EmptyState } from './EmptyState';
 export { StatusBadge } from './StatusBadge';
+export { default as LoadingScreen } from './LoadingScreen';

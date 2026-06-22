@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useStore } from '@/store/useStore'
 import { supabase } from '@/lib/supabase'
+import { LoadingScreen } from '@/components/ui'
 
 // Layouts
 import Layout from '@/components/layout/Layout'
@@ -87,17 +88,16 @@ function App() {
   }, [restoreSession])
 
   if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-zapp-cream/30">
-        <div className="text-sm text-gray-500">Loading...</div>
-      </div>
-    )
+    return <LoadingScreen />
   }
 
   return (
     <Routes>
       {/* Landing page: standalone (own dark nav + footer, no PublicLayout chrome) */}
       <Route path="/" element={<LandingPage />} />
+
+      {/* Dev preview of the boot loading splash (always renders it) */}
+      <Route path="/loading-preview" element={<LoadingScreen />} />
 
       {/* Public routes */}
       <Route element={<PublicLayout />}>

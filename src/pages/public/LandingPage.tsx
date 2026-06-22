@@ -81,19 +81,24 @@ export default function LandingPage() {
             <img
               src="/zapp-logo.png"
               alt="ZAPP Donuts"
-              className="h-11 w-auto drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)]"
+              className="h-16 w-auto drop-shadow-[0_2px_6px_rgba(0,0,0,0.5)] sm:h-20"
             />
           </a>
 
           {/* Desktop links */}
           <div className="hidden items-center gap-7 lg:flex">
-            {NAV_LINKS.map((link) => (
+            {NAV_LINKS.map((link, i) => (
               <a
                 key={link.href}
                 href={link.href}
-                className="text-sm font-semibold text-white/90 transition-colors hover:text-zapp-gold"
+                className={`relative text-sm font-semibold transition-colors hover:text-zapp-gold ${
+                  i === 0 ? 'text-zapp-gold' : 'text-white/90'
+                }`}
               >
                 {link.label}
+                {i === 0 && (
+                  <span className="absolute -bottom-1.5 left-0 h-0.5 w-full rounded bg-zapp-gold" />
+                )}
               </a>
             ))}
           </div>
@@ -148,103 +153,80 @@ export default function LandingPage() {
         id="home"
         className="relative min-h-screen overflow-hidden bg-zapp-brown"
       >
-        {/* Cinematic branded background: warm dark gradient + radial glows */}
-        <div className="absolute inset-0 bg-gradient-to-br from-[#3a211f] via-zapp-brown to-[#1d100f]" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_75%_35%,rgba(255,107,0,0.22),transparent_55%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_80%,rgba(239,68,68,0.18),transparent_50%)]" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/30" />
-
-        {/* Faint donut pattern accents */}
-        <div className="pointer-events-none absolute -right-20 top-40 h-72 w-72 rounded-full border-[20px] border-white/[0.03]" />
-        <div className="pointer-events-none absolute right-1/3 top-24 h-32 w-32 rounded-full border-[12px] border-zapp-gold/[0.05]" />
-        <div className="pointer-events-none absolute -left-16 bottom-40 h-56 w-56 rounded-full border-[16px] border-zapp-gold/[0.06]" />
+        {/* Real donut-shop background photo */}
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: "url('/zapp-bg.png')" }}
+        />
+        {/* Dark cinematic gradients (match reference: deep on the left for
+            text legibility, warmer/lighter toward the product on the right) */}
+        <div className="absolute inset-0 bg-black/55" />
+        <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/55 to-black/25" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_72%_40%,rgba(255,107,0,0.18),transparent_55%)]" />
 
         <Section className="relative flex min-h-screen items-center pt-28 pb-40 lg:pt-24">
-          <div className="grid w-full gap-12 lg:grid-cols-2 lg:items-center">
+          <div className="grid w-full gap-10 lg:grid-cols-2 lg:items-center">
             {/* Left: copy */}
             <div>
-              <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-zapp-gold/30 bg-zapp-gold/10 px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-zapp-gold backdrop-blur-sm">
-                <Sparkles size={13} />
-                Franchise Opportunity
-              </div>
-
               <h1 className="text-5xl font-black leading-[0.95] tracking-tight text-white sm:text-6xl lg:text-7xl">
                 BE PART OF
                 <br />
                 THE SWEETEST
                 <br />
-                <span className="text-zapp-gold drop-shadow-[0_2px_8px_rgba(255,215,0,0.25)]">
+                <span className="text-zapp-gold drop-shadow-[0_2px_10px_rgba(255,215,0,0.3)]">
                   BUSINESS!
                 </span>
               </h1>
 
-              <p className="mt-6 max-w-lg text-lg leading-relaxed text-white/80">
+              <p className="mt-6 max-w-md text-lg leading-relaxed text-white/85">
                 Join ZAPP Donuts and own a proven, high-demand business that
                 brings happiness in every bite.
               </p>
 
-              {/* Feature badges */}
-              <div className="mt-10 grid max-w-xl grid-cols-1 gap-6 sm:grid-cols-3">
+              {/* Feature badges (icon stacked above label, like the reference) */}
+              <div className="mt-10 grid max-w-lg grid-cols-3 gap-5">
                 {[
                   {
-                    icon: <Sparkles size={22} />,
+                    icon: <Sparkles size={20} />,
                     title: 'HIGH DEMAND',
                     desc: 'Loved by all ages. Perfect anytime, anywhere.',
                   },
                   {
-                    icon: <TrendingUp size={22} />,
+                    icon: <TrendingUp size={20} />,
                     title: 'PROVEN BUSINESS',
                     desc: 'Low risk, high return with fast ROI.',
                   },
                   {
-                    icon: <Store size={22} />,
+                    icon: <Store size={20} />,
                     title: 'EASY TO START',
                     desc: 'We guide you every step of the way.',
                   },
                 ].map((f) => (
                   <div key={f.title}>
-                    <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-zapp-red text-white shadow-lg shadow-red-900/40">
+                    <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-zapp-red text-white shadow-lg shadow-red-900/50">
                       {f.icon}
                     </div>
-                    <h3 className="text-sm font-extrabold tracking-wide text-white">
+                    <h3 className="text-xs font-extrabold tracking-wide text-white">
                       {f.title}
                     </h3>
-                    <p className="mt-1 text-xs leading-relaxed text-white/60">
+                    <p className="mt-1 text-[11px] leading-snug text-white/65">
                       {f.desc}
                     </p>
                   </div>
                 ))}
-              </div>
-
-              <div className="mt-10 flex flex-wrap gap-4">
-                <button
-                  onClick={() => navigate('/apply')}
-                  className="group inline-flex items-center gap-2 rounded-full bg-zapp-red px-7 py-3.5 text-sm font-bold text-white shadow-xl shadow-red-900/40 transition-all hover:bg-red-600 hover:shadow-red-900/60"
-                >
-                  BECOME A STORE PARTNER
-                  <ArrowRight
-                    size={18}
-                    className="transition-transform group-hover:translate-x-1"
-                  />
-                </button>
-                <button
-                  onClick={() => navigate('/stores')}
-                  className="inline-flex items-center gap-2 rounded-full border border-white/30 px-7 py-3.5 text-sm font-bold text-white transition-colors hover:bg-white/10"
-                >
-                  View Stores
-                </button>
               </div>
             </div>
 
             {/* Right: product display case */}
             <div className="hidden justify-center lg:flex">
               <div className="relative">
-                <div className="absolute inset-0 scale-110 rounded-full bg-zapp-red/20 blur-3xl" />
+                <div className="absolute inset-0 scale-110 rounded-full bg-zapp-red/25 blur-3xl" />
                 <div className="absolute -inset-4 rounded-full bg-zapp-gold/10 blur-2xl" />
                 <img
                   src="/zapp-product.png"
                   alt="ZAPP Donuts display case"
-                  className="relative w-full max-w-md object-contain drop-shadow-[0_25px_60px_rgba(0,0,0,0.6)]"
+                  className="relative w-full max-w-lg object-contain drop-shadow-[0_25px_60px_rgba(0,0,0,0.7)]"
                 />
               </div>
             </div>

@@ -81,7 +81,7 @@ export default function LandingPage() {
             <img
               src="/zapp-logo.png"
               alt="ZAPP Donuts"
-              className="h-20 w-auto drop-shadow-[0_2px_6px_rgba(0,0,0,0.5)] sm:h-24 lg:h-28"
+              className="h-24 w-auto drop-shadow-[0_2px_6px_rgba(0,0,0,0.5)] sm:h-32 lg:h-40"
             />
           </a>
 

@@ -8,6 +8,7 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useReveal } from '@/lib/useReveal';
 import {
   Donut,
   TrendingUp,
@@ -41,6 +42,30 @@ function Section({
     <section id={id} className={`px-4 sm:px-6 lg:px-8 ${className}`}>
       <div className="mx-auto max-w-7xl">{children}</div>
     </section>
+  );
+}
+
+// ── Scroll-reveal wrapper ──────────────────────────────────────
+
+function Reveal({
+  children,
+  className = '',
+  stagger = false,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  stagger?: boolean;
+}) {
+  const { ref, shown } = useReveal<HTMLDivElement>();
+  return (
+    <div
+      ref={ref}
+      className={`${stagger ? 'reveal-stagger' : 'reveal'} ${
+        shown ? 'is-shown' : ''
+      } ${className}`}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -173,11 +198,11 @@ export default function LandingPage() {
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_72%_40%,rgba(255,107,0,0.18),transparent_55%)]" />
 
-        <Section className="relative flex min-h-screen items-center pt-28 pb-40 lg:pt-24">
+        <Section className="relative flex min-h-screen items-center pt-24 pb-44 sm:pt-28 lg:pb-40 lg:pt-24">
           <div className="grid w-full gap-10 lg:grid-cols-2 lg:items-center">
             {/* Left: copy */}
             <div>
-              <h1 className="font-display text-4xl font-black uppercase leading-[0.95] tracking-tight text-white drop-shadow-[0_3px_12px_rgba(0,0,0,0.6)] sm:text-5xl lg:text-6xl">
+              <h1 className="hero-anim hero-d1 font-display text-3xl font-black uppercase leading-[0.95] tracking-tight text-white drop-shadow-[0_3px_12px_rgba(0,0,0,0.6)] sm:text-5xl lg:text-6xl">
                 Be Part of
                 <br />
                 The Sweetest
@@ -188,40 +213,40 @@ export default function LandingPage() {
               </h1>
 
               {/* Red accent underline (matches the reference) */}
-              <div className="mt-5 h-1.5 w-24 rounded-full bg-zapp-brand-red" />
+              <div className="hero-anim hero-d2 mt-4 h-1.5 w-20 rounded-full bg-zapp-brand-red sm:mt-5 sm:w-24" />
 
-              <p className="mt-6 max-w-md text-lg leading-relaxed text-white/90">
+              <p className="hero-anim hero-d3 mt-5 max-w-md text-base leading-relaxed text-white/90 sm:mt-6 sm:text-lg">
                 Join ZAPP Donuts and own a proven, high-demand business that
                 brings happiness in every bite.
               </p>
 
               {/* Feature badges (icon stacked above label, like the reference) */}
-              <div className="mt-10 grid max-w-lg grid-cols-3 gap-5">
+              <div className="hero-anim hero-d4 mt-8 grid max-w-lg grid-cols-3 gap-3 sm:mt-10 sm:gap-5">
                 {[
                   {
-                    icon: <Donut size={24} />,
+                    icon: <Donut className="size-5 sm:size-6" />,
                     title: 'HIGH DEMAND',
                     desc: 'Loved by all ages. Perfect anytime, anywhere.',
                   },
                   {
-                    icon: <TrendingUp size={24} />,
+                    icon: <TrendingUp className="size-5 sm:size-6" />,
                     title: 'PROVEN BUSINESS',
                     desc: 'Low risk, high return with fast ROI.',
                   },
                   {
-                    icon: <Store size={24} />,
+                    icon: <Store className="size-5 sm:size-6" />,
                     title: 'EASY TO START',
                     desc: 'We guide you every step of the way.',
                   },
                 ].map((f) => (
                   <div key={f.title}>
-                    <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-zapp-brand-red text-white shadow-lg shadow-black/40">
+                    <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-zapp-brand-red text-white shadow-lg shadow-black/40 sm:mb-3 sm:h-14 sm:w-14">
                       {f.icon}
                     </div>
-                    <h3 className="text-sm font-extrabold tracking-wide text-white">
+                    <h3 className="text-xs font-extrabold leading-tight tracking-wide text-white sm:text-sm">
                       {f.title}
                     </h3>
-                    <p className="mt-1 text-xs leading-snug text-white/75">
+                    <p className="mt-1 text-[11px] leading-snug text-white/75 sm:text-xs">
                       {f.desc}
                     </p>
                   </div>
@@ -230,7 +255,7 @@ export default function LandingPage() {
             </div>
 
             {/* Right: product display case */}
-            <div className="hidden justify-center lg:flex lg:justify-end">
+            <div className="hero-anim-right hidden justify-center lg:flex lg:justify-end">
               <div className="relative">
                 <div className="absolute inset-0 scale-125 rounded-full bg-zapp-brand-red/25 blur-3xl" />
                 <div className="absolute -inset-6 rounded-full bg-zapp-gold/10 blur-2xl" />
@@ -246,14 +271,14 @@ export default function LandingPage() {
 
         {/* ─── Red stats bar (bottom of hero) ───────────────── */}
         <div className="absolute inset-x-0 bottom-0 z-10 bg-zapp-brand-red">
-          <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 py-6 sm:flex-row sm:px-6 lg:px-8">
-            <div className="flex items-center gap-4">
-              <Store size={44} className="text-white" strokeWidth={1.5} />
+          <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 py-5 sm:flex-row sm:px-6 sm:py-6 lg:px-8">
+            <div className="flex items-center gap-3 sm:gap-4">
+              <Store className="size-9 text-white sm:size-11" strokeWidth={1.5} />
               <div>
-                <div className="text-4xl font-black leading-none text-white">
+                <div className="text-3xl font-black leading-none text-white sm:text-4xl">
                   1000+
                 </div>
-                <div className="mt-1 text-sm font-bold uppercase tracking-widest text-white/90">
+                <div className="mt-1 text-xs font-bold uppercase tracking-widest text-white/90 sm:text-sm">
                   Stores Nationwide
                 </div>
               </div>
@@ -261,7 +286,7 @@ export default function LandingPage() {
             <div className="hidden h-12 w-px bg-white/30 sm:block" />
             <button
               onClick={() => navigate('/apply')}
-              className="inline-flex items-center gap-2 rounded-md bg-zapp-gold px-10 py-4 text-base font-black uppercase tracking-wide text-zapp-brown shadow-lg transition-transform hover:scale-[1.02]"
+              className="w-full rounded-md bg-zapp-gold px-6 py-3.5 text-sm font-black uppercase tracking-wide text-zapp-brown shadow-lg transition-transform hover:scale-[1.02] sm:w-auto sm:px-10 sm:py-4 sm:text-base"
             >
               Become a Store Partner
             </button>
@@ -272,11 +297,11 @@ export default function LandingPage() {
       {/* ─── About Section ──────────────────────────────────── */}
       <Section id="about" className="py-20 lg:py-28">
         <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
-          <div>
+          <Reveal>
             <span className="text-sm font-black uppercase tracking-wider text-zapp-red">
               About Us
             </span>
-            <h2 className="mt-3 font-display text-3xl font-extrabold text-zapp-brown sm:text-4xl">
+            <h2 className="mt-3 font-display text-2xl font-extrabold text-zapp-brown sm:text-4xl">
               The Donut Brand Filipinos Love
             </h2>
             <p className="mt-4 text-lg leading-relaxed text-gray-600">
@@ -294,9 +319,9 @@ export default function LandingPage() {
               operations platform that handles inventory, billing, forecasting,
               and analytics so you can focus on growing your store.
             </p>
-          </div>
+          </Reveal>
 
-          <div className="grid grid-cols-2 gap-4">
+          <Reveal stagger className="grid grid-cols-2 gap-4">
             {[
               {
                 icon: <Zap size={24} className="text-zapp-red" />,
@@ -332,21 +357,21 @@ export default function LandingPage() {
                 <p className="mt-1 text-sm text-gray-500">{item.desc}</p>
               </div>
             ))}
-          </div>
+          </Reveal>
         </div>
       </Section>
 
       {/* ─── Why ZAPP (value band) ──────────────────────────── */}
       <div id="why" className="bg-zapp-brown">
         <Section className="py-16 lg:py-20">
-          <div className="grid gap-8 text-center sm:grid-cols-3">
+          <Reveal stagger className="grid gap-8 text-center sm:grid-cols-3">
             {[
               { value: '3', label: 'Production Plants' },
               { value: '1000+', label: 'Stores Nationwide' },
               { value: '9', label: 'Signature Products' },
             ].map((s) => (
               <div key={s.label}>
-                <div className="text-5xl font-black text-zapp-gold">
+                <div className="text-4xl font-black text-zapp-gold sm:text-5xl">
                   {s.value}
                 </div>
                 <div className="mt-2 text-sm font-bold uppercase tracking-widest text-white/70">
@@ -354,26 +379,26 @@ export default function LandingPage() {
                 </div>
               </div>
             ))}
-          </div>
+          </Reveal>
         </Section>
       </div>
 
       {/* ─── How It Works / Partnership ─────────────────────── */}
       <Section id="how-it-works" className="py-20 lg:py-28">
-        <div className="text-center">
+        <Reveal className="text-center">
           <span className="text-sm font-black uppercase tracking-wider text-zapp-red">
             Partnership
           </span>
-          <h2 className="mt-3 text-3xl font-extrabold text-zapp-brown sm:text-4xl">
+          <h2 className="mt-3 font-display text-2xl font-extrabold text-zapp-brown sm:text-4xl">
             Four Simple Steps to Ownership
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-lg text-gray-600">
             From interested applicant to operational franchise owner — our
             streamlined process gets you there fast.
           </p>
-        </div>
+        </Reveal>
 
-        <div className="mt-16 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+        <Reveal stagger className="mt-16 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
           {[
             {
               step: 1,
@@ -418,25 +443,25 @@ export default function LandingPage() {
               </p>
             </div>
           ))}
-        </div>
+        </Reveal>
       </Section>
 
       {/* ─── Our Plants ─────────────────────────────────────── */}
       <Section id="faq" className="bg-zapp-cream/40 py-20 lg:py-28">
-        <div className="text-center">
+        <Reveal className="text-center">
           <span className="text-sm font-black uppercase tracking-wider text-zapp-red">
             Our Plants
           </span>
-          <h2 className="mt-3 text-3xl font-extrabold text-zapp-brown sm:text-4xl">
+          <h2 className="mt-3 font-display text-2xl font-extrabold text-zapp-brown sm:text-4xl">
             Strategically Located Production
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-lg text-gray-600">
             Three plants across the Philippines ensure fresh daily deliveries to
             every franchise store in their region.
           </p>
-        </div>
+        </Reveal>
 
-        <div className="mt-16 grid gap-8 sm:grid-cols-3">
+        <Reveal stagger className="mt-16 grid gap-8 sm:grid-cols-3">
           {[
             {
               name: 'Daraga Plant',
@@ -504,7 +529,7 @@ export default function LandingPage() {
               </div>
             </div>
           ))}
-        </div>
+        </Reveal>
       </Section>
 
       {/* ─── CTA Section ────────────────────────────────────── */}
@@ -515,8 +540,8 @@ export default function LandingPage() {
         <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full border-[24px] border-white/10" />
         <div className="pointer-events-none absolute -bottom-20 -left-10 h-72 w-72 rounded-full border-[20px] border-zapp-gold/20" />
         <Section className="relative py-20 lg:py-24">
-          <div className="text-center">
-            <h2 className="font-display text-3xl font-black text-white sm:text-4xl lg:text-5xl">
+          <Reveal className="text-center">
+            <h2 className="font-display text-2xl font-black text-white sm:text-4xl lg:text-5xl">
               Ready to Join ZAPP Donuts?
             </h2>
             <p className="mx-auto mt-4 max-w-2xl text-lg text-white/85">
@@ -542,7 +567,7 @@ export default function LandingPage() {
                 <ChevronRight size={18} />
               </button>
             </div>
-          </div>
+          </Reveal>
         </Section>
       </div>
 

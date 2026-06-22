@@ -136,6 +136,92 @@ body {
   }
 }
 
+/* ── Scroll-reveal (fade + slide-up) ─────────────────────────── */
+
+.reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition:
+    opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+.reveal.is-shown {
+  opacity: 1;
+  transform: none;
+}
+
+/* Stagger children once the container is shown (cards, badges, etc.) */
+.reveal-stagger.is-shown > * {
+  animation: zapp-reveal-up 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.reveal-stagger.is-shown > *:nth-child(1) { animation-delay: 0.05s; }
+.reveal-stagger.is-shown > *:nth-child(2) { animation-delay: 0.13s; }
+.reveal-stagger.is-shown > *:nth-child(3) { animation-delay: 0.21s; }
+.reveal-stagger.is-shown > *:nth-child(4) { animation-delay: 0.29s; }
+.reveal-stagger.is-shown > *:nth-child(5) { animation-delay: 0.37s; }
+.reveal-stagger.is-shown > *:nth-child(6) { animation-delay: 0.45s; }
+
+@keyframes zapp-reveal-up {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ── Hero entrance (on load) ─────────────────────────────────── */
+
+@keyframes zapp-hero-up {
+  from {
+    opacity: 0;
+    transform: translateY(26px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes zapp-hero-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(40px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.hero-anim {
+  opacity: 0;
+  animation: zapp-hero-up 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.hero-anim-right {
+  opacity: 0;
+  animation: zapp-hero-in-right 1s cubic-bezier(0.22, 1, 0.36, 1) 0.25s forwards;
+}
+.hero-d1 { animation-delay: 0.05s; }
+.hero-d2 { animation-delay: 0.18s; }
+.hero-d3 { animation-delay: 0.31s; }
+.hero-d4 { animation-delay: 0.44s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal,
+  .reveal.is-shown,
+  .reveal-stagger.is-shown > *,
+  .hero-anim,
+  .hero-anim-right {
+    opacity: 1;
+    transform: none;
+    animation: none;
+    transition: none;
+  }
+}
+
 /* ── Scrollbar styling ───────────────────────────────────────── */
 
 ::-webkit-scrollbar {

@@ -96,9 +96,11 @@ function App() {
 
   return (
     <Routes>
+      {/* Landing page: standalone (own dark nav + footer, no PublicLayout chrome) */}
+      <Route path="/" element={<LandingPage />} />
+
       {/* Public routes */}
       <Route element={<PublicLayout />}>
-        <Route path="/" element={<LandingPage />} />
         <Route path="/stores" element={<StoreDirectoryPage />} />
         <Route path="/apply" element={<ApplicationPage />} />
         <Route path="/referral/:code" element={<ReferralEntryPage />} />

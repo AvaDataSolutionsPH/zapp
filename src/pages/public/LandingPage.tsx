@@ -1,24 +1,30 @@
 // ============================================================
-// ZAPP Donuts ERP - Public Landing Page
+// ZAPP Donuts ERP - Public Landing Page (redesigned)
 // ============================================================
+// Matches the approved "BE PART OF THE SWEETEST BUSINESS!" concept:
+// cinematic dark hero over a donut-shop ambiance, ZAPP red/gold
+// branding, three franchise-value badges, the product display case
+// on the right, and a red "1000+ stores nationwide" CTA bar.
 
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
+  Sparkles,
+  TrendingUp,
+  Store,
+  Menu,
+  X,
+  ArrowRight,
   ClipboardCheck,
   UserCheck,
   Truck,
-  TrendingUp,
   MapPin,
   Factory,
   Handshake,
-  Sparkles,
-  ArrowRight,
-  ChevronRight,
   BarChart3,
-  Shield,
   Zap,
+  ChevronRight,
 } from 'lucide-react';
-import { Button } from '@/components/ui';
 
 // ── Section wrapper ────────────────────────────────────────────
 
@@ -38,194 +44,298 @@ function Section({
   );
 }
 
+const NAV_LINKS = [
+  { label: 'Home', href: '#home' },
+  { label: 'About Us', href: '#about' },
+  { label: 'Why ZAPP Donuts', href: '#why' },
+  { label: 'Partnership', href: '#how-it-works' },
+  { label: 'FAQ', href: '#faq' },
+  { label: 'Contact', href: '#contact' },
+];
+
 // ── Landing Page ──────────────────────────────────────────────
 
 export default function LandingPage() {
   const navigate = useNavigate();
+  const [scrolled, setScrolled] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 20);
+    window.addEventListener('scroll', onScroll);
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white font-sans">
       {/* ─── Navbar ─────────────────────────────────────────── */}
-      <nav className="sticky top-0 z-40 border-b border-orange-100 bg-white/90 backdrop-blur-md">
+      <nav
+        className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${
+          scrolled
+            ? 'bg-zapp-brown/95 shadow-lg shadow-black/20 backdrop-blur-md'
+            : 'bg-transparent'
+        }`}
+      >
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-2">
-            <img src="/Logo.jpg" alt="ZAPP Donuts" className="h-9 w-9 rounded-lg object-cover" />
-            <span className="text-lg font-bold text-zapp-brown">
-              ZAPP <span className="text-zapp-orange">Donuts</span>
-            </span>
-          </div>
+          <a href="#home" className="flex items-center gap-2">
+            <img
+              src="/zapp-logo.png"
+              alt="ZAPP Donuts"
+              className="h-11 w-auto drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)]"
+            />
+          </a>
 
-          <div className="hidden items-center gap-8 md:flex">
-            <a href="#about" className="text-sm font-medium text-gray-600 hover:text-zapp-orange transition-colors">
-              About
-            </a>
-            <a href="#how-it-works" className="text-sm font-medium text-gray-600 hover:text-zapp-orange transition-colors">
-              How It Works
-            </a>
-<a href="#plants" className="text-sm font-medium text-gray-600 hover:text-zapp-orange transition-colors">
-              Our Plants
-            </a>
+          {/* Desktop links */}
+          <div className="hidden items-center gap-7 lg:flex">
+            {NAV_LINKS.map((link) => (
+              <a
+                key={link.href}
+                href={link.href}
+                className="text-sm font-semibold text-white/90 transition-colors hover:text-zapp-gold"
+              >
+                {link.label}
+              </a>
+            ))}
           </div>
 
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={() => navigate('/stores')}>
-              View Stores
-            </Button>
-            <Button variant="primary" size="sm" onClick={() => navigate('/apply')}>
-              Apply Now
-            </Button>
+            <button
+              onClick={() => navigate('/apply')}
+              className="hidden rounded-full bg-zapp-red px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-red-900/30 transition-all hover:bg-red-600 hover:shadow-red-900/50 sm:inline-flex"
+            >
+              BECOME A STORE PARTNER
+            </button>
+            <button
+              onClick={() => setMenuOpen((v) => !v)}
+              className="rounded-lg p-2 text-white lg:hidden"
+              aria-label="Toggle menu"
+            >
+              {menuOpen ? <X size={22} /> : <Menu size={22} />}
+            </button>
           </div>
         </div>
+
+        {/* Mobile menu */}
+        {menuOpen && (
+          <div className="border-t border-white/10 bg-zapp-brown/98 px-4 py-4 lg:hidden">
+            <div className="flex flex-col gap-1">
+              {NAV_LINKS.map((link) => (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setMenuOpen(false)}
+                  className="rounded-lg px-3 py-2.5 text-sm font-semibold text-white/90 hover:bg-white/10 hover:text-zapp-gold"
+                >
+                  {link.label}
+                </a>
+              ))}
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  navigate('/apply');
+                }}
+                className="mt-2 rounded-full bg-zapp-red px-5 py-3 text-sm font-bold text-white"
+              >
+                BECOME A STORE PARTNER
+              </button>
+            </div>
+          </div>
+        )}
       </nav>
 
       {/* ─── Hero ───────────────────────────────────────────── */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-zapp-orange via-orange-400 to-zapp-cream">
-        {/* Decorative circles */}
-        <div className="absolute -top-24 -right-24 h-96 w-96 rounded-full bg-white/10" />
-        <div className="absolute -bottom-32 -left-32 h-[28rem] w-[28rem] rounded-full bg-white/10" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-64 w-64 rounded-full bg-white/5" />
+      <header
+        id="home"
+        className="relative min-h-screen overflow-hidden bg-zapp-brown"
+      >
+        {/* Cinematic branded background: warm dark gradient + radial glows */}
+        <div className="absolute inset-0 bg-gradient-to-br from-[#3a211f] via-zapp-brown to-[#1d100f]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_75%_35%,rgba(255,107,0,0.22),transparent_55%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_80%,rgba(239,68,68,0.18),transparent_50%)]" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/30" />
 
-        <Section className="relative py-20 sm:py-28 lg:py-36">
-          <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
+        {/* Faint donut pattern accents */}
+        <div className="pointer-events-none absolute -right-20 top-40 h-72 w-72 rounded-full border-[20px] border-white/[0.03]" />
+        <div className="pointer-events-none absolute right-1/3 top-24 h-32 w-32 rounded-full border-[12px] border-zapp-gold/[0.05]" />
+        <div className="pointer-events-none absolute -left-16 bottom-40 h-56 w-56 rounded-full border-[16px] border-zapp-gold/[0.06]" />
+
+        <Section className="relative flex min-h-screen items-center pt-28 pb-40 lg:pt-24">
+          <div className="grid w-full gap-12 lg:grid-cols-2 lg:items-center">
+            {/* Left: copy */}
             <div>
-              <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/20 px-4 py-1.5 text-sm font-medium text-white backdrop-blur-sm">
-                <Sparkles size={14} />
-                AI-Powered Franchise Operations
-              </div>
-              <h1 className="text-4xl font-extrabold leading-tight tracking-tight text-white sm:text-5xl lg:text-6xl">
-                Franchise Your{' '}
-                <span className="relative">
-                  Success
-                  <span className="absolute -bottom-1 left-0 h-1 w-full rounded bg-zapp-gold" />
-                </span>{' '}
-                with ZAPP Donuts
-              </h1>
-              <p className="mt-6 max-w-xl text-lg leading-relaxed text-white/90">
-                Join the fastest-growing donut franchise in the Philippines. With three strategic plants,
-                AI-assisted inventory management, and a modern ERP platform, we make franchise ownership
-                simple, profitable, and scalable.
-              </p>
-              <div className="mt-8 flex flex-wrap gap-4">
-                <Button
-                  size="lg"
-                  variant="secondary"
-                  iconRight={<ArrowRight size={18} />}
-                  onClick={() => navigate('/apply')}
-                  className="!bg-white !text-zapp-orange hover:!bg-zapp-cream font-bold shadow-lg"
-                >
-                  Apply Now
-                </Button>
-                <Button
-                  size="lg"
-                  variant="ghost"
-                  iconRight={<ChevronRight size={18} />}
-                  onClick={() => navigate('/stores')}
-                  className="!text-white hover:!bg-white/20 border border-white/30"
-                >
-                  View Stores
-                </Button>
+              <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-zapp-gold/30 bg-zapp-gold/10 px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-zapp-gold backdrop-blur-sm">
+                <Sparkles size={13} />
+                Franchise Opportunity
               </div>
 
-              {/* Quick stats */}
-              <div className="mt-12 grid grid-cols-3 gap-6">
+              <h1 className="text-5xl font-black leading-[0.95] tracking-tight text-white sm:text-6xl lg:text-7xl">
+                BE PART OF
+                <br />
+                THE SWEETEST
+                <br />
+                <span className="text-zapp-gold drop-shadow-[0_2px_8px_rgba(255,215,0,0.25)]">
+                  BUSINESS!
+                </span>
+              </h1>
+
+              <p className="mt-6 max-w-lg text-lg leading-relaxed text-white/80">
+                Join ZAPP Donuts and own a proven, high-demand business that
+                brings happiness in every bite.
+              </p>
+
+              {/* Feature badges */}
+              <div className="mt-10 grid max-w-xl grid-cols-1 gap-6 sm:grid-cols-3">
                 {[
-                  { value: '3', label: 'Production Plants' },
-                  { value: '50+', label: 'Active Stores' },
-                  { value: '5', label: 'Distributor Partners' },
-                ].map((stat) => (
-                  <div key={stat.label}>
-                    <div className="text-3xl font-extrabold text-white">{stat.value}</div>
-                    <div className="mt-1 text-sm text-white/70">{stat.label}</div>
+                  {
+                    icon: <Sparkles size={22} />,
+                    title: 'HIGH DEMAND',
+                    desc: 'Loved by all ages. Perfect anytime, anywhere.',
+                  },
+                  {
+                    icon: <TrendingUp size={22} />,
+                    title: 'PROVEN BUSINESS',
+                    desc: 'Low risk, high return with fast ROI.',
+                  },
+                  {
+                    icon: <Store size={22} />,
+                    title: 'EASY TO START',
+                    desc: 'We guide you every step of the way.',
+                  },
+                ].map((f) => (
+                  <div key={f.title}>
+                    <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-zapp-red text-white shadow-lg shadow-red-900/40">
+                      {f.icon}
+                    </div>
+                    <h3 className="text-sm font-extrabold tracking-wide text-white">
+                      {f.title}
+                    </h3>
+                    <p className="mt-1 text-xs leading-relaxed text-white/60">
+                      {f.desc}
+                    </p>
                   </div>
                 ))}
               </div>
+
+              <div className="mt-10 flex flex-wrap gap-4">
+                <button
+                  onClick={() => navigate('/apply')}
+                  className="group inline-flex items-center gap-2 rounded-full bg-zapp-red px-7 py-3.5 text-sm font-bold text-white shadow-xl shadow-red-900/40 transition-all hover:bg-red-600 hover:shadow-red-900/60"
+                >
+                  BECOME A STORE PARTNER
+                  <ArrowRight
+                    size={18}
+                    className="transition-transform group-hover:translate-x-1"
+                  />
+                </button>
+                <button
+                  onClick={() => navigate('/stores')}
+                  className="inline-flex items-center gap-2 rounded-full border border-white/30 px-7 py-3.5 text-sm font-bold text-white transition-colors hover:bg-white/10"
+                >
+                  View Stores
+                </button>
+              </div>
             </div>
 
-            {/* Right side: visual card */}
-            <div className="hidden lg:flex justify-center">
+            {/* Right: product display case */}
+            <div className="hidden justify-center lg:flex">
               <div className="relative">
-                <div className="absolute inset-0 rounded-3xl bg-white/10 blur-2xl" />
-                <div className="relative rounded-3xl border border-white/20 bg-white/10 p-8 backdrop-blur-sm">
-                  <div className="grid grid-cols-2 gap-4">
-                    {[
-                      { icon: <Factory size={28} />, text: 'Multi-Plant Production' },
-                      { icon: <Truck size={28} />, text: 'Daily Deliveries' },
-                      { icon: <BarChart3 size={28} />, text: 'AI-Powered Analytics' },
-                      { icon: <Shield size={28} />, text: 'Full ERP Support' },
-                    ].map((item) => (
-                      <div
-                        key={item.text}
-                        className="flex flex-col items-center gap-3 rounded-2xl bg-white/10 p-6 text-center"
-                      >
-                        <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-white/20 text-white">
-                          {item.icon}
-                        </div>
-                        <span className="text-sm font-semibold text-white">{item.text}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <div className="absolute inset-0 scale-110 rounded-full bg-zapp-red/20 blur-3xl" />
+                <div className="absolute -inset-4 rounded-full bg-zapp-gold/10 blur-2xl" />
+                <img
+                  src="/zapp-product.png"
+                  alt="ZAPP Donuts display case"
+                  className="relative w-full max-w-md object-contain drop-shadow-[0_25px_60px_rgba(0,0,0,0.6)]"
+                />
               </div>
             </div>
           </div>
         </Section>
-      </div>
+
+        {/* ─── Red stats bar (bottom of hero) ───────────────── */}
+        <div className="absolute inset-x-0 bottom-0 z-10 bg-zapp-red">
+          <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 py-5 sm:flex-row sm:px-6 lg:px-8">
+            <div className="flex items-center gap-4">
+              <Store size={36} className="text-white/90" strokeWidth={1.5} />
+              <div>
+                <div className="text-3xl font-black leading-none text-white">
+                  1000+
+                </div>
+                <div className="text-xs font-bold uppercase tracking-widest text-white/80">
+                  Stores Nationwide
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => navigate('/apply')}
+              className="inline-flex items-center gap-2 rounded-full bg-zapp-gold px-7 py-3 text-sm font-black uppercase tracking-wide text-zapp-brown shadow-lg transition-transform hover:scale-[1.03]"
+            >
+              Become a Store Partner
+              <ArrowRight size={18} />
+            </button>
+          </div>
+        </div>
+      </header>
 
       {/* ─── About Section ──────────────────────────────────── */}
       <Section id="about" className="py-20 lg:py-28">
         <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
           <div>
-            <span className="text-sm font-bold uppercase tracking-wider text-zapp-orange">About Us</span>
-            <h2 className="mt-3 text-3xl font-bold text-gray-900 sm:text-4xl">About ZAPP Donuts</h2>
+            <span className="text-sm font-black uppercase tracking-wider text-zapp-red">
+              About Us
+            </span>
+            <h2 className="mt-3 text-3xl font-extrabold text-zapp-brown sm:text-4xl">
+              The Donut Brand Filipinos Love
+            </h2>
             <p className="mt-4 text-lg leading-relaxed text-gray-600">
-              ZAPP Donuts is a Philippine-based donut franchise that operates on a multi-plant distribution
-              model. With production facilities in <strong>Daraga (Bicol)</strong>,{' '}
-              <strong>Manila (NCR)</strong>, and <strong>Cebu (Visayas)</strong>, we ensure fresh daily
-              deliveries to franchise stores across the nation.
+              ZAPP Donuts is a Philippine-based donut franchise built on a
+              multi-plant distribution model. With production facilities in{' '}
+              <strong className="text-zapp-brown">Daraga (Bicol)</strong>,{' '}
+              <strong className="text-zapp-brown">Manila (NCR)</strong>, and{' '}
+              <strong className="text-zapp-brown">Cebu (Visayas)</strong>, we
+              ensure fresh daily deliveries to franchise stores across the
+              nation.
             </p>
             <p className="mt-4 text-lg leading-relaxed text-gray-600">
-              We partner with franchisees to provide a seamless and scalable business experience, backed by
-              reliable logistics, consistent product quality, and strong operational support.
-            </p>
-            <p className="mt-4 text-lg leading-relaxed text-gray-600">
-              What sets us apart is our <strong>AI-assisted operations platform</strong> — a modern ERP
-              system that handles inventory counting via image recognition, automated billing reconciliation,
-              demand forecasting, and real-time sales analytics. Franchise owners spend less time on
-              paperwork and more time growing their business.
+              We partner with franchisees for a seamless, scalable business —
+              backed by reliable logistics, consistent quality, and a modern
+              operations platform that handles inventory, billing, forecasting,
+              and analytics so you can focus on growing your store.
             </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             {[
               {
-                icon: <Zap size={24} className="text-zapp-orange" />,
-                title: 'AI-Assisted Operations',
-                desc: 'Computer vision for inventory, smart forecasting, and automated billing.',
+                icon: <Zap size={24} className="text-zapp-red" />,
+                title: 'Smart Operations',
+                desc: 'Image-assisted inventory, automated billing, demand forecasting.',
               },
               {
-                icon: <Truck size={24} className="text-zapp-orange" />,
+                icon: <Truck size={24} className="text-zapp-red" />,
                 title: 'Daily Fresh Deliveries',
-                desc: 'Products baked and delivered daily from the nearest plant.',
+                desc: 'Baked and delivered daily from your nearest plant.',
               },
               {
-                icon: <Handshake size={24} className="text-zapp-orange" />,
+                icon: <Handshake size={24} className="text-zapp-red" />,
                 title: 'Two Franchise Models',
-                desc: 'Choose between distributor-linked or direct franchise partnerships.',
+                desc: 'Distributor-linked or direct franchise partnerships.',
               },
               {
-                icon: <BarChart3 size={24} className="text-zapp-orange" />,
+                icon: <BarChart3 size={24} className="text-zapp-red" />,
                 title: 'Modern ERP Platform',
-                desc: 'Full-featured dashboard for sales tracking, billing, and reporting.',
+                desc: 'Full dashboard for sales, billing, and reporting.',
               },
             ].map((item) => (
               <div
                 key={item.title}
-                className="rounded-2xl border border-gray-100 bg-gray-50 p-6 transition-colors hover:border-orange-200 hover:bg-orange-50/30"
+                className="rounded-2xl border border-gray-100 bg-zapp-cream/50 p-6 transition-all hover:-translate-y-1 hover:border-zapp-red/20 hover:shadow-lg"
               >
-                <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-lg bg-orange-100">
+                <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-zapp-red/10">
                   {item.icon}
                 </div>
-                <h3 className="text-sm font-bold text-gray-900">{item.title}</h3>
+                <h3 className="text-sm font-bold text-zapp-brown">
+                  {item.title}
+                </h3>
                 <p className="mt-1 text-sm text-gray-500">{item.desc}</p>
               </div>
             ))}
@@ -233,16 +343,40 @@ export default function LandingPage() {
         </div>
       </Section>
 
-      {/* ─── How It Works ───────────────────────────────────── */}
-      <Section id="how-it-works" className="bg-zapp-cream/40 py-20 lg:py-28">
+      {/* ─── Why ZAPP (value band) ──────────────────────────── */}
+      <div id="why" className="bg-zapp-brown">
+        <Section className="py-16 lg:py-20">
+          <div className="grid gap-8 text-center sm:grid-cols-3">
+            {[
+              { value: '3', label: 'Production Plants' },
+              { value: '1000+', label: 'Stores Nationwide' },
+              { value: '9', label: 'Signature Products' },
+            ].map((s) => (
+              <div key={s.label}>
+                <div className="text-5xl font-black text-zapp-gold">
+                  {s.value}
+                </div>
+                <div className="mt-2 text-sm font-bold uppercase tracking-widest text-white/70">
+                  {s.label}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Section>
+      </div>
+
+      {/* ─── How It Works / Partnership ─────────────────────── */}
+      <Section id="how-it-works" className="py-20 lg:py-28">
         <div className="text-center">
-          <span className="text-sm font-bold uppercase tracking-wider text-zapp-orange">How It Works</span>
-          <h2 className="mt-3 text-3xl font-bold text-gray-900 sm:text-4xl">
-            Four Simple Steps to Franchise Ownership
+          <span className="text-sm font-black uppercase tracking-wider text-zapp-red">
+            Partnership
+          </span>
+          <h2 className="mt-3 text-3xl font-extrabold text-zapp-brown sm:text-4xl">
+            Four Simple Steps to Ownership
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-lg text-gray-600">
-            Our streamlined application process gets you from interested applicant to operational franchise
-            owner in no time.
+            From interested applicant to operational franchise owner — our
+            streamlined process gets you there fast.
           </p>
         </div>
 
@@ -250,59 +384,62 @@ export default function LandingPage() {
           {[
             {
               step: 1,
-              icon: <ClipboardCheck size={28} />,
+              icon: <ClipboardCheck size={26} />,
               title: 'Apply with Referral Code',
-              desc: 'Get a referral code from a distributor or ZAPP representative. Fill out the online application with your details and store information.',
+              desc: 'Get a code from a distributor or ZAPP rep, then fill out the online application.',
             },
             {
               step: 2,
-              icon: <UserCheck size={28} />,
+              icon: <UserCheck size={26} />,
               title: 'Get Reviewed & Approved',
-              desc: 'Our area supervisors and operations team review your application, verify documents, and approve your franchise within days.',
+              desc: 'Our team verifies your documents and approves your franchise within days.',
             },
             {
               step: 3,
-              icon: <Truck size={28} />,
+              icon: <Truck size={26} />,
               title: 'Receive Daily Deliveries',
-              desc: 'Once approved, your store receives fresh donut deliveries daily from the nearest plant. AI verifies each delivery receipt.',
+              desc: 'Fresh donuts delivered daily from the nearest plant, verified on arrival.',
             },
             {
               step: 4,
-              icon: <TrendingUp size={28} />,
+              icon: <TrendingUp size={26} />,
               title: 'Track Sales & Grow',
-              desc: 'Use the ZAPP ERP to track sales, manage billing, view analytics, and grow your franchise with data-driven insights.',
+              desc: 'Use the ZAPP ERP to track sales, manage billing, and grow with insights.',
             },
           ].map((item) => (
             <div
               key={item.step}
-              className="relative rounded-2xl border border-gray-100 bg-white p-8 shadow-sm transition-shadow hover:shadow-md"
+              className="relative rounded-2xl border border-gray-100 bg-white p-8 shadow-sm transition-all hover:-translate-y-1 hover:shadow-lg"
             >
-              {/* Step number */}
-              <div className="absolute -top-4 left-6 flex h-8 w-8 items-center justify-center rounded-full bg-zapp-orange text-sm font-bold text-white shadow-md shadow-orange-200">
+              <div className="absolute -top-4 left-6 flex h-9 w-9 items-center justify-center rounded-full bg-zapp-red text-sm font-black text-white shadow-md shadow-red-200">
                 {item.step}
               </div>
-              <div className="mt-2 mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-orange-50 text-zapp-orange">
+              <div className="mt-2 mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-zapp-red/10 text-zapp-red">
                 {item.icon}
               </div>
-              <h3 className="text-base font-bold text-gray-900">{item.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-gray-500">{item.desc}</p>
+              <h3 className="text-base font-bold text-zapp-brown">
+                {item.title}
+              </h3>
+              <p className="mt-2 text-sm leading-relaxed text-gray-500">
+                {item.desc}
+              </p>
             </div>
           ))}
         </div>
       </Section>
 
       {/* ─── Our Plants ─────────────────────────────────────── */}
-      <Section id="plants" className="bg-zapp-cream/40 py-20 lg:py-28">
+      <Section id="faq" className="bg-zapp-cream/40 py-20 lg:py-28">
         <div className="text-center">
-          <span className="text-sm font-bold uppercase tracking-wider text-zapp-orange">
+          <span className="text-sm font-black uppercase tracking-wider text-zapp-red">
             Our Plants
           </span>
-          <h2 className="mt-3 text-3xl font-bold text-gray-900 sm:text-4xl">
+          <h2 className="mt-3 text-3xl font-extrabold text-zapp-brown sm:text-4xl">
             Strategically Located Production
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-lg text-gray-600">
-            Three production plants across the Philippines ensure fresh daily deliveries to every franchise
-            store in their region.
+            Three plants across the Philippines ensure fresh daily deliveries to
+            every franchise store in their region.
           </p>
         </div>
 
@@ -315,7 +452,6 @@ export default function LandingPage() {
               region: 'Bicol Region',
               coverage: 'Albay, Camarines Sur, Sorsogon, and nearby provinces',
               color: 'from-orange-500 to-red-500',
-              iconBg: 'bg-orange-100 text-orange-600',
             },
             {
               name: 'Manila Plant',
@@ -323,8 +459,7 @@ export default function LandingPage() {
               location: 'Tondo, Manila',
               region: 'National Capital Region',
               coverage: 'Manila, Makati, Quezon City, Pasig, and Metro Manila',
-              color: 'from-blue-500 to-indigo-500',
-              iconBg: 'bg-blue-100 text-blue-600',
+              color: 'from-amber-500 to-orange-600',
             },
             {
               name: 'Cebu Plant',
@@ -332,39 +467,46 @@ export default function LandingPage() {
               location: 'Mandaue, Cebu',
               region: 'Visayas Region',
               coverage: 'Cebu, Mandaue, Lapu-Lapu, and surrounding Visayan areas',
-              color: 'from-emerald-500 to-teal-500',
-              iconBg: 'bg-emerald-100 text-emerald-600',
+              color: 'from-red-500 to-rose-600',
             },
           ].map((plant) => (
             <div
               key={plant.code}
-              className="group overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-shadow hover:shadow-lg"
+              className="group overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all hover:-translate-y-1 hover:shadow-xl"
             >
-              {/* Gradient header */}
-              <div className={`bg-gradient-to-r ${plant.color} px-6 py-8 text-white`}>
+              <div
+                className={`bg-gradient-to-r ${plant.color} px-6 py-8 text-white`}
+              >
                 <div className="flex items-start justify-between">
                   <div>
                     <div className="text-xs font-bold uppercase tracking-wider text-white/70">
                       Plant Code: {plant.code}
                     </div>
-                    <h3 className="mt-1 text-xl font-bold">{plant.name}</h3>
+                    <h3 className="mt-1 text-xl font-extrabold">{plant.name}</h3>
                   </div>
                   <Factory size={32} className="text-white/30" />
                 </div>
               </div>
-
               <div className="p-6">
                 <div className="flex items-center gap-2 text-sm text-gray-600">
                   <MapPin size={14} className="text-gray-400" />
                   {plant.location}
                 </div>
                 <div className="mt-3">
-                  <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Region</span>
-                  <p className="mt-0.5 text-sm font-semibold text-gray-900">{plant.region}</p>
+                  <span className="text-xs font-bold uppercase tracking-wider text-gray-400">
+                    Region
+                  </span>
+                  <p className="mt-0.5 text-sm font-semibold text-zapp-brown">
+                    {plant.region}
+                  </p>
                 </div>
                 <div className="mt-3">
-                  <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Coverage</span>
-                  <p className="mt-0.5 text-sm text-gray-600">{plant.coverage}</p>
+                  <span className="text-xs font-bold uppercase tracking-wider text-gray-400">
+                    Coverage
+                  </span>
+                  <p className="mt-0.5 text-sm text-gray-600">
+                    {plant.coverage}
+                  </p>
                 </div>
               </div>
             </div>
@@ -373,68 +515,74 @@ export default function LandingPage() {
       </Section>
 
       {/* ─── CTA Section ────────────────────────────────────── */}
-      <div className="bg-gradient-to-r from-zapp-orange to-orange-500">
-        <Section className="py-20 lg:py-24">
+      <div
+        id="contact"
+        className="relative overflow-hidden bg-zapp-red"
+      >
+        <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full border-[24px] border-white/10" />
+        <div className="pointer-events-none absolute -bottom-20 -left-10 h-72 w-72 rounded-full border-[20px] border-zapp-gold/20" />
+        <Section className="relative py-20 lg:py-24">
           <div className="text-center">
-            <h2 className="text-3xl font-extrabold text-white sm:text-4xl lg:text-5xl">
+            <h2 className="text-3xl font-black text-white sm:text-4xl lg:text-5xl">
               Ready to Join ZAPP Donuts?
             </h2>
-            <p className="mx-auto mt-4 max-w-2xl text-lg text-white/80">
-              Start your franchise journey today. Apply now and become part of the ZAPP Donuts family --
-              where AI meets delicious donuts.
+            <p className="mx-auto mt-4 max-w-2xl text-lg text-white/85">
+              Start your franchise journey today — apply now and become part of
+              the sweetest business in the Philippines.
             </p>
             <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
-              <Button
-                size="lg"
-                variant="secondary"
-                iconRight={<ArrowRight size={18} />}
+              <button
                 onClick={() => navigate('/apply')}
-                className="!bg-white !text-zapp-orange hover:!bg-zapp-cream font-bold shadow-lg"
+                className="group inline-flex items-center gap-2 rounded-full bg-zapp-gold px-8 py-4 text-sm font-black uppercase tracking-wide text-zapp-brown shadow-xl transition-transform hover:scale-[1.03]"
               >
-                Apply Now
-              </Button>
-              <Button
-                size="lg"
-                variant="ghost"
+                Become a Store Partner
+                <ArrowRight
+                  size={18}
+                  className="transition-transform group-hover:translate-x-1"
+                />
+              </button>
+              <button
                 onClick={() => navigate('/stores')}
-                className="!text-white hover:!bg-white/20 border border-white/30"
+                className="inline-flex items-center gap-2 rounded-full border border-white/40 px-8 py-4 text-sm font-bold text-white transition-colors hover:bg-white/10"
               >
                 Browse Store Directory
-              </Button>
+                <ChevronRight size={18} />
+              </button>
             </div>
           </div>
         </Section>
       </div>
 
       {/* ─── Footer ─────────────────────────────────────────── */}
-      <footer className="border-t border-gray-100 bg-white">
+      <footer className="bg-zapp-brown">
         <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
           <div className="flex flex-col items-center justify-between gap-6 sm:flex-row">
-            <div className="flex items-center gap-2">
-              <img src="/Logo.jpg" alt="ZAPP Donuts" className="h-8 w-8 rounded-lg object-cover" />
-              <span className="text-sm font-bold text-gray-900">ZAPP Donuts ERP</span>
-            </div>
+            <img
+              src="/zapp-logo.png"
+              alt="ZAPP Donuts"
+              className="h-12 w-auto"
+            />
             <div className="flex items-center gap-6">
               <button
                 onClick={() => navigate('/stores')}
-                className="text-sm text-gray-500 hover:text-zapp-orange transition-colors"
+                className="text-sm font-medium text-white/70 transition-colors hover:text-zapp-gold"
               >
                 Store Directory
               </button>
               <button
                 onClick={() => navigate('/apply')}
-                className="text-sm text-gray-500 hover:text-zapp-orange transition-colors"
+                className="text-sm font-medium text-white/70 transition-colors hover:text-zapp-gold"
               >
                 Apply
               </button>
               <button
                 onClick={() => navigate('/login')}
-                className="text-sm text-gray-500 hover:text-zapp-orange transition-colors"
+                className="text-sm font-medium text-white/70 transition-colors hover:text-zapp-gold"
               >
                 Franchisee Login
               </button>
             </div>
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-white/50">
               &copy; {new Date().getFullYear()} ZAPP Donuts. All rights reserved.
             </p>
           </div>

@@ -84,9 +84,54 @@ body {
   animation: zapp-pulse-soft 1.8s ease-in-out infinite;
 }
 
+/* Floating donut accents (two speeds, offset drift) */
+@keyframes zapp-float-slow {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-22px) rotate(8deg);
+  }
+}
+@keyframes zapp-float-med {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-14px) rotate(-10deg);
+  }
+}
+
+.zapp-float-slow {
+  animation: zapp-float-slow 6s ease-in-out infinite;
+}
+.zapp-float-med {
+  animation: zapp-float-med 4.5s ease-in-out infinite;
+}
+
+/* Tagline fade/slide-in on each swap */
+@keyframes zapp-tagline-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.zapp-tagline {
+  animation: zapp-tagline-in 0.4s ease-out;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .zapp-loading-bar,
-  .animate-pulse-soft {
+  .animate-pulse-soft,
+  .zapp-float-slow,
+  .zapp-float-med,
+  .zapp-tagline {
     animation: none;
   }
 }

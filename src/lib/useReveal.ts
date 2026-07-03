@@ -11,20 +11,20 @@ export function useReveal<T extends HTMLElement = HTMLDivElement>(
   options?: IntersectionObserverInit,
 ) {
   const ref = useRef<T>(null);
-  const [shown, setShown] = useState(false);
+  // Reduced motion → start already-shown so there's no fade-in and the
+  // effect never needs to setState synchronously (avoids a cascading
+  // render / the react-hooks set-state-in-effect lint).
+  const prefersReducedMotion =
+    typeof window !== 'undefined' &&
+    (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false);
+  const [shown, setShown] = useState(prefersReducedMotion);
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
 
-    // Reduced motion → show immediately, skip the observer.
-    if (
-      typeof window !== 'undefined' &&
-      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-    ) {
-      setShown(true);
-      return;
-    }
+    // Reduced motion → already shown from the initial state; skip the observer.
+    if (prefersReducedMotion) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -40,7 +40,7 @@ export function useReveal<T extends HTMLElement = HTMLDivElement>(
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [options]);
+  }, [options, prefersReducedMotion]);
 
   return { ref, shown };
 }

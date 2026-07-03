@@ -1,25 +1,20 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import {
   ClipboardCheck,
   Camera,
-  Cpu,
   Save,
-  AlertTriangle,
   CheckSquare,
   History,
   Eye,
   RotateCcw,
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
-import { aiService } from '@/services/api';
-import { isGeminiConfigured, geminiCountCrate } from '@/services/aiService';
 import {
   Card,
   CardHeader,
   CardContent,
   Button,
   Select,
-  Badge,
   FileUpload,
   ConfirmDialog,
   EmptyState,
@@ -28,7 +23,7 @@ import {
 import { useToast } from '@/components/ui/Toast';
 import { uploadFile, buildObjectPath, deleteFile, parseStorageRef } from '@/services/storage';
 import type { SelectOption, UploadedFile } from '@/components/ui';
-import type { AIResult, EndingInventory, InventoryItem } from '@/types';
+import type { EndingInventory, InventoryItem } from '@/types';
 import { InventoryReviewDetailDrawer } from './InventoryReviewDetailDrawer';
 
 interface UnsoldRow {
@@ -37,28 +32,12 @@ interface UnsoldRow {
   deliveredQty: number;
   unsoldQty: number;
   soldQty: number;
-  aiEstimate: number | null;
-  aiConfidence: AIResult['confidence'] | null;
-  useAI: boolean;
-  hasDiscrepancy: boolean;
 }
-
-const confidenceBadge = (level: AIResult['confidence'] | null) => {
-  if (!level) return null;
-  const map = {
-    high: { variant: 'success' as const, label: 'High' },
-    medium: { variant: 'warning' as const, label: 'Medium' },
-    low: { variant: 'danger' as const, label: 'Low' },
-  };
-  const cfg = map[level];
-  return <Badge variant={cfg.variant} size="sm" dot>{cfg.label}</Badge>;
-};
 
 export default function EndingInventoryPage() {
   const {
     deliveries,
     stores,
-    skus,
     addEndingInventory,
     endingInventories,
     currentUser,
@@ -75,8 +54,6 @@ export default function EndingInventoryPage() {
   const [selectedDeliveryId, setSelectedDeliveryId] = useState('');
   const [unsoldRows, setUnsoldRows] = useState<UnsoldRow[]>([]);
   const [crateFiles, setCrateFiles] = useState<UploadedFile[]>([]);
-  const [aiProcessing, setAiProcessing] = useState(false);
-  const [aiDone, setAiDone] = useState(false);
   const [notes, setNotes] = useState('');
   const [showSave, setShowSave] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
@@ -121,7 +98,6 @@ export default function EndingInventoryPage() {
   // Initialize rows when delivery selected
   const handleDeliveryChange = (id: string) => {
     setSelectedDeliveryId(id);
-    setAiDone(false);
     setCrateFiles([]);
     const del = eligibleDeliveries.find((d) => d.id === id);
     if (del) {
@@ -132,10 +108,6 @@ export default function EndingInventoryPage() {
           deliveredQty: item.quantity,
           unsoldQty: 0,
           soldQty: item.quantity,
-          aiEstimate: null,
-          aiConfidence: null,
-          useAI: false,
-          hasDiscrepancy: false,
         })),
       );
     }
@@ -150,86 +122,7 @@ export default function EndingInventoryPage() {
           ...r,
           unsoldQty: clamped,
           soldQty: r.deliveredQty - clamped,
-          useAI: false, // Manual edit overrides AI
-          hasDiscrepancy: r.aiEstimate !== null && Math.abs(clamped - r.aiEstimate) > 0,
         };
-      }),
-    );
-  };
-
-  // AI Processing
-  const processAI = useCallback(async () => {
-    setAiProcessing(true);
-    try {
-      // Real crate counting via Gemini when configured + at least one
-      // crate photo was uploaded; otherwise fall back to the legacy
-      // mock so the EI submission flow still completes without a key.
-      // The model returns per-SKU unsold counts which then get merged
-      // into the existing unsoldRows state by skuId. Toasts fire AFTER
-      // the awaited promise settles, never mid-spinner.
-      const crateRealFiles = crateFiles.map((f) => f.file).filter(Boolean) as File[];
-      let results: AIResult[];
-      let geminiFailed = false;
-      let usedGemini = false;
-      if (isGeminiConfigured() && crateRealFiles.length > 0) {
-        try {
-          results = await geminiCountCrate(crateRealFiles, skus);
-          usedGemini = true;
-        } catch (err) {
-          console.error('[EndingInventoryPage] Gemini crate count failed:', err);
-          geminiFailed = true;
-          results = await aiService.estimateCrates(['mock-end-crate']);
-        }
-      } else {
-        results = await aiService.estimateCrates(['mock-end-crate']);
-      }
-
-      if (usedGemini) {
-        const totalUnsold = results.reduce(
-          (sum, r) => sum + (r.estimatedValue ?? 0),
-          0,
-        );
-        addToast(
-          'success',
-          `AI counted ${totalUnsold} unsold donut(s) across ${crateRealFiles.length} crate(s).`,
-        );
-      }
-      if (geminiFailed) {
-        addToast('warning', 'AI counting failed — using mock estimates.');
-      }
-
-      setUnsoldRows((prev) =>
-        prev.map((r) => {
-          const aiItem = results.find((ai) => ai.skuId === r.skuId);
-          const aiEst = aiItem?.estimatedValue ?? null;
-          return {
-            ...r,
-            aiEstimate: aiEst,
-            aiConfidence: aiItem?.confidence ?? null,
-            hasDiscrepancy: aiEst !== null && Math.abs(r.unsoldQty - aiEst) > 0,
-          };
-        }),
-      );
-      setAiDone(true);
-    } catch (err) {
-      console.error('AI processing failed:', err);
-    } finally {
-      setAiProcessing(false);
-    }
-  }, [crateFiles, skus, addToast]);
-
-  const toggleUseAI = (skuId: string) => {
-    setUnsoldRows((prev) =>
-      prev.map((r) => {
-        if (r.skuId !== skuId || r.aiEstimate === null) return r;
-        if (!r.useAI) {
-          // Switch to AI value
-          const newUnsold = r.aiEstimate;
-          return { ...r, useAI: true, unsoldQty: newUnsold, soldQty: r.deliveredQty - newUnsold, hasDiscrepancy: false };
-        } else {
-          // Revert - keep current unsold value
-          return { ...r, useAI: false, hasDiscrepancy: r.aiEstimate !== null && Math.abs(r.unsoldQty - r.aiEstimate) > 0 };
-        }
       }),
     );
   };
@@ -260,14 +153,9 @@ export default function EndingInventoryPage() {
           deliveredQty: item.quantity,
           unsoldQty: clamped,
           soldQty: item.quantity - clamped,
-          aiEstimate: null,
-          aiConfidence: null,
-          useAI: false,
-          hasDiscrepancy: false,
         };
       }),
     );
-    setAiDone(false);
     setCrateFiles([]);
     setNotes('');
   };
@@ -277,7 +165,6 @@ export default function EndingInventoryPage() {
     setSelectedDeliveryId('');
     setUnsoldRows([]);
     setCrateFiles([]);
-    setAiDone(false);
     setNotes('');
   };
 
@@ -293,10 +180,7 @@ export default function EndingInventoryPage() {
         skuId: r.skuId,
         skuName: r.skuName,
         quantity: r.unsoldQty,
-        aiEstimate: r.aiEstimate ?? undefined,
-        confidence: r.aiConfidence ?? undefined,
-        discrepancy: r.aiEstimate !== null ? r.unsoldQty - r.aiEstimate : undefined,
-        manualOverride: !r.useAI,
+        manualOverride: true,
       }));
 
       if (resubmittingEI) {
@@ -376,7 +260,6 @@ export default function EndingInventoryPage() {
   const totalSold = unsoldRows.reduce((s, r) => s + r.soldQty, 0);
   const totalUnsold = unsoldRows.reduce((s, r) => s + r.unsoldQty, 0);
   const totalDelivered = unsoldRows.reduce((s, r) => s + r.deliveredQty, 0);
-  const discrepancyCount = unsoldRows.filter((r) => r.hasDiscrepancy).length;
 
   if (submitted) {
     const wasResubmit = resubmittingEI !== null;
@@ -397,7 +280,6 @@ export default function EndingInventoryPage() {
             setSelectedDeliveryId('');
             setUnsoldRows([]);
             setCrateFiles([]);
-            setAiDone(false);
             setNotes('');
           }}
         />
@@ -545,23 +427,13 @@ export default function EndingInventoryPage() {
                       <th className="px-3 py-2 text-center">Delivered</th>
                       <th className="px-3 py-2 text-center">Unsold</th>
                       <th className="px-3 py-2 text-center">Sold</th>
-                      {aiDone && (
-                        <>
-                          <th className="px-3 py-2 text-center">AI Estimate</th>
-                          <th className="px-3 py-2 text-center">Confidence</th>
-                          <th className="px-3 py-2 text-center">Use AI</th>
-                        </>
-                      )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {unsoldRows.map((row) => (
-                      <tr key={row.skuId} className={row.hasDiscrepancy ? 'bg-amber-50' : 'hover:bg-gray-50'}>
+                      <tr key={row.skuId} className="hover:bg-gray-50">
                         <td className="px-3 py-2 font-medium text-gray-900">
                           {row.skuName}
-                          {row.hasDiscrepancy && (
-                            <AlertTriangle size={12} className="inline ml-1 text-amber-500" />
-                          )}
                         </td>
                         <td className="px-3 py-2 text-center text-gray-600">{row.deliveredQty}</td>
                         <td className="px-3 py-2 text-center">
@@ -575,28 +447,6 @@ export default function EndingInventoryPage() {
                           />
                         </td>
                         <td className="px-3 py-2 text-center font-medium text-green-700">{row.soldQty}</td>
-                        {aiDone && (
-                          <>
-                            <td className="px-3 py-2 text-center">
-                              {row.aiEstimate !== null ? row.aiEstimate : '-'}
-                            </td>
-                            <td className="px-3 py-2 text-center">{confidenceBadge(row.aiConfidence)}</td>
-                            <td className="px-3 py-2 text-center">
-                              {row.aiEstimate !== null && (
-                                <button
-                                  onClick={() => toggleUseAI(row.skuId)}
-                                  className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
-                                    row.useAI
-                                      ? 'bg-green-100 text-green-700'
-                                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                  }`}
-                                >
-                                  {row.useAI ? 'Using AI' : 'Accept AI'}
-                                </button>
-                              )}
-                            </td>
-                          </>
-                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -633,45 +483,6 @@ export default function EndingInventoryPage() {
             </Card>
           )}
 
-          {/* AI Estimation */}
-          <Card>
-            <CardHeader>
-              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <Cpu size={18} /> AI Estimation
-              </h2>
-            </CardHeader>
-            <CardContent>
-              {!aiDone ? (
-                <div className="text-center py-8">
-                  <p className="text-sm text-gray-600 mb-4">
-                    Process crate images to get AI-estimated remaining quantities.
-                  </p>
-                  <Button
-                    variant="primary"
-                    iconLeft={<Cpu size={16} />}
-                    onClick={processAI}
-                    loading={aiProcessing}
-                  >
-                    Process with AI
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <p className="text-sm text-green-700 font-medium">AI estimation complete.</p>
-                  {discrepancyCount > 0 && (
-                    <p className="text-sm text-amber-700 flex items-center gap-1">
-                      <AlertTriangle size={14} />
-                      {discrepancyCount} discrepanc{discrepancyCount === 1 ? 'y' : 'ies'} between your input and AI estimate.
-                    </p>
-                  )}
-                  <p className="text-xs text-gray-500">
-                    You can accept AI values or keep your manual input for each SKU in the table above.
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
           {/* Reconciliation Summary */}
           <Card>
             <CardHeader>
@@ -680,7 +491,7 @@ export default function EndingInventoryPage() {
               </h2>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div className="bg-gray-50 rounded-lg p-3 text-center">
                   <p className="text-xs text-gray-500 uppercase">Total Delivered</p>
                   <p className="text-lg font-bold text-gray-900">{totalDelivered}</p>
@@ -692,12 +503,6 @@ export default function EndingInventoryPage() {
                 <div className="bg-amber-50 rounded-lg p-3 text-center">
                   <p className="text-xs text-amber-600 uppercase">Total Unsold</p>
                   <p className="text-lg font-bold text-amber-700">{totalUnsold}</p>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-3 text-center">
-                  <p className="text-xs text-gray-500 uppercase">Discrepancies</p>
-                  <p className={`text-lg font-bold ${discrepancyCount > 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                    {discrepancyCount}
-                  </p>
                 </div>
               </div>
 

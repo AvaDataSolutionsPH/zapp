@@ -37,5 +37,6 @@ Copy `_TEMPLATE.md` when adding a feature doc.
 
 ## Index
 
+- [inventory-capture](inventory-capture.md) — Beginning/Ending Inventory data entry (manual-only counting, local DR OCR, no Gemini)
 - [ending-inventory-review](ending-inventory-review.md) — reviewer state machine (approve / needs-review / correction)
 - [billing-and-delivery-recompute](billing-and-delivery-recompute.md) — computed billings + auto delivery-status cascade

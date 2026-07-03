@@ -5,13 +5,11 @@ import {
   Cpu,
   CheckSquare,
   Save,
-  AlertTriangle,
   ChevronRight,
   ChevronLeft,
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { aiService } from '@/services/api';
-import { isGeminiConfigured, geminiCountCrate } from '@/services/aiService';
 import { tesseractAnalyzeDR } from '@/services/tesseractService';
 import {
   Card,
@@ -36,19 +34,17 @@ interface ConfirmedRow {
   skuId: string;
   skuName: string;
   drQty: number;
-  crateEstimate: number;
   confirmedQty: number;
   lack: number;
   overage: number;
   manualOverride: boolean;
   confidence: AIResult['confidence'];
-  hasDiscrepancy: boolean;
 }
 
 const stepLabels: Record<Step, string> = {
   1: 'Upload DR Image',
   2: 'Upload Crate Images',
-  3: 'AI Processing',
+  3: 'DR OCR',
   4: 'Confirm / Edit',
   5: 'Submit',
 };
@@ -84,8 +80,6 @@ export default function BeginningInventoryPage() {
   const [crateFiles, setCrateFiles] = useState<UploadedFile[]>([]);
   const [aiProcessing, setAiProcessing] = useState(false);
   const [ocrResults, setOcrResults] = useState<AIResult[]>([]);
-  const [crateResults, setCrateResults] = useState<AIResult[]>([]);
-  const [discrepancies, setDiscrepancies] = useState<AIResult[]>([]);
   const [confirmedRows, setConfirmedRows] = useState<ConfirmedRow[]>([]);
   const [notes, setNotes] = useState('');
   const [showSubmit, setShowSubmit] = useState(false);
@@ -114,129 +108,66 @@ export default function BeginningInventoryPage() {
     }
   };
 
-  // AI Processing
+  // DR OCR processing
   const processAI = useCallback(async () => {
     if (!delivery) return;
     setAiProcessing(true);
     try {
-      // Both OCR and crate counting can be real Gemini calls when the
-      // env var is set; each is independently gated and independently
-      // falls back to the legacy mock on failure so a single broken
-      // path never blocks the BI submission flow. We run them in
-      // parallel via Promise.all so total latency = max of the two
-      // round-trips rather than the sum. Toasts are deferred until
-      // after BOTH calls settle so the spinner-vs-toast UI stays
-      // coherent (no toast firing while the loader is still spinning).
-      const drFile = drFiles[0]?.file;
-      const crateRealFiles = crateFiles.map((f) => f.file).filter(Boolean) as File[];
-      const useGemini = isGeminiConfigured();
-
-      type Outcome = {
-        results: AIResult[];
-        source: 'gemini' | 'tesseract' | 'mock';
-        gemFailed?: boolean;
-      };
-
-      // OCR now runs locally via Tesseract (no API call, zero cost).
+      // DR-slip OCR runs locally via Tesseract (no API call, zero cost).
       // On any OCR/parse failure we fall back to the legacy mock so the
-      // BI flow never blocks. `gemFailed` is reused as a generic
-      // "real engine failed, using mock" flag for the deferred toast.
-      const ocrPromise: Promise<Outcome> = drFile
-        ? tesseractAnalyzeDR(drFile, skus).then(
-            (results) => ({ results, source: 'tesseract' } as Outcome),
-            async (err) => {
-              console.error('[BeginningInventoryPage] Tesseract DR OCR failed:', err);
-              const results = await aiService.processOCR('mock-dr-image');
-              return { results, source: 'mock', gemFailed: true } as Outcome;
-            },
-          )
-        : aiService.processOCR('mock-dr-image').then(
-            (results) => ({ results, source: 'mock' } as Outcome),
-          );
+      // BI flow never blocks. Crate photos are captured as evidence only
+      // (see Step 2) — there is no automated crate counting anymore; the
+      // reviewer confirms quantities manually in Step 4.
+      const drFile = drFiles[0]?.file;
 
-      const cratePromise: Promise<Outcome> = useGemini && crateRealFiles.length > 0
-        ? geminiCountCrate(crateRealFiles, skus).then(
-            (results) => ({ results, source: 'gemini' } as Outcome),
-            async (err) => {
-              console.error('[BeginningInventoryPage] Gemini crate count failed:', err);
-              const results = await aiService.estimateCrates(['mock-crate-1', 'mock-crate-2']);
-              return { results, source: 'mock', gemFailed: true } as Outcome;
-            },
-          )
-        : aiService.estimateCrates(['mock-crate-1', 'mock-crate-2']).then(
-            (results) => ({ results, source: 'mock' } as Outcome),
-          );
+      let ocr: AIResult[];
+      let ocrFailed = false;
+      if (drFile) {
+        try {
+          ocr = await tesseractAnalyzeDR(drFile, skus);
+        } catch (err) {
+          console.error('[BeginningInventoryPage] Tesseract DR OCR failed:', err);
+          ocr = await aiService.processOCR('mock-dr-image');
+          ocrFailed = true;
+        }
+      } else {
+        ocr = await aiService.processOCR('mock-dr-image');
+      }
 
-      const [ocrOutcome, crateOutcome] = await Promise.all([ocrPromise, cratePromise]);
-      const ocr = ocrOutcome.results;
-      const crates = crateOutcome.results;
-
-      // Fire toasts now that both pipelines have settled. Order is
-      // success-first then failures so the user reads positive news
-      // before the warnings.
-      if (ocrOutcome.source === 'tesseract') {
+      if (ocrFailed) {
+        addToast('warning', 'OCR failed — using mock line items.');
+      } else if (drFile) {
         if (ocr.length > 0) {
           addToast('success', `OCR extracted ${ocr.length} line item(s) from DR.`);
         } else {
           addToast('info', 'OCR found no line items — please enter manually.');
         }
       }
-      if (crateOutcome.source === 'gemini') {
-        const totalDonuts = crates.reduce((sum, r) => sum + (r.estimatedValue ?? 0), 0);
-        addToast(
-          'success',
-          `AI counted ${totalDonuts} donut(s) across ${crateRealFiles.length} crate(s).`,
-        );
-      }
-      if (ocrOutcome.gemFailed) {
-        addToast('warning', 'OCR failed — using mock estimates.');
-      }
-      if (crateOutcome.gemFailed) {
-        addToast('warning', 'Crate counting failed — using mock estimates.');
-      }
 
       setOcrResults(ocr);
-      setCrateResults(crates);
 
-      // Detect discrepancies
-      const drItems = ocr.map((r) => ({
-        skuId: r.skuId ?? '',
-        skuName: r.skuName ?? '',
-        quantity: r.extractedValue ?? 0,
-      }));
-      const crateItems = crates.map((c) => ({
-        skuId: c.skuId ?? '',
-        estimatedValue: c.estimatedValue,
-      }));
-      const disc = await aiService.detectDiscrepancies(drItems, crateItems);
-      setDiscrepancies(disc);
-
-      // Build confirmed rows
+      // Build confirmed rows from the DR line items. Quantities default
+      // to the DR value and are edited manually in Step 4.
       const rows: ConfirmedRow[] = ocr.map((ocrItem) => {
-        const crateItem = crates.find((c) => c.skuId === ocrItem.skuId);
         const drQty = ocrItem.extractedValue ?? 0;
-        const crateEst = crateItem?.estimatedValue ?? 0;
-        const hasDisc = disc.some((d) => d.skuId === ocrItem.skuId);
         return {
           skuId: ocrItem.skuId ?? '',
           skuName: ocrItem.skuName ?? '',
           drQty,
-          crateEstimate: crateEst,
           confirmedQty: drQty,
           lack: 0,
           overage: 0,
           manualOverride: false,
           confidence: ocrItem.confidence,
-          hasDiscrepancy: hasDisc,
         };
       });
       setConfirmedRows(rows);
     } catch (err) {
-      console.error('AI processing failed:', err);
+      console.error('DR OCR processing failed:', err);
     } finally {
       setAiProcessing(false);
     }
-  }, [delivery, drFiles, crateFiles, skus, addToast]);
+  }, [delivery, drFiles, skus, addToast]);
 
   // Update confirmed row
   const updateRow = (skuId: string, field: keyof ConfirmedRow, value: number | boolean) => {
@@ -272,7 +203,6 @@ export default function BeginningInventoryPage() {
         skuId: r.skuId,
         skuName: r.skuName,
         quantity: r.confirmedQty,
-        aiEstimate: r.crateEstimate,
         confidence: r.confidence,
         discrepancy: r.confirmedQty - r.drQty,
         manualOverride: r.manualOverride,
@@ -312,7 +242,7 @@ export default function BeginningInventoryPage() {
         date: new Date().toISOString().slice(0, 10),
         drImageUrl: drUpload.storageRef,
         crateImageUrls: crateUploads.map((u) => u.storageRef),
-        aiResults: [...ocrResults, ...crateResults, ...discrepancies],
+        aiResults: [...ocrResults],
         confirmedItems: items,
         status: 'confirmed',
         notes: notes || undefined,
@@ -349,19 +279,12 @@ export default function BeginningInventoryPage() {
     { key: 'warning', header: 'Warning', render: (row) => row.warning ? <span className="text-xs text-amber-600">{row.warning}</span> : <span className="text-xs text-gray-400">None</span> },
   ];
 
-  const crateColumns: TableColumn<AIResult>[] = [
-    { key: 'skuName', header: 'SKU', render: (row) => row.skuName ?? '-' },
-    { key: 'estimatedValue', header: 'AI Estimated Qty', render: (row) => row.estimatedValue ?? '-' },
-    { key: 'confidence', header: 'Confidence', render: (row) => confidenceBadge(row.confidence) },
-    { key: 'warning', header: 'Warning', render: (row) => row.warning ? <span className="text-xs text-amber-600">{row.warning}</span> : <span className="text-xs text-gray-400">None</span> },
-  ];
-
   if (!selectedDeliveryId) {
     return (
       <div className="p-6 space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Beginning Inventory</h1>
-          <p className="text-sm text-gray-500 mt-1">Process DR images and crate photos with AI verification</p>
+          <p className="text-sm text-gray-500 mt-1">Extract DR line items with OCR, then confirm quantities manually</p>
         </div>
         <Card>
           <CardContent>
@@ -400,8 +323,6 @@ export default function BeginningInventoryPage() {
             setDrFiles([]);
             setCrateFiles([]);
             setOcrResults([]);
-            setCrateResults([]);
-            setDiscrepancies([]);
             setConfirmedRows([]);
             setNotes('');
           }}
@@ -481,7 +402,7 @@ export default function BeginningInventoryPage() {
             </h2>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-gray-600 mb-4">Upload 3-5 photos of the delivery crates for AI counting.</p>
+            <p className="text-sm text-gray-600 mb-4">Upload photos of the delivery crates as evidence for the record. Quantities are confirmed manually in a later step.</p>
             <FileUpload
               accept="image/*"
               multiple
@@ -511,14 +432,14 @@ export default function BeginningInventoryPage() {
             <Card>
               <CardContent className="text-center py-12">
                 <Cpu size={48} className="mx-auto text-gray-300 mb-4" />
-                <p className="text-sm text-gray-600 mb-4">Ready to process DR and crate images with AI.</p>
+                <p className="text-sm text-gray-600 mb-4">Ready to extract DR line items with OCR.</p>
                 <Button
                   variant="primary"
                   iconLeft={<Cpu size={16} />}
                   onClick={processAI}
                   loading={aiProcessing}
                 >
-                  Process with AI
+                  Run DR OCR
                 </Button>
               </CardContent>
             </Card>
@@ -528,50 +449,18 @@ export default function BeginningInventoryPage() {
             <Card>
               <CardContent className="text-center py-12">
                 <div className="animate-spin w-12 h-12 border-4 border-gray-200 border-t-zapp-orange rounded-full mx-auto mb-4" />
-                <p className="text-sm text-gray-600">Processing images with AI... This may take a moment.</p>
+                <p className="text-sm text-gray-600">Reading the DR slip... This may take a moment.</p>
               </CardContent>
             </Card>
           )}
 
           {ocrResults.length > 0 && (
-            <>
-              <Card>
-                <CardHeader>
-                  <h2 className="text-lg font-semibold text-gray-900">AI OCR Results (DR)</h2>
-                </CardHeader>
-                <Table columns={ocrColumns} data={ocrResults} keyExtractor={(row) => row.id} />
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <h2 className="text-lg font-semibold text-gray-900">Crate Estimation Results</h2>
-                </CardHeader>
-                <Table columns={crateColumns} data={crateResults} keyExtractor={(row) => row.id} />
-              </Card>
-
-              {discrepancies.length > 0 && (
-                <Card className="border-amber-200">
-                  <CardHeader className="bg-amber-50">
-                    <h2 className="text-lg font-semibold text-amber-800 flex items-center gap-2">
-                      <AlertTriangle size={18} /> Discrepancies Detected ({discrepancies.length})
-                    </h2>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      {discrepancies.map((d) => (
-                        <div key={d.id} className="flex items-start gap-2 p-2 rounded-lg bg-amber-50">
-                          <AlertTriangle size={14} className="text-amber-600 mt-0.5 shrink-0" />
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">{d.skuName}</p>
-                            <p className="text-xs text-amber-700">{d.warning}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </>
+            <Card>
+              <CardHeader>
+                <h2 className="text-lg font-semibold text-gray-900">OCR Results (DR)</h2>
+              </CardHeader>
+              <Table columns={ocrColumns} data={ocrResults} keyExtractor={(row) => row.id} />
+            </Card>
           )}
         </div>
       )}
@@ -591,7 +480,6 @@ export default function BeginningInventoryPage() {
                   <tr>
                     <th className="px-3 py-2 text-left">SKU Name</th>
                     <th className="px-3 py-2 text-center">DR Qty</th>
-                    <th className="px-3 py-2 text-center">Crate Est.</th>
                     <th className="px-3 py-2 text-center">Confirmed Qty</th>
                     <th className="px-3 py-2 text-center">Lack</th>
                     <th className="px-3 py-2 text-center">Overage</th>
@@ -603,16 +491,12 @@ export default function BeginningInventoryPage() {
                   {confirmedRows.map((row) => (
                     <tr
                       key={row.skuId}
-                      className={row.hasDiscrepancy ? 'bg-amber-50' : 'hover:bg-gray-50'}
+                      className="hover:bg-gray-50"
                     >
                       <td className="px-3 py-2 font-medium text-gray-900">
                         {row.skuName}
-                        {row.hasDiscrepancy && (
-                          <AlertTriangle size={12} className="inline ml-1 text-amber-500" />
-                        )}
                       </td>
                       <td className="px-3 py-2 text-center">{row.drQty}</td>
-                      <td className="px-3 py-2 text-center">{row.crateEstimate || '-'}</td>
                       <td className="px-3 py-2 text-center">
                         <input
                           type="number"
@@ -769,7 +653,7 @@ export default function BeginningInventoryPage() {
           }}
           disabled={step === 5 || !canNext()}
         >
-          {step === 3 && ocrResults.length === 0 ? 'Process AI' : 'Next'}
+          {step === 3 && ocrResults.length === 0 ? 'Run DR OCR' : 'Next'}
         </Button>
       </div>
 
@@ -783,8 +667,7 @@ export default function BeginningInventoryPage() {
             <p>{new Date().toLocaleString()} - Beginning inventory session started</p>
             {drFiles.length > 0 && <p>DR image uploaded ({drFiles.length} file)</p>}
             {crateFiles.length > 0 && <p>Crate images uploaded ({crateFiles.length} files)</p>}
-            {ocrResults.length > 0 && <p>AI processing completed - {ocrResults.length} SKUs extracted</p>}
-            {discrepancies.length > 0 && <p className="text-amber-600">{discrepancies.length} discrepancies detected</p>}
+            {ocrResults.length > 0 && <p>DR OCR completed - {ocrResults.length} line item(s) extracted</p>}
             {confirmedRows.filter((r) => r.manualOverride).length > 0 && (
               <p>{confirmedRows.filter((r) => r.manualOverride).length} manual overrides applied</p>
             )}

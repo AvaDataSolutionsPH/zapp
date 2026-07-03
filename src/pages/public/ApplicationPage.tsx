@@ -15,7 +15,6 @@ import {
   Upload,
   FileSearch,
   AlertCircle,
-  MapPin,
   Phone,
   Mail,
   Handshake,
@@ -38,6 +37,7 @@ import {
 } from '@/components/ui';
 import type { SelectOption, UploadedFile } from '@/components/ui';
 import { useStore } from '@/store/useStore';
+import StorePinPicker from './StorePinPicker';
 import { referralService } from '@/services/api';
 import { uploadFile, buildObjectPath, deleteFile, parseStorageRef } from '@/services/storage';
 import type { ReferralCode, Distributor, AreaSupervisor, Plant } from '@/types';
@@ -276,6 +276,9 @@ export default function ApplicationPage() {
         if (!form.address.trim()) newErrors.address = 'Complete address is required.';
         if (!form.province) newErrors.province = 'Province is required.';
         if (!form.city) newErrors.city = 'City/Area is required.';
+        if (!form.lat || !form.lng) {
+          newErrors.lat = 'I-pin ang eksaktong lokasyon ng tindahan sa mapa.';
+        }
         break;
 
       case 3:
@@ -647,40 +650,21 @@ export default function ApplicationPage() {
               />
             </div>
 
-            {/* Map / coordinates */}
+            {/* Map pin — exact store location (required) */}
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                Google Maps Location (Optional)
+                Store Location on Map <span className="text-red-500">*</span>
               </label>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Input
-                  label="Latitude"
-                  placeholder="e.g. 13.1391"
-                  value={form.lat}
-                  onChange={(e) => updateForm('lat', e.target.value)}
-                  iconLeft={<MapPin size={16} />}
-                />
-                <Input
-                  label="Longitude"
-                  placeholder="e.g. 123.7341"
-                  value={form.lng}
-                  onChange={(e) => updateForm('lng', e.target.value)}
-                  iconLeft={<MapPin size={16} />}
-                />
-              </div>
-              {/* Map placeholder */}
-              <div className="mt-3 flex h-40 items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50">
-                <div className="text-center">
-                  <MapPin size={24} className="mx-auto mb-1 text-gray-400" />
-                  {form.lat && form.lng ? (
-                    <p className="text-sm text-gray-600">
-                      Map pin at ({form.lat}, {form.lng})
-                    </p>
-                  ) : (
-                    <p className="text-sm text-gray-400">Map pin will appear here</p>
-                  )}
-                </div>
-              </div>
+              <StorePinPicker
+                lat={form.lat}
+                lng={form.lng}
+                province={form.province}
+                onChange={(lat, lng) => {
+                  updateForm('lat', lat);
+                  updateForm('lng', lng);
+                }}
+                error={errors.lat}
+              />
             </div>
           </div>
         );

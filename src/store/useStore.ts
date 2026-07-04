@@ -488,10 +488,16 @@ export const useStore = create<AppStore>((set, get) => {
     // Optimistic in-memory insert so the UI updates immediately.
     set((s) => ({ applications: [...s.applications, newApp] }));
 
-    // Persist when DB is the active source of truth. Caller awaits
-    // this Promise, so we re-throw on failure (after rolling back the
-    // optimistic row) and let the form surface the error to the user.
-    if (get().dataSource !== 'db') return;
+    // ALWAYS persist — unlike the other mutations, this one is only ever
+    // called from the PUBLIC /apply form, whose users are anonymous and
+    // therefore never hydrate (dataSource stays 'mock'). Gating on
+    // dataSource here would silently drop every real applicant's
+    // submission (it would show "Submitted!" but never reach the DB /
+    // reviewer queue). The insert runs under the anon role, so the
+    // `applications` table needs an anon INSERT RLS policy
+    // (apps_insert_public — see supabase/migrations/006). Caller awaits
+    // this Promise, so we roll back the optimistic row and re-throw on
+    // failure and let the form surface the error to the user.
     try {
       await insertApplication(newApp);
     } catch (err) {

@@ -58,6 +58,24 @@ parsed to numbers) → `submitApplication` (async, optimistic + rollback). On
 approval, `reviewApplication` creates the `Store` row (see CLAUDE.md gotchas:
 area-supervisor fallback, compensating rollback).
 
+## Anonymous persistence (the /apply-doesn't-save gotcha — fixed)
+Applicants are **anonymous** — no login, so the store never hydrates and
+`dataSource` stays `'mock'`. Two things had to change so real submissions
+actually persist (before this, /apply showed "Submitted!" but saved nothing
+for anon users; it only worked when a dev happened to be logged in):
+1. **Client:** `submitApplication` in `src/store/useStore.ts` **always**
+   attempts the DB insert now — it does NOT gate on `dataSource === 'db'`
+   like every other mutation, because its only caller is this public form.
+2. **RLS:** `supabase/migrations/006_public_apply_insert.sql` grants anon
+   INSERT on `applications` + policy `apps_insert_public`
+   (`WITH CHECK (status = 'pending')`). Anon can create a pending application
+   and nothing else (no select/update/delete).
+
+Storage uploads already work anonymously (permissive INSERT dev policy +
+`stor_read_anon` for the `gov-id/`+`proof-of-billing/` prefixes).
+**Rollout order matters:** run migration 006 BEFORE deploying the client
+change, else anon submits fail loudly (RLS block) until the policy exists.
+
 ## Gotchas
 - The Step 4 review summary shows `form.lat, form.lng` (now always present since
   the pin is required — the old "Not provided" branch is effectively dead).

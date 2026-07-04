@@ -1,15 +1,14 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   Upload,
   Camera,
-  Cpu,
+  ScanLine,
   CheckSquare,
   Save,
   ChevronRight,
   ChevronLeft,
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
-import { aiService } from '@/services/api';
 import { tesseractAnalyzeDR } from '@/services/tesseractService';
 import {
   Card,
@@ -44,7 +43,7 @@ interface ConfirmedRow {
 const stepLabels: Record<Step, string> = {
   1: 'Upload DR Image',
   2: 'Upload Crate Images',
-  3: 'DR OCR',
+  3: 'Scan DR',
   4: 'Confirm / Edit',
   5: 'Submit',
 };
@@ -61,17 +60,20 @@ const confidenceBadge = (level: AIResult['confidence']) => {
 
 export default function BeginningInventoryPage() {
   const {
-    deliveries,
     stores,
     skus,
     addBeginningInventory,
+    getDeliveriesForCurrentUser,
   } = useStore();
   const { addToast } = useToast();
 
-  // Only show delivered ones
-  const deliveredList = useMemo(
-    () => deliveries.filter((d) => d.status === 'delivered'),
-    [deliveries],
+  // Deliveries the signed-in user may process, delivered ones only —
+  // scoped to the current user so a franchisee sees only their own store's
+  // deliveries (no cross-store picking). Derived inline (small list) so it
+  // stays fresh across store hydration; the no-selector useStore()
+  // subscription already re-renders this component on any store change.
+  const deliveredList = getDeliveriesForCurrentUser().filter(
+    (d) => d.status === 'delivered',
   );
 
   const [selectedDeliveryId, setSelectedDeliveryId] = useState('');
@@ -89,13 +91,33 @@ export default function BeginningInventoryPage() {
   const delivery = deliveredList.find((d) => d.id === selectedDeliveryId);
   const store = delivery ? stores.find((s) => s.id === delivery.storeId) : null;
 
-  const deliveryOptions: SelectOption[] = [
-    { value: '', label: 'Select a delivery...' },
-    ...deliveredList.map((d) => ({
-      value: d.id,
-      label: `${d.drNumber} - ${stores.find((s) => s.id === d.storeId)?.name ?? d.storeId} (${d.date})`,
-    })),
-  ];
+  const deliveryOptions: SelectOption[] = deliveredList.map((d) => ({
+    value: d.id,
+    label: `${d.drNumber} - ${stores.find((s) => s.id === d.storeId)?.name ?? d.storeId} (${d.date})`,
+  }));
+
+  // Land straight in the flow (no separate "select delivery" gate):
+  // auto-select the first available delivery once. Keyed on the primitive
+  // id (not the array) so it doesn't re-run on every render. The inline
+  // selector below lets the user switch if they have more than one.
+  const firstDeliveryId = deliveredList[0]?.id;
+  useEffect(() => {
+    if (!selectedDeliveryId && firstDeliveryId) {
+      setSelectedDeliveryId(firstDeliveryId);
+    }
+  }, [selectedDeliveryId, firstDeliveryId]);
+
+  // Switching delivery resets the in-progress capture so steps never
+  // carry another delivery's files/scan over.
+  const changeDelivery = (id: string) => {
+    setSelectedDeliveryId(id);
+    setStep(1);
+    setDrFiles([]);
+    setCrateFiles([]);
+    setOcrResults([]);
+    setConfirmedRows([]);
+    setNotes('');
+  };
 
   // Step navigation
   const canNext = (): boolean => {
@@ -108,62 +130,85 @@ export default function BeginningInventoryPage() {
     }
   };
 
-  // DR OCR processing
+  // Scan the Delivery Receipt
   const processAI = useCallback(async () => {
     if (!delivery) return;
     setAiProcessing(true);
     try {
-      // DR-slip OCR runs locally via Tesseract (no API call, zero cost).
-      // On any OCR/parse failure we fall back to the legacy mock so the
-      // BI flow never blocks. Crate photos are captured as evidence only
-      // (see Step 2) — there is no automated crate counting anymore; the
-      // reviewer confirms quantities manually in Step 4.
+      // The Delivery Receipt is the source of truth for what donuts were
+      // shipped — the delivery record's line items ARE the DR. We run local
+      // Tesseract OCR on the uploaded slip only to help pre-fill the scanned
+      // quantities, then RECONCILE strictly against delivery.items so the
+      // results show exactly the donuts on the DR and nothing else (no crate
+      // guessing, no phantom SKUs). The reviewer edits for lack/overage in
+      // Step 4. Crate photos (Step 2) are evidence only.
       const drFile = drFiles[0]?.file;
 
-      let ocr: AIResult[];
+      let ocr: AIResult[] = [];
       let ocrFailed = false;
       if (drFile) {
         try {
           ocr = await tesseractAnalyzeDR(drFile, skus);
         } catch (err) {
           console.error('[BeginningInventoryPage] Tesseract DR OCR failed:', err);
-          ocr = await aiService.processOCR('mock-dr-image');
           ocrFailed = true;
         }
-      } else {
-        ocr = await aiService.processOCR('mock-dr-image');
       }
 
-      if (ocrFailed) {
-        addToast('warning', 'OCR failed — using mock line items.');
-      } else if (drFile) {
-        if (ocr.length > 0) {
-          addToast('success', `OCR extracted ${ocr.length} line item(s) from DR.`);
-        } else {
-          addToast('info', 'OCR found no line items — please enter manually.');
-        }
+      // Index the OCR hits by SKU so we can overlay the scanned qty onto
+      // each DR line item. Anything the scan read that ISN'T on the DR is
+      // ignored here by construction (we iterate delivery.items, not ocr).
+      const ocrBySku = new Map<string, AIResult>();
+      for (const r of ocr) {
+        if (r.skuId) ocrBySku.set(r.skuId, r);
       }
 
-      setOcrResults(ocr);
-
-      // Build confirmed rows from the DR line items. Quantities default
-      // to the DR value and are edited manually in Step 4.
-      const rows: ConfirmedRow[] = ocr.map((ocrItem) => {
-        const drQty = ocrItem.extractedValue ?? 0;
+      // Results table = the DR line items, in DR order, with the scanned
+      // quantity/confidence overlaid where the OCR matched that SKU.
+      const results: AIResult[] = delivery.items.map((item, idx) => {
+        const hit = ocrBySku.get(item.skuId);
         return {
-          skuId: ocrItem.skuId ?? '',
-          skuName: ocrItem.skuName ?? '',
-          drQty,
-          confirmedQty: drQty,
+          id: hit?.id ?? `dr-${delivery.id}-${item.skuId}-${idx}`,
+          type: 'ocr_dr',
+          skuId: item.skuId,
+          skuName: item.skuName,
+          extractedValue: hit?.extractedValue ?? item.quantity,
+          confidence: hit?.confidence ?? 'medium',
+          warning: hit
+            ? hit.warning
+            : 'Not detected in scan — using DR quantity',
+        };
+      });
+
+      const matched = results.filter((r) => ocrBySku.has(r.skuId ?? '')).length;
+      if (ocrFailed) {
+        addToast('warning', 'Scan failed — showing DR items. Please confirm quantities.');
+      } else if (drFile) {
+        addToast('success', `Scanned Delivery Receipt — ${matched}/${results.length} item(s) auto-read.`);
+      } else {
+        addToast('info', 'No DR image scanned — showing DR items. Please confirm quantities.');
+      }
+
+      setOcrResults(results);
+
+      // Confirmed rows: DR quantity is the baseline; the reviewer adjusts
+      // the confirmed count for any lack/overage in Step 4.
+      const rows: ConfirmedRow[] = delivery.items.map((item) => {
+        const hit = ocrBySku.get(item.skuId);
+        return {
+          skuId: item.skuId,
+          skuName: item.skuName,
+          drQty: item.quantity,
+          confirmedQty: item.quantity,
           lack: 0,
           overage: 0,
           manualOverride: false,
-          confidence: ocrItem.confidence,
+          confidence: hit?.confidence ?? 'medium',
         };
       });
       setConfirmedRows(rows);
     } catch (err) {
-      console.error('DR OCR processing failed:', err);
+      console.error('DR scan processing failed:', err);
     } finally {
       setAiProcessing(false);
     }
@@ -271,37 +316,29 @@ export default function BeginningInventoryPage() {
     }
   };
 
-  // OCR Results columns
+  // Scanned Delivery Receipt columns
   const ocrColumns: TableColumn<AIResult>[] = [
     { key: 'skuName', header: 'SKU', render: (row) => row.skuName ?? '-' },
-    { key: 'extractedValue', header: 'AI Extracted Qty', render: (row) => row.extractedValue ?? '-' },
+    { key: 'extractedValue', header: 'Scanned Qty', render: (row) => row.extractedValue ?? '-' },
     { key: 'confidence', header: 'Confidence', render: (row) => confidenceBadge(row.confidence) },
     { key: 'warning', header: 'Warning', render: (row) => row.warning ? <span className="text-xs text-amber-600">{row.warning}</span> : <span className="text-xs text-gray-400">None</span> },
   ];
 
-  if (!selectedDeliveryId) {
+  // No delivery to process — show a friendly empty state instead of a
+  // blank flow. (Auto-select handles the has-deliveries case above.)
+  if (deliveredList.length === 0) {
     return (
       <div className="p-6 space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Beginning Inventory</h1>
-          <p className="text-sm text-gray-500 mt-1">Extract DR line items with OCR, then confirm quantities manually</p>
+          <p className="text-sm text-gray-500 mt-1">Scan the Delivery Receipt, then confirm quantities manually</p>
         </div>
         <Card>
           <CardContent>
-            <Select
-              label="Select Delivery"
-              options={deliveryOptions}
-              value={selectedDeliveryId}
-              onChange={(e) => setSelectedDeliveryId(e.target.value)}
+            <EmptyState
+              title="No Delivered Items"
+              description="There are no deliveries with 'delivered' status to process yet."
             />
-            {deliveredList.length === 0 && (
-              <div className="mt-4">
-                <EmptyState
-                  title="No Delivered Items"
-                  description="There are no deliveries with 'delivered' status to process."
-                />
-              </div>
-            )}
           </CardContent>
         </Card>
       </div>
@@ -334,16 +371,24 @@ export default function BeginningInventoryPage() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Beginning Inventory</h1>
           <p className="text-sm text-gray-500 mt-1">
             DR: <span className="font-mono font-medium">{delivery?.drNumber}</span> | Store: {store?.name ?? '-'}
           </p>
         </div>
-        <Button variant="ghost" size="sm" onClick={() => { setSelectedDeliveryId(''); setStep(1); }}>
-          Change Delivery
-        </Button>
+        {/* Inline delivery switcher — only when there's more than one to pick */}
+        {deliveredList.length > 1 && (
+          <div className="w-full sm:w-72">
+            <Select
+              label="Delivery"
+              options={deliveryOptions}
+              value={selectedDeliveryId}
+              onChange={(e) => changeDelivery(e.target.value)}
+            />
+          </div>
+        )}
       </div>
 
       {/* Step Indicator */}
@@ -376,11 +421,12 @@ export default function BeginningInventoryPage() {
             </h2>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-gray-600 mb-4">Upload a photo or scan of the Delivery Receipt (DR).</p>
+            <p className="text-sm text-gray-600 mb-4">Upload a photo or scan of the Delivery Receipt (DR) — or use your camera to take one now.</p>
             <FileUpload
               accept="image/*"
               multiple={false}
               maxSizeMB={10}
+              camera
               onChange={setDrFiles}
             />
             {drFiles.length > 0 && drFiles[0].preview && (
@@ -402,11 +448,12 @@ export default function BeginningInventoryPage() {
             </h2>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-gray-600 mb-4">Upload photos of the delivery crates as evidence for the record. Quantities are confirmed manually in a later step.</p>
+            <p className="text-sm text-gray-600 mb-4">Upload or take photos of the delivery crates as evidence for the record. Quantities are confirmed manually in a later step.</p>
             <FileUpload
               accept="image/*"
               multiple
               maxSizeMB={10}
+              camera
               onChange={setCrateFiles}
             />
             {crateFiles.length > 0 && (
@@ -425,21 +472,21 @@ export default function BeginningInventoryPage() {
         </Card>
       )}
 
-      {/* Step 3: AI Processing */}
+      {/* Step 3: Scan Delivery Receipt */}
       {step === 3 && (
         <div className="space-y-4">
           {ocrResults.length === 0 && !aiProcessing && (
             <Card>
               <CardContent className="text-center py-12">
-                <Cpu size={48} className="mx-auto text-gray-300 mb-4" />
-                <p className="text-sm text-gray-600 mb-4">Ready to extract DR line items with OCR.</p>
+                <ScanLine size={48} className="mx-auto text-gray-300 mb-4" />
+                <p className="text-sm text-gray-600 mb-4">Ready to scan the Delivery Receipt. Only the donuts written on the DR will be listed.</p>
                 <Button
                   variant="primary"
-                  iconLeft={<Cpu size={16} />}
+                  iconLeft={<ScanLine size={16} />}
                   onClick={processAI}
                   loading={aiProcessing}
                 >
-                  Run DR OCR
+                  Scan Delivery Receipt
                 </Button>
               </CardContent>
             </Card>
@@ -449,7 +496,7 @@ export default function BeginningInventoryPage() {
             <Card>
               <CardContent className="text-center py-12">
                 <div className="animate-spin w-12 h-12 border-4 border-gray-200 border-t-zapp-orange rounded-full mx-auto mb-4" />
-                <p className="text-sm text-gray-600">Reading the DR slip... This may take a moment.</p>
+                <p className="text-sm text-gray-600">Scanning the Delivery Receipt... This may take a moment.</p>
               </CardContent>
             </Card>
           )}
@@ -457,7 +504,7 @@ export default function BeginningInventoryPage() {
           {ocrResults.length > 0 && (
             <Card>
               <CardHeader>
-                <h2 className="text-lg font-semibold text-gray-900">OCR Results (DR)</h2>
+                <h2 className="text-lg font-semibold text-gray-900">Delivery Receipt Items</h2>
               </CardHeader>
               <Table columns={ocrColumns} data={ocrResults} keyExtractor={(row) => row.id} />
             </Card>
@@ -653,7 +700,7 @@ export default function BeginningInventoryPage() {
           }}
           disabled={step === 5 || !canNext()}
         >
-          {step === 3 && ocrResults.length === 0 ? 'Run DR OCR' : 'Next'}
+          {step === 3 && ocrResults.length === 0 ? 'Scan Delivery Receipt' : 'Next'}
         </Button>
       </div>
 
@@ -667,7 +714,7 @@ export default function BeginningInventoryPage() {
             <p>{new Date().toLocaleString()} - Beginning inventory session started</p>
             {drFiles.length > 0 && <p>DR image uploaded ({drFiles.length} file)</p>}
             {crateFiles.length > 0 && <p>Crate images uploaded ({crateFiles.length} files)</p>}
-            {ocrResults.length > 0 && <p>DR OCR completed - {ocrResults.length} line item(s) extracted</p>}
+            {ocrResults.length > 0 && <p>Delivery Receipt scanned - {ocrResults.length} item(s)</p>}
             {confirmedRows.filter((r) => r.manualOverride).length > 0 && (
               <p>{confirmedRows.filter((r) => r.manualOverride).length} manual overrides applied</p>
             )}

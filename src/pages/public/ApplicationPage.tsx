@@ -77,6 +77,7 @@ interface FormData {
   email: string;
   // Step 3
   storeName: string;
+  shopCode: string;      // Mister Donut shop code (assigned by MD)
   address: string;
   province: string;      // display name (used for address / map / review)
   provinceCode: string;  // PSGC code (drives the city fetch)
@@ -105,6 +106,7 @@ export default function ApplicationPage() {
     mobile: '',
     email: '',
     storeName: '',
+    shopCode: '',
     address: '',
     province: '',
     provinceCode: '',
@@ -304,6 +306,7 @@ export default function ApplicationPage() {
 
       case 2:
         if (!form.storeName.trim()) newErrors.storeName = 'Store name is required.';
+        if (!form.shopCode.trim()) newErrors.shopCode = 'Shop code is required.';
         if (!form.address.trim()) newErrors.address = 'Complete address is required.';
         if (!form.province.trim()) newErrors.province = 'Province is required.';
         if (!form.city.trim()) newErrors.city = 'City / Municipality is required.';
@@ -386,6 +389,7 @@ export default function ApplicationPage() {
         mobile: form.mobile,
         email: form.email,
         storeName: form.storeName,
+        shopCode: form.shopCode.trim(),
         address: `${form.address}, Brgy. ${form.barangay}, ${form.city}, ${form.province}`,
         lat: parseFloat(form.lat) || 0,
         lng: parseFloat(form.lng) || 0,
@@ -587,6 +591,20 @@ export default function ApplicationPage() {
               error={errors.storeName}
               iconLeft={<StoreIcon size={16} />}
             />
+
+            <div>
+              <Input
+                label="Shop Code"
+                placeholder="e.g. MD-1234"
+                value={form.shopCode}
+                onChange={(e) => updateForm('shopCode', e.target.value)}
+                error={errors.shopCode}
+                iconLeft={<Hash size={16} />}
+              />
+              <p className="mt-1.5 text-xs text-gray-500">
+                Ang <span className="font-medium">Shop Code</span> na ibinigay ng Mister Donut para sa iyong tindahan.
+              </p>
+            </div>
 
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700">Complete Address</label>
@@ -831,6 +849,10 @@ export default function ApplicationPage() {
                 <div>
                   <span className="text-gray-500">Store Name:</span>{' '}
                   <span className="font-medium">{form.storeName}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Shop Code:</span>{' '}
+                  <span className="font-medium">{form.shopCode}</span>
                 </div>
                 <div>
                   <span className="text-gray-500">Province:</span>{' '}

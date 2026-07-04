@@ -14,8 +14,9 @@ Applications queue.
 0. **Referral code** — must resolve via `referralService` (`referralInfo`).
    Review card shows **only the Code** (Type/Distributor/Plant hidden per boss).
 1. **Applicant info** — full name, PH mobile regex, email.
-2. **Store info** — store name, address, **Province → City/Municipality →
-   Barangay** (cascading, from the PSGC API — see below), **+ map pin (required)**.
+2. **Store info** — store name, **Shop Code (required)**, address, **Province →
+   City/Municipality → Barangay** (cascading, from the PSGC API — see below),
+   **+ map pin (required)**.
 3. **Store photo** — front-view store photo ONLY. **Gov ID + Proof of Billing
    were removed** (boss: collected later, once the location is approved). A
    green **photo-instructions panel** sits under the upload.
@@ -24,6 +25,20 @@ Applications queue.
 `validateStep(n)` gates each Next; final submit re-runs `validateStep(4)`.
 Removed docs still have NOT NULL columns → `handleSubmit` persists `govIdUrl: ''`
 and `proofOfBillingUrl: ''`.
+
+## Shop Code (Mister Donut store code)
+Every store has a Mister Donut-assigned **shop code**. Captured as a **required**
+text field on the Store Info step (`form.shopCode`, validated in `validateStep`
+case 2, `Hash` icon + Tagalog helper). Persisted end-to-end: `Application.shopCode`
++ `Store.shopCode` (both **optional** in `src/types/index.ts` for back-compat with
+pre-existing rows) → `shop_code` columns via `mapApplicationToDB` / `mapStoreToDB`
+(`dbWrite.ts`) + the seed mappers; the read layer auto-camelCases `shop_code`.
+On approval, `reviewApplication` (`useStore.ts`) copies `updatedApp.shopCode` onto
+the new `Store`. **Migration `007_shop_code.sql`** adds both columns (additive +
+nullable). **Rollout order: run 007 BEFORE deploying** — the anon /apply insert
+now includes `shop_code`, so it errors until the column exists (same rule as 006).
+ID + Proof of Billing collection (post-approval) is still deferred — see the
+account-provisioning backlog.
 
 ## Location cascade (PSGC API)
 Province/City/Barangay come from `src/services/phLocations.ts` (the free,

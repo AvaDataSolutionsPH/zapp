@@ -45,10 +45,23 @@ export default function EndingInventoryPage() {
   } = useStore();
   const { addToast } = useToast();
 
-  // Deliveries that have been delivered (or have beginning inventory)
+  // Deliveries eligible for a NEW ending inventory: delivered/reconciled AND
+  // not already ended. Once an EI exists for a delivery it drops out of this
+  // dropdown and lives in the "Ending Inventory History" table instead
+  // (resubmits happen from there, not by re-selecting the delivery).
+  const endedDeliveryIds = useMemo(
+    () => new Set(endingInventories.map((ei) => ei.deliveryId)),
+    [endingInventories],
+  );
+
   const eligibleDeliveries = useMemo(
-    () => deliveries.filter((d) => d.status === 'delivered' || d.status === 'reconciled'),
-    [deliveries],
+    () =>
+      deliveries.filter(
+        (d) =>
+          (d.status === 'delivered' || d.status === 'reconciled') &&
+          !endedDeliveryIds.has(d.id),
+      ),
+    [deliveries, endedDeliveryIds],
   );
 
   const [selectedDeliveryId, setSelectedDeliveryId] = useState('');
@@ -299,7 +312,7 @@ export default function EndingInventoryPage() {
         <Card>
           <CardHeader>
             <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <History size={18} /> My Submission History
+              <History size={18} /> Ending Inventory History
             </h2>
           </CardHeader>
           <CardContent>
@@ -468,6 +481,7 @@ export default function EndingInventoryPage() {
                   accept="image/*"
                   multiple
                   maxSizeMB={10}
+                  camera
                   onChange={setCrateFiles}
                 />
                 {crateFiles.length > 0 && (

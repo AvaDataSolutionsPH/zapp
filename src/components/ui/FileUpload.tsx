@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, type DragEvent, type ChangeEvent } from 'react';
-import { UploadCloud, X, FileText, Image as ImageIcon } from 'lucide-react';
+import { UploadCloud, X, FileText, Image as ImageIcon, Camera } from 'lucide-react';
 import clsx from 'clsx';
 
 /* ------------------------------------------------------------------ */
@@ -19,6 +19,11 @@ interface FileUploadProps {
   maxSizeMB?: number;
   onChange?: (files: UploadedFile[]) => void;
   className?: string;
+  // When true, shows a "Use Camera" button alongside the drop zone.
+  // On mobile the camera input opens the rear camera directly
+  // (capture="environment") so franchisees can shoot the DR / crate
+  // photo in-app; on desktop it falls back to the file picker.
+  camera?: boolean;
 }
 
 let fileIdCounter = 0;
@@ -33,10 +38,12 @@ export function FileUpload({
   maxSizeMB = 10,
   onChange,
   className,
+  camera = false,
 }: FileUploadProps) {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const simulateProgress = useCallback((entry: UploadedFile, allFiles: UploadedFile[]) => {
     let prog = 0;
@@ -142,6 +149,18 @@ export function FileUpload({
         </p>
       </div>
 
+      {/* Camera capture — opt-in. On phones this opens the rear camera
+          directly; on desktop it behaves like a normal file picker. */}
+      {camera && (
+        <button
+          type="button"
+          onClick={() => cameraInputRef.current?.click()}
+          className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:border-zapp-orange/60 hover:bg-orange-50/40 transition-colors cursor-pointer"
+        >
+          <Camera size={16} className="text-zapp-orange" /> Use Camera
+        </button>
+      )}
+
       <input
         ref={inputRef}
         type="file"
@@ -151,6 +170,18 @@ export function FileUpload({
         className="sr-only"
         tabIndex={-1}
       />
+
+      {camera && (
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept={accept ?? 'image/*'}
+          capture="environment"
+          onChange={onInputChange}
+          className="sr-only"
+          tabIndex={-1}
+        />
+      )}
 
       {/* File list */}
       {files.length > 0 && (

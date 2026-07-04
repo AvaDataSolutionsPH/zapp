@@ -30,8 +30,16 @@ export default function SpecialOrdersPage() {
   const [page, setPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
 
+  // A franchisee only operates their own store — default the Store select
+  // to it so they don't have to pick it every time. Other roles (owner/ops)
+  // keep the empty "Select Store" prompt and choose explicitly.
+  const isFranchisee =
+    currentUser?.role === 'franchisee_distributor' ||
+    currentUser?.role === 'franchisee_direct';
+  const defaultStoreId = isFranchisee ? currentUser?.assignedStoreIds?.[0] ?? '' : '';
+
   // Form state
-  const [formStoreId, setFormStoreId] = useState('');
+  const [formStoreId, setFormStoreId] = useState(defaultStoreId);
   const [formDate, setFormDate] = useState('');
   const [formNotes, setFormNotes] = useState('');
   const [formItems, setFormItems] = useState<
@@ -116,9 +124,9 @@ export default function SpecialOrdersPage() {
       `Special order recorded. SRP total: P${totalSRPVal.toLocaleString()}.`,
     );
 
-    // Reset form
+    // Reset form (keep the franchisee's default store pre-selected)
     setShowForm(false);
-    setFormStoreId('');
+    setFormStoreId(defaultStoreId);
     setFormDate('');
     setFormNotes('');
     setFormItems([{ skuId: '', quantity: 0 }]);

@@ -130,6 +130,9 @@ export interface Store {
   address: string;
   lat: number;
   lng: number;
+  // Mister Donut shop code (assigned by MD per store). Optional for
+  // back-compat with pre-existing seeded stores that predate the field.
+  shopCode?: string;
   plantId: string;
   distributorId?: string;
   subPartnerDistributorId?: string;
@@ -160,6 +163,9 @@ export interface Application {
   mobile: string;
   email: string;
   storeName: string;
+  // Mister Donut shop code captured at application time. Optional for
+  // back-compat with applications submitted before the field existed.
+  shopCode?: string;
   address: string;
   lat: number;
   lng: number;

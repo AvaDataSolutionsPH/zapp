@@ -569,6 +569,7 @@ export const useStore = create<AppStore>((set, get) => {
         address: updatedApp.address,
         lat: updatedApp.lat,
         lng: updatedApp.lng,
+        shopCode: updatedApp.shopCode,
         plantId: updatedApp.assignedPlantId,
         distributorId: updatedApp.assignedDistributorId,
         areaSupervisorId: resolvedAreaSupId,

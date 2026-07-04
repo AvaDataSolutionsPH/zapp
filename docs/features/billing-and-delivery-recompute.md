@@ -47,6 +47,26 @@ verify Payment ┘                 └→ recomputeDeliveryStatuses() → comput
 
 Deterministic billing id: `bill-{storeId}-{yearMonth}-{cutoffRange}`.
 
+### Special Orders are priced at DISCOUNTED (SRP − 15%), not DR
+Per boss, a special order is billed at the **discounted price** (SRP − 15% =
+`srp * 0.85`), because that's what the customer buys from us; the regular DR price
+only applies to normal deliveries (what the distributor pays billing).
+`SpecialOrdersPage.tsx` stores `item.drPrice` **and** `totalDR` as the discounted
+amount (`discPrice()` helper, `DISC_RATE = 0.85`), and the UI shows "Disc." not
+"DR". `computeBillingsFromState` uses `so.totalDR` for `drSold`/`drTotal`/
+`totalPayable`, so those now carry the discounted special-order amount. `totalSRP`
+(→ `grossSales` → franchisee profit / remit) is unchanged.
+
+## Franchisee billing view (BillingPage.tsx)
+When `currentUser.role` is `franchisee_*`, `BillingPage` renders a simplified,
+sales-focused table (`franchiseeColumns`) instead of the full distributor columns:
+**DR Number · Date · Total Sales · Profit (15%) · Remit to Distributor (85%) ·
+Status · Issued · Due · Pay Now**. The DR-based formula banner + DR/packaging KPI
+stats are hidden. DR number + date are resolved per billing via `getBillingBreakdown`
+→ contributing deliveries (`billingMeta` map; a billing aggregates a store's cutoff
+deliveries so DR numbers are joined, date = earliest delivery). **Pay Now** is a
+stub toast — NextPay integration is not wired yet ("coconnect natin kay NextPay").
+
 ## Delivery-status auto-rule
 `Store.deliveryStatus` is auto-derived: 0 overdue billings = `active`,
 1 = `warning`, 2+ = `hold`. Manual `requestStopDelivery` / `resumeDelivery`

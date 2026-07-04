@@ -9,6 +9,7 @@ import {
   Download,
   Clock,
   CheckCircle,
+  CreditCard,
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import {
@@ -21,9 +22,11 @@ import {
   StatusBadge,
   Button,
 } from '@/components/ui';
+import { useToast } from '@/components/ui/Toast';
 import type { TableColumn, SelectOption } from '@/components/ui';
-import type { BillingRecord } from '@/types';
+import type { BillingRecord, Delivery } from '@/types';
 import { billingService } from '@/services/api';
+import { getBillingBreakdown } from '@/lib/billingComputations';
 import BillingDetailDrawer from './BillingDetailDrawer';
 
 const PAGE_SIZE = 10;
@@ -104,9 +107,21 @@ export default function BillingPage() {
     currentUser,
     payments,
     updateBillingRecord,
+    deliveries,
+    endingInventories,
+    specialOrders,
+    packagingOrders,
   } = useStore();
+  const { addToast } = useToast();
 
   const allBilling = getBillingForCurrentUser();
+
+  // Franchisees get a simplified, sales-focused billing view (no DR/packaging
+  // internals — those are distributor/billing concerns). Per boss: DR number,
+  // date, total sales, profit 15%, remit 85%, status, issued, due, Pay Now.
+  const isFranchisee =
+    currentUser?.role === 'franchisee_distributor' ||
+    currentUser?.role === 'franchisee_direct';
 
   const [plantFilter, setPlantFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -177,10 +192,39 @@ export default function BillingPage() {
       totalRecords: source.length,
       totalRemittance: source.reduce((s, b) => s + b.remitToPD, 0),
       totalSRP: source.reduce((s, b) => s + b.srpTotal, 0),
+      totalProfit: source.reduce((s, b) => s + b.franchiseeProfit, 0),
     };
   }, [allBilling, plantFilter]);
 
+  // Franchisee view: resolve each billing's contributing DR number(s) + date.
+  // A billing aggregates a store's deliveries in one cutoff, so there can be
+  // more than one DR — we join them; date is the earliest contributing delivery.
+  const billingMeta = useMemo(() => {
+    const map = new Map<string, { drNumbers: string; date: string }>();
+    if (!isFranchisee) return map;
+    const ctx = { endingInventories, specialOrders, packagingOrders, deliveries, stores, payments };
+    for (const b of allBilling) {
+      const bd = getBillingBreakdown(b.id, ctx);
+      const dels = (bd?.contributingEis ?? [])
+        .map((ei) => deliveries.find((d) => d.id === ei.deliveryId))
+        .filter((d): d is Delivery => !!d);
+      const drNumbers = Array.from(new Set(dels.map((d) => d.drNumber)));
+      const dates = dels.map((d) => d.date).sort();
+      map.set(b.id, {
+        drNumbers: drNumbers.length ? drNumbers.join(', ') : '—',
+        date: dates[0] ?? b.issuedAt.slice(0, 10),
+      });
+    }
+    return map;
+  }, [isFranchisee, allBilling, endingInventories, specialOrders, packagingOrders, deliveries, stores, payments]);
+
   const formatCurrency = (n: number) => `P${n.toLocaleString()}`;
+
+  // Pay Now — NextPay integration is not wired yet (boss: "coconnect natin yan
+  // kay NextPay"). For now the button acknowledges the intent.
+  const handlePayNow = (b: BillingRecord) => {
+    addToast('info', `Pay Now for ${b.id.toUpperCase()} — NextPay integration coming soon.`);
+  };
 
   // Export handler
   const handleExport = useCallback(async () => {
@@ -341,6 +385,79 @@ export default function BillingPage() {
     },
   ];
 
+  // Simplified, sales-focused columns for the franchisee.
+  const franchiseeColumns: TableColumn<BillingRecord>[] = [
+    {
+      key: 'drNumber',
+      header: 'DR Number',
+      render: (row) => (
+        <span className="font-mono text-sm font-medium text-gray-900">
+          {billingMeta.get(row.id)?.drNumbers ?? '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'date',
+      header: 'Date',
+      render: (row) => {
+        const d = billingMeta.get(row.id)?.date;
+        return <span className="text-sm text-gray-700">{d ? new Date(d).toLocaleDateString() : '—'}</span>;
+      },
+    },
+    {
+      key: 'srpTotal',
+      header: 'Total Sales',
+      render: (row) => <span className="text-sm font-semibold text-purple-600">{formatCurrency(row.srpTotal)}</span>,
+    },
+    {
+      key: 'franchiseeProfit',
+      header: 'Profit (15%)',
+      render: (row) => <span className="text-sm font-medium text-green-600">{formatCurrency(row.franchiseeProfit)}</span>,
+    },
+    {
+      key: 'remitToPD',
+      header: 'Remit to Distributor (85%)',
+      render: (row) => <span className="text-sm font-medium text-indigo-600">{formatCurrency(row.remitToPD)}</span>,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (row) => <StatusBadge category="billing" status={row.status} />,
+    },
+    {
+      key: 'issuedAt',
+      header: 'Issued',
+      render: (row) => (
+        <span className="text-xs text-gray-500">{new Date(row.issuedAt).toLocaleDateString()}</span>
+      ),
+    },
+    {
+      key: 'dueAt',
+      header: 'Due',
+      render: (row) => <DueLabel dueAt={row.dueAt} status={row.status} />,
+    },
+    {
+      key: 'payment',
+      header: 'Payment',
+      render: (row) =>
+        row.status === 'paid' ? (
+          <span className="inline-flex items-center gap-1 text-green-600 text-xs font-medium">
+            <CheckCircle size={12} /> Paid
+          </span>
+        ) : (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handlePayNow(row);
+            }}
+            className="inline-flex items-center gap-1 rounded-lg bg-zapp-orange px-3 py-1.5 text-xs font-semibold text-white hover:bg-zapp-orange-dark transition-colors cursor-pointer border-none"
+          >
+            <CreditCard size={13} /> Pay Now
+          </button>
+        ),
+    },
+  ];
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -372,23 +489,26 @@ export default function BillingPage() {
         </div>
       </div>
 
-      {/* Formula Banners */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 flex items-center gap-3">
-          <Receipt size={18} className="text-zapp-orange shrink-0" />
-          <div>
-            <p className="text-xs text-gray-500 font-semibold uppercase">Zapp Billing (DR-Based)</p>
-            <p className="text-sm text-zapp-brown font-medium">
-              <span className="font-mono font-bold">Total Payable = (DR Total - Unsold Deduction) + Packaging</span>
-            </p>
+      {/* Formula Banners — franchisees only see the SRP/profit split (DR-based
+          billing internals are a distributor/billing concern). */}
+      <div className={`grid grid-cols-1 gap-3 ${isFranchisee ? '' : 'lg:grid-cols-2'}`}>
+        {!isFranchisee && (
+          <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 flex items-center gap-3">
+            <Receipt size={18} className="text-zapp-orange shrink-0" />
+            <div>
+              <p className="text-xs text-gray-500 font-semibold uppercase">Zapp Billing (DR-Based)</p>
+              <p className="text-sm text-zapp-brown font-medium">
+                <span className="font-mono font-bold">Total Payable = (DR Total - Unsold Deduction) + Packaging</span>
+              </p>
+            </div>
           </div>
-        </div>
+        )}
         <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3 flex items-center gap-3">
           <DollarSign size={18} className="text-indigo-600 shrink-0" />
           <div>
             <p className="text-xs text-gray-500 font-semibold uppercase">Store Remittance (SRP-Based)</p>
             <p className="text-sm text-indigo-800 font-medium">
-              <span className="font-mono font-bold">Remit to PD = 85% of SRP Sales | Franchisee Profit = 15% of SRP Sales</span>
+              <span className="font-mono font-bold">Remit to Distributor = 85% of SRP Sales | Franchisee Profit = 15% of SRP Sales</span>
             </p>
           </div>
         </div>
@@ -396,36 +516,73 @@ export default function BillingPage() {
 
       {/* KPI Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-        <Stat
-          icon={<DollarSign size={18} />}
-          label="DR Total Payable"
-          value={formatCurrency(stats.totalPayable)}
-        />
-        <Stat
-          icon={<DollarSign size={18} />}
-          label="SRP Remittance (85%)"
-          value={formatCurrency(stats.totalRemittance)}
-        />
-        <Stat
-          icon={<CheckCircle size={18} />}
-          label="Total Paid"
-          value={formatCurrency(stats.totalPaid)}
-        />
-        <Stat
-          icon={<Receipt size={18} />}
-          label="Total SRP Sales"
-          value={formatCurrency(stats.totalSRP)}
-        />
-        <Stat
-          icon={<AlertTriangle size={18} />}
-          label="Overdue"
-          value={stats.overdueCount}
-        />
-        <Stat
-          icon={<FileSpreadsheet size={18} />}
-          label="Total Records"
-          value={stats.totalRecords}
-        />
+        {isFranchisee ? (
+          <>
+            <Stat
+              icon={<Receipt size={18} />}
+              label="Total Sales"
+              value={formatCurrency(stats.totalSRP)}
+            />
+            <Stat
+              icon={<DollarSign size={18} />}
+              label="Profit (15%)"
+              value={formatCurrency(stats.totalProfit)}
+            />
+            <Stat
+              icon={<DollarSign size={18} />}
+              label="Remit to Distributor (85%)"
+              value={formatCurrency(stats.totalRemittance)}
+            />
+            <Stat
+              icon={<CheckCircle size={18} />}
+              label="Total Paid"
+              value={formatCurrency(stats.totalPaid)}
+            />
+            <Stat
+              icon={<AlertTriangle size={18} />}
+              label="Overdue"
+              value={stats.overdueCount}
+            />
+            <Stat
+              icon={<FileSpreadsheet size={18} />}
+              label="Total Records"
+              value={stats.totalRecords}
+            />
+          </>
+        ) : (
+          <>
+            <Stat
+              icon={<DollarSign size={18} />}
+              label="DR Total Payable"
+              value={formatCurrency(stats.totalPayable)}
+            />
+            <Stat
+              icon={<DollarSign size={18} />}
+              label="SRP Remittance (85%)"
+              value={formatCurrency(stats.totalRemittance)}
+            />
+            <Stat
+              icon={<CheckCircle size={18} />}
+              label="Total Paid"
+              value={formatCurrency(stats.totalPaid)}
+            />
+            <Stat
+              icon={<Receipt size={18} />}
+              label="Total SRP Sales"
+              value={formatCurrency(stats.totalSRP)}
+            />
+            <Stat
+              icon={<AlertTriangle size={18} />}
+              label="Overdue"
+              value={stats.overdueCount}
+            />
+            <Stat
+              icon={<FileSpreadsheet size={18} />}
+              label="Total Records"
+              value={stats.totalRecords}
+            />
+          </>
+        )}
       </div>
 
       {/* Filters */}
@@ -469,7 +626,7 @@ export default function BillingPage() {
 
       {/* Table */}
       <Table
-        columns={columns}
+        columns={isFranchisee ? franchiseeColumns : columns}
         data={paged}
         keyExtractor={(row) => row.id}
         onRowClick={(row) => setSelectedBilling(row)}

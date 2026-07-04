@@ -17,6 +17,12 @@ import type { SpecialOrder } from '@/types';
 
 const PAGE_SIZE = 10;
 
+// Special orders are priced at the DISCOUNTED price = SRP − 15% (what the
+// customer buys from us). Regular deliveries' DR price does NOT apply here —
+// per boss, DR is only what the distributor pays billing on regular flow.
+const DISC_RATE = 0.85; // SRP − 15%
+const discPrice = (srp: number) => Math.round(srp * DISC_RATE * 100) / 100;
+
 export default function SpecialOrdersPage() {
   const {
     specialOrders,
@@ -73,7 +79,7 @@ export default function SpecialOrdersPage() {
 
   const skuOptions: SelectOption[] = [
     { value: '', label: 'Select SKU' },
-    ...skus.map((s) => ({ value: s.id, label: `${s.name} (DR: P${s.drPrice} / SRP: P${s.srpPrice})` })),
+    ...skus.map((s) => ({ value: s.id, label: `${s.name} (Disc: P${discPrice(s.srpPrice)} / SRP: P${s.srpPrice})` })),
   ];
 
   const addItemRow = () => {
@@ -101,7 +107,9 @@ export default function SpecialOrdersPage() {
         skuId: it.skuId,
         skuName: sku.name,
         quantity: it.quantity,
-        drPrice: sku.drPrice,
+        // Store the discounted price (SRP − 15%) as the special order's price
+        // basis — special orders are billed at Disc, not the regular DR price.
+        drPrice: discPrice(sku.srpPrice),
         srpPrice: sku.srpPrice,
       };
     });
@@ -161,7 +169,7 @@ export default function SpecialOrdersPage() {
     },
     {
       key: 'totalDR',
-      header: 'Total DR',
+      header: 'Total Disc',
       render: (row) => `P${row.totalDR.toLocaleString()}`,
     },
     {
@@ -218,7 +226,7 @@ export default function SpecialOrdersPage() {
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Stat icon={<Package size={18} />} label="Total Orders" value={specialOrders.length} />
-        <Stat icon={<Package size={18} />} label="Total DR Value" value={`P${totalDR.toLocaleString()}`} />
+        <Stat icon={<Package size={18} />} label="Total Disc Value" value={`P${totalDR.toLocaleString()}`} />
         <Stat icon={<Package size={18} />} label="Total SRP Value" value={`P${totalSRP.toLocaleString()}`} />
       </div>
 
@@ -328,9 +336,9 @@ export default function SpecialOrdersPage() {
                   <p className="text-sm font-medium text-gray-700">Order Preview</p>
                   {(() => {
                     const validItems = formItems.filter((it) => it.skuId && it.quantity > 0);
-                    const dr = validItems.reduce((sum, it) => {
+                    const disc = validItems.reduce((sum, it) => {
                       const sku = skus.find((s) => s.id === it.skuId);
-                      return sum + (sku ? sku.drPrice * it.quantity : 0);
+                      return sum + (sku ? discPrice(sku.srpPrice) * it.quantity : 0);
                     }, 0);
                     const srp = validItems.reduce((sum, it) => {
                       const sku = skus.find((s) => s.id === it.skuId);
@@ -338,7 +346,7 @@ export default function SpecialOrdersPage() {
                     }, 0);
                     return (
                       <div className="flex gap-6 mt-1">
-                        <span className="text-sm text-gray-600">DR Total: <strong>P{dr.toLocaleString()}</strong></span>
+                        <span className="text-sm text-gray-600">Disc. Total: <strong>P{disc.toLocaleString()}</strong></span>
                         <span className="text-sm text-gray-600">SRP Total: <strong>P{srp.toLocaleString()}</strong></span>
                       </div>
                     );

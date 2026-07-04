@@ -19,9 +19,8 @@ import {
   Mail,
   Handshake,
   Zap,
-  ShieldCheck,
   Image as ImageIcon,
-  FileText,
+  Camera,
 } from 'lucide-react';
 import {
   Button,
@@ -38,77 +37,16 @@ import {
 import type { SelectOption, UploadedFile } from '@/components/ui';
 import { useStore } from '@/store/useStore';
 import StorePinPicker from './StorePinPicker';
+import { fetchProvinces, fetchCities, fetchBarangays } from '@/services/phLocations';
+import type { PsgcItem } from '@/services/phLocations';
 import { referralService } from '@/services/api';
 import { uploadFile, buildObjectPath, deleteFile, parseStorageRef } from '@/services/storage';
 import type { ReferralCode, Distributor, AreaSupervisor, Plant } from '@/types';
 
 // ── Philippine provinces & cities for selects ─────────────────
 
-const PROVINCES: SelectOption[] = [
-  { value: '', label: 'Select Province' },
-  { value: 'Albay', label: 'Albay' },
-  { value: 'Camarines Sur', label: 'Camarines Sur' },
-  { value: 'Sorsogon', label: 'Sorsogon' },
-  { value: 'Catanduanes', label: 'Catanduanes' },
-  { value: 'Masbate', label: 'Masbate' },
-  { value: 'Metro Manila', label: 'Metro Manila' },
-  { value: 'Cavite', label: 'Cavite' },
-  { value: 'Laguna', label: 'Laguna' },
-  { value: 'Bulacan', label: 'Bulacan' },
-  { value: 'Rizal', label: 'Rizal' },
-  { value: 'Batangas', label: 'Batangas' },
-  { value: 'Pampanga', label: 'Pampanga' },
-  { value: 'Cebu', label: 'Cebu' },
-  { value: 'Bohol', label: 'Bohol' },
-  { value: 'Leyte', label: 'Leyte' },
-  { value: 'Iloilo', label: 'Iloilo' },
-  { value: 'Negros Occidental', label: 'Negros Occidental' },
-  { value: 'Davao del Sur', label: 'Davao del Sur' },
-  { value: 'Zamboanga del Sur', label: 'Zamboanga del Sur' },
-];
-
-const CITY_MAP: Record<string, SelectOption[]> = {
-  Albay: [
-    { value: '', label: 'Select City/Area' },
-    { value: 'Legazpi City', label: 'Legazpi City' },
-    { value: 'Daraga', label: 'Daraga' },
-    { value: 'Tabaco', label: 'Tabaco' },
-    { value: 'Ligao', label: 'Ligao' },
-    { value: 'Malilipot', label: 'Malilipot' },
-  ],
-  'Camarines Sur': [
-    { value: '', label: 'Select City/Area' },
-    { value: 'Naga City', label: 'Naga City' },
-    { value: 'Pili', label: 'Pili' },
-    { value: 'Iriga City', label: 'Iriga City' },
-  ],
-  Sorsogon: [
-    { value: '', label: 'Select City/Area' },
-    { value: 'Sorsogon City', label: 'Sorsogon City' },
-    { value: 'Bulan', label: 'Bulan' },
-  ],
-  'Metro Manila': [
-    { value: '', label: 'Select City/Area' },
-    { value: 'Manila', label: 'Manila' },
-    { value: 'Makati', label: 'Makati' },
-    { value: 'Quezon City', label: 'Quezon City' },
-    { value: 'Pasig', label: 'Pasig' },
-    { value: 'Taguig', label: 'Taguig' },
-    { value: 'Mandaluyong', label: 'Mandaluyong' },
-    { value: 'San Juan', label: 'San Juan' },
-    { value: 'Parañaque', label: 'Parañaque' },
-    { value: 'Caloocan', label: 'Caloocan' },
-  ],
-  Cebu: [
-    { value: '', label: 'Select City/Area' },
-    { value: 'Cebu City', label: 'Cebu City' },
-    { value: 'Mandaue', label: 'Mandaue' },
-    { value: 'Lapu-Lapu', label: 'Lapu-Lapu' },
-    { value: 'Talisay', label: 'Talisay' },
-  ],
-};
-
-const DEFAULT_CITIES: SelectOption[] = [{ value: '', label: 'Select province first' }];
+// Province / City / Barangay come from the PSGC API (see
+// `src/services/phLocations.ts`) — cascading + complete, incl. barangays.
 
 // ── Step definitions ──────────────────────────────────────────
 
@@ -139,8 +77,11 @@ interface FormData {
   // Step 3
   storeName: string;
   address: string;
-  province: string;
-  city: string;
+  province: string;      // display name (used for address / map / review)
+  provinceCode: string;  // PSGC code (drives the city fetch)
+  city: string;          // display name
+  cityCode: string;      // PSGC code (drives the barangay fetch)
+  barangay: string;      // display name
   lat: string;
   lng: string;
   // Step 4
@@ -165,7 +106,10 @@ export default function ApplicationPage() {
     storeName: '',
     address: '',
     province: '',
+    provinceCode: '',
     city: '',
+    cityCode: '',
+    barangay: '',
     lat: '',
     lng: '',
     storePhoto: [],
@@ -195,11 +139,74 @@ export default function ApplicationPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // City options based on province
-  const cityOptions = useMemo(
-    () => CITY_MAP[form.province] ?? DEFAULT_CITIES,
-    [form.province],
-  );
+  // ── Location cascade (PSGC API) ─────────────────────────────
+  // Province → City/Municipality → Barangay, fetched on demand. Each
+  // level degrades to a free-text input if its fetch fails (offline /
+  // API down) so the form never hard-blocks.
+  const [provinces, setProvinces] = useState<PsgcItem[]>([]);
+  const [cities, setCities] = useState<PsgcItem[]>([]);
+  const [barangays, setBarangays] = useState<PsgcItem[]>([]);
+  const [locLoading, setLocLoading] = useState({ prov: false, city: false, brgy: false });
+  const [locFailed, setLocFailed] = useState({ prov: false, city: false, brgy: false });
+
+  useEffect(() => {
+    let alive = true;
+    setLocLoading((s) => ({ ...s, prov: true }));
+    fetchProvinces()
+      .then((list) => {
+        if (!alive) return;
+        setProvinces(list);
+        setLocFailed((s) => ({ ...s, prov: false }));
+      })
+      .catch(() => alive && setLocFailed((s) => ({ ...s, prov: true })))
+      .finally(() => alive && setLocLoading((s) => ({ ...s, prov: false })));
+    return () => { alive = false; };
+  }, []);
+
+  const selectProvince = (code: string) => {
+    const name = provinces.find((p) => p.code === code)?.name ?? '';
+    setForm((prev) => ({
+      ...prev, provinceCode: code, province: name, cityCode: '', city: '', barangay: '',
+    }));
+    setErrors((prev) => ({ ...prev, province: undefined, city: undefined, barangay: undefined }));
+    setCities([]); setBarangays([]);
+    setLocFailed((s) => ({ ...s, city: false, brgy: false }));
+    if (!code) return;
+    setLocLoading((s) => ({ ...s, city: true }));
+    fetchCities(code)
+      .then((list) => setCities(list))
+      .catch(() => setLocFailed((s) => ({ ...s, city: true })))
+      .finally(() => setLocLoading((s) => ({ ...s, city: false })));
+  };
+
+  const selectCity = (code: string) => {
+    const name = cities.find((c) => c.code === code)?.name ?? '';
+    setForm((prev) => ({ ...prev, cityCode: code, city: name, barangay: '' }));
+    setErrors((prev) => ({ ...prev, city: undefined, barangay: undefined }));
+    setBarangays([]);
+    setLocFailed((s) => ({ ...s, brgy: false }));
+    if (!code) return;
+    setLocLoading((s) => ({ ...s, brgy: true }));
+    fetchBarangays(code)
+      .then((list) => setBarangays(list))
+      .catch(() => setLocFailed((s) => ({ ...s, brgy: true })))
+      .finally(() => setLocLoading((s) => ({ ...s, brgy: false })));
+  };
+
+  const provinceOptions: SelectOption[] = useMemo(() => [
+    { value: '', label: locLoading.prov ? 'Loading provinces…' : 'Select Province' },
+    ...provinces.map((p) => ({ value: p.code, label: p.name })),
+  ], [provinces, locLoading.prov]);
+
+  const cityOptions: SelectOption[] = useMemo(() => [
+    { value: '', label: locLoading.city ? 'Loading…' : 'Select City / Municipality' },
+    ...cities.map((c) => ({ value: c.code, label: c.name })),
+  ], [cities, locLoading.city]);
+
+  const barangayOptions: SelectOption[] = useMemo(() => [
+    { value: '', label: locLoading.brgy ? 'Loading…' : 'Select Barangay' },
+    ...barangays.map((b) => ({ value: b.name, label: b.name })),
+  ], [barangays, locLoading.brgy]);
 
   // ── Form helpers ────────────────────────────────────────────
 
@@ -274,8 +281,9 @@ export default function ApplicationPage() {
       case 2:
         if (!form.storeName.trim()) newErrors.storeName = 'Store name is required.';
         if (!form.address.trim()) newErrors.address = 'Complete address is required.';
-        if (!form.province) newErrors.province = 'Province is required.';
-        if (!form.city) newErrors.city = 'City/Area is required.';
+        if (!form.province.trim()) newErrors.province = 'Province is required.';
+        if (!form.city.trim()) newErrors.city = 'City / Municipality is required.';
+        if (!form.barangay.trim()) newErrors.barangay = 'Barangay is required.';
         if (!form.lat || !form.lng) {
           newErrors.lat = 'I-pin ang eksaktong lokasyon ng tindahan sa mapa.';
         }
@@ -283,8 +291,6 @@ export default function ApplicationPage() {
 
       case 3:
         if (form.storePhoto.length === 0) newErrors.storePhoto = 'Store photo is required.';
-        if (form.govId.length === 0) newErrors.govId = 'Government ID is required.';
-        if (form.proofOfBilling.length === 0) newErrors.proofOfBilling = 'Proof of billing is required.';
         break;
 
       case 4:
@@ -326,14 +332,14 @@ export default function ApplicationPage() {
     const uploadedRefs: string[] = [];
 
     try {
-      // Store photo → public bucket (low-sensitivity, embedded
-      // directly in <img src>). Gov ID + Proof of billing → private
-      // bucket; renderers fetch a fresh signed URL via useStorageUrl.
+      // Store photo → public bucket (low-sensitivity, embedded directly
+      // in <img src>). Gov ID + Proof of billing are NO LONGER collected
+      // here — they're requested only once the store's location is
+      // approved. Their DB columns are NOT NULL, so we persist empty
+      // strings for now (filled in later at approval time).
       const storePhotoFile = form.storePhoto[0]?.file;
-      const govIdFile = form.govId[0]?.file;
-      const proofFile = form.proofOfBilling[0]?.file;
-      if (!storePhotoFile || !govIdFile || !proofFile) {
-        throw new Error('Missing required upload');
+      if (!storePhotoFile) {
+        throw new Error('Missing required store photo upload');
       }
 
       const storePhotoUpload = await uploadFile(
@@ -343,31 +349,17 @@ export default function ApplicationPage() {
       );
       uploadedRefs.push(storePhotoUpload.storageRef);
 
-      const govIdUpload = await uploadFile(
-        'zapp-private',
-        buildObjectPath('gov-id', scopeId, govIdFile),
-        govIdFile,
-      );
-      uploadedRefs.push(govIdUpload.storageRef);
-
-      const proofUpload = await uploadFile(
-        'zapp-private',
-        buildObjectPath('proof-of-billing', scopeId, proofFile),
-        proofFile,
-      );
-      uploadedRefs.push(proofUpload.storageRef);
-
       await submitApplication({
         fullName: form.fullName,
         mobile: form.mobile,
         email: form.email,
         storeName: form.storeName,
-        address: `${form.address}, ${form.city}, ${form.province}`,
+        address: `${form.address}, Brgy. ${form.barangay}, ${form.city}, ${form.province}`,
         lat: parseFloat(form.lat) || 0,
         lng: parseFloat(form.lng) || 0,
         storePhotoUrl: storePhotoUpload.storageRef,
-        govIdUrl: govIdUpload.storageRef,
-        proofOfBillingUrl: proofUpload.storageRef,
+        govIdUrl: '',
+        proofOfBillingUrl: '',
         referralCode: form.referralCode,
         referralType: referralInfo.referral.type,
         assignedDistributorId: referralInfo.distributor?.id,
@@ -630,25 +622,66 @@ export default function ApplicationPage() {
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <Select
-                label="Province"
-                options={PROVINCES}
-                value={form.province}
-                onChange={(e) => {
-                  updateForm('province', e.target.value);
-                  updateForm('city', '');
-                }}
-                error={errors.province}
-              />
-              <Select
-                label="City / Area"
-                options={cityOptions}
-                value={form.city}
-                onChange={(e) => updateForm('city', e.target.value)}
-                error={errors.city}
-                disabled={!form.province}
-              />
+              {/* Province */}
+              {locFailed.prov ? (
+                <Input
+                  label="Province"
+                  placeholder="I-type ang province"
+                  value={form.province}
+                  onChange={(e) => updateForm('province', e.target.value)}
+                  error={errors.province}
+                />
+              ) : (
+                <Select
+                  label="Province"
+                  options={provinceOptions}
+                  value={form.provinceCode}
+                  onChange={(e) => selectProvince(e.target.value)}
+                  error={errors.province}
+                  disabled={locLoading.prov}
+                />
+              )}
+
+              {/* City / Municipality */}
+              {locFailed.prov || locFailed.city ? (
+                <Input
+                  label="City / Municipality"
+                  placeholder="I-type ang city/municipality"
+                  value={form.city}
+                  onChange={(e) => updateForm('city', e.target.value)}
+                  error={errors.city}
+                />
+              ) : (
+                <Select
+                  label="City / Municipality"
+                  options={cityOptions}
+                  value={form.cityCode}
+                  onChange={(e) => selectCity(e.target.value)}
+                  error={errors.city}
+                  disabled={!form.provinceCode || locLoading.city}
+                />
+              )}
             </div>
+
+            {/* Barangay */}
+            {locFailed.prov || locFailed.city || locFailed.brgy ? (
+              <Input
+                label="Barangay"
+                placeholder="I-type ang barangay"
+                value={form.barangay}
+                onChange={(e) => updateForm('barangay', e.target.value)}
+                error={errors.barangay}
+              />
+            ) : (
+              <Select
+                label="Barangay"
+                options={barangayOptions}
+                value={form.barangay}
+                onChange={(e) => updateForm('barangay', e.target.value)}
+                error={errors.barangay}
+                disabled={!form.cityCode || locLoading.brgy}
+              />
+            )}
 
             {/* Map pin — exact store location (required) */}
             <div>
@@ -674,9 +707,10 @@ export default function ApplicationPage() {
         return (
           <div className="space-y-6">
             <div>
-              <h2 className="text-xl font-bold text-gray-900">Document Upload</h2>
+              <h2 className="text-xl font-bold text-gray-900">Store Photo</h2>
               <p className="mt-1 text-sm text-gray-500">
-                Upload the required documents for verification.
+                Mag-upload ng malinaw na larawan ng harap ng iyong tindahan. Ang
+                Government ID at Proof of Billing ay hihingin na lang kapag na-approve na.
               </p>
             </div>
 
@@ -695,38 +729,52 @@ export default function ApplicationPage() {
                 {errors.storePhoto && (
                   <p className="mt-1.5 text-xs text-red-600">{errors.storePhoto}</p>
                 )}
-              </div>
 
-              <div>
-                <label className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700">
-                  <ShieldCheck size={16} className="text-gray-400" />
-                  Valid Government ID <span className="text-red-500">*</span>
-                </label>
-                <FileUpload
-                  accept="image/*,.pdf"
-                  onChange={(files) =>
-                    setForm((prev) => ({ ...prev, govId: files }))
-                  }
-                />
-                {errors.govId && (
-                  <p className="mt-1.5 text-xs text-red-600">{errors.govId}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700">
-                  <FileText size={16} className="text-gray-400" />
-                  Proof of Billing <span className="text-red-500">*</span>
-                </label>
-                <FileUpload
-                  accept="image/*,.pdf"
-                  onChange={(files) =>
-                    setForm((prev) => ({ ...prev, proofOfBilling: files }))
-                  }
-                />
-                {errors.proofOfBilling && (
-                  <p className="mt-1.5 text-xs text-red-600">{errors.proofOfBilling}</p>
-                )}
+                {/* Photo instructions — helps applicants take a usable photo */}
+                <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-4">
+                  <div className="mb-3 flex items-center gap-2">
+                    <Camera size={18} className="text-green-700" />
+                    <h3 className="text-sm font-bold uppercase tracking-wide text-green-800">
+                      Paano kumuha ng tamang larawan
+                    </h3>
+                  </div>
+                  <ol className="space-y-3 text-sm text-gray-700">
+                    <li className="flex gap-3">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-600 text-xs font-bold text-white">
+                        1
+                      </span>
+                      <span>
+                        Kumuha ng <b>malinaw na front-view</b> na larawan ng iyong tindahan.
+                        Siguraduhing kita ang mga establishment sa <b>kaliwa at kanan</b> nito.
+                      </span>
+                    </li>
+                    <li className="flex gap-3">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-600 text-xs font-bold text-white">
+                        2
+                      </span>
+                      <span>
+                        Pagkatapos, <b>markahan ang iyong tindahan</b> gamit ang square o
+                        circle para madaling makita ang eksaktong lokasyon nito.
+                      </span>
+                    </li>
+                  </ol>
+                  {/* Optional example image — drop `store-photo-example.jpg` into
+                      /public to show it; hidden gracefully if the file is absent. */}
+                  <img
+                    src="/store-photo-example.jpg"
+                    alt="Halimbawa ng tamang store photo"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                    className="mt-3 w-full rounded-lg border border-green-200"
+                  />
+                  <p className="mt-3 flex items-start gap-1.5 rounded-lg bg-white px-3 py-2 text-xs text-gray-500">
+                    <span>💡</span>
+                    <span>
+                      Siguraduhing malinaw, maliwanag, at kuha mula sa harap ng tindahan.
+                    </span>
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -754,29 +802,11 @@ export default function ApplicationPage() {
                   )}
                   Referral Information
                 </h3>
-                <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                <div className="mt-3 text-sm">
                   <div>
                     <span className="text-gray-500">Code:</span>{' '}
                     <span className="font-medium">{referralInfo.referral.code}</span>
                   </div>
-                  <div>
-                    <span className="text-gray-500">Type:</span>{' '}
-                    <Badge variant={referralInfo.referral.type === 'distributor' ? 'orange' : 'info'} size="sm">
-                      {referralInfo.referral.type === 'distributor' ? 'Distributor' : 'Direct'}
-                    </Badge>
-                  </div>
-                  {referralInfo.distributor && (
-                    <div>
-                      <span className="text-gray-500">Distributor:</span>{' '}
-                      <span className="font-medium">{referralInfo.distributor.name}</span>
-                    </div>
-                  )}
-                  {referralInfo.plant && (
-                    <div>
-                      <span className="text-gray-500">Plant:</span>{' '}
-                      <span className="font-medium">{referralInfo.plant.name}</span>
-                    </div>
-                  )}
                 </div>
               </div>
             )}
@@ -819,8 +849,12 @@ export default function ApplicationPage() {
                   <span className="font-medium">{form.province}</span>
                 </div>
                 <div>
-                  <span className="text-gray-500">City/Area:</span>{' '}
+                  <span className="text-gray-500">City / Municipality:</span>{' '}
                   <span className="font-medium">{form.city}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Barangay:</span>{' '}
+                  <span className="font-medium">{form.barangay}</span>
                 </div>
                 <div>
                   <span className="text-gray-500">Coordinates:</span>{' '}
@@ -855,37 +889,13 @@ export default function ApplicationPage() {
                       : 'Not uploaded'}
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  {form.govId.length > 0 ? (
-                    <CheckCircle2 size={16} className="text-green-500" />
-                  ) : (
-                    <AlertCircle size={16} className="text-red-500" />
-                  )}
-                  <span className="text-gray-600">
-                    Government ID:{' '}
-                    {form.govId.length > 0 ? form.govId[0].file.name : 'Not uploaded'}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {form.proofOfBilling.length > 0 ? (
-                    <CheckCircle2 size={16} className="text-green-500" />
-                  ) : (
-                    <AlertCircle size={16} className="text-red-500" />
-                  )}
-                  <span className="text-gray-600">
-                    Proof of Billing:{' '}
-                    {form.proofOfBilling.length > 0
-                      ? form.proofOfBilling[0].file.name
-                      : 'Not uploaded'}
-                  </span>
-                </div>
               </div>
             </div>
 
             {/* File previews */}
-            {(form.storePhoto.length > 0 || form.govId.length > 0 || form.proofOfBilling.length > 0) && (
+            {form.storePhoto.length > 0 && (
               <div className="flex flex-wrap gap-3">
-                {[...form.storePhoto, ...form.govId, ...form.proofOfBilling].map(
+                {form.storePhoto.map(
                   (f) =>
                     f.preview && (
                       <img

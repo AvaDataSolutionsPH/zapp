@@ -12,13 +12,32 @@ Applications queue.
 
 ## Wizard steps (`renderStep` + `validateStep` switch, 0-indexed)
 0. **Referral code** — must resolve via `referralService` (`referralInfo`).
+   Review card shows **only the Code** (Type/Distributor/Plant hidden per boss).
 1. **Applicant info** — full name, PH mobile regex, email.
-2. **Store info** — store name, address, province, city, **+ map pin (required)**.
-3. **Documents** — store photo, gov ID, proof of billing (all required, uploaded
-   to Supabase Storage on submit).
+2. **Store info** — store name, address, **Province → City/Municipality →
+   Barangay** (cascading, from the PSGC API — see below), **+ map pin (required)**.
+3. **Store photo** — front-view store photo ONLY. **Gov ID + Proof of Billing
+   were removed** (boss: collected later, once the location is approved). A
+   green **photo-instructions panel** sits under the upload.
 4. **Consent** — data-privacy checkbox.
 
 `validateStep(n)` gates each Next; final submit re-runs `validateStep(4)`.
+Removed docs still have NOT NULL columns → `handleSubmit` persists `govIdUrl: ''`
+and `proofOfBillingUrl: ''`.
+
+## Location cascade (PSGC API)
+Province/City/Barangay come from `src/services/phLocations.ts` (the free,
+no-key **PSGC** API — `psgc.gitlab.io/api`), fetched on demand:
+`fetchProvinces()` → `fetchCities(provinceCode)` → `fetchBarangays(cityCode)`,
+session-cached in a `Map`. Not bundled — the full PH set is ~42k barangays
+(multi-MB), so on-demand keeps payloads tiny. `form` tracks both the PSGC
+`code` (drives the next fetch) and the display `name` (used in the address /
+map / review). Each level **degrades to a free-text `<Input>`** if its fetch
+throws (offline / API down / CORS) via the `locFailed` flags, so the form never
+hard-blocks. The composed address is
+`"<address>, Brgy. <barangay>, <city>, <province>"`. NOTE: PSGC returns names
+only (no coordinates) — the map still centers by province name
+(`PROVINCE_CENTROIDS`); barangay improves the written address, not map centering.
 
 ## Map pin (Grab-style, `StorePinPicker`)
 Replaced the old optional Latitude/Longitude **text inputs + placeholder box**

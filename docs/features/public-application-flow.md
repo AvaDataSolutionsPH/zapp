@@ -35,9 +35,21 @@ session-cached in a `Map`. Not bundled — the full PH set is ~42k barangays
 map / review). Each level **degrades to a free-text `<Input>`** if its fetch
 throws (offline / API down / CORS) via the `locFailed` flags, so the form never
 hard-blocks. The composed address is
-`"<address>, Brgy. <barangay>, <city>, <province>"`. NOTE: PSGC returns names
-only (no coordinates) — the map still centers by province name
-(`PROVINCE_CENTROIDS`); barangay improves the written address, not map centering.
+`"<address>, Brgy. <barangay>, <city>, <province>"`.
+
+## Progressive map zoom (geocoding)
+PSGC returns names only (no coordinates), so to make the map **zoom toward the
+chosen area** as the applicant selects Province → City → Barangay, each
+selection geocodes the name via `src/services/geocode.ts` (`geocodePH`, free
+OpenStreetMap **Nominatim**, `countrycodes=ph`, fails soft → null). The result
+feeds `mapCenter`/`mapZoom` state → `StorePinPicker`'s `centerOverride` /
+`zoomOverride` props (province zoom 10 → city 13 → barangay 16). `geoSeq` (a
+ref) discards a stale earlier response when a newer selection is made. This
+only moves the **view** — it never places the pin (the applicant still
+taps/drags). `StorePinPicker`'s `Recenter` uses primitive lat/lng/zoom deps so
+unrelated re-renders don't reset manual panning, and it stops recentering once
+a pin exists (`active={!hasPin}`). Text-fallback mode (API down) skips
+geocoding.
 
 ## Map pin (Grab-style, `StorePinPicker`)
 Replaced the old optional Latitude/Longitude **text inputs + placeholder box**

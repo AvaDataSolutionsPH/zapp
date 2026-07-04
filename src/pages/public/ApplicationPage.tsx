@@ -2,7 +2,7 @@
 // ZAPP Donuts ERP - Public Franchise Application Page
 // ============================================================
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -38,6 +38,7 @@ import { useStore } from '@/store/useStore';
 import StorePinPicker from './StorePinPicker';
 import { fetchProvinces, fetchCities, fetchBarangays } from '@/services/phLocations';
 import type { PsgcItem } from '@/services/phLocations';
+import { geocodePH } from '@/services/geocode';
 import { referralService } from '@/services/api';
 import { uploadFile, buildObjectPath, deleteFile, parseStorageRef } from '@/services/storage';
 import type { ReferralCode, Distributor, AreaSupervisor, Plant } from '@/types';
@@ -148,6 +149,22 @@ export default function ApplicationPage() {
   const [locLoading, setLocLoading] = useState({ prov: false, city: false, brgy: false });
   const [locFailed, setLocFailed] = useState({ prov: false, city: false, brgy: false });
 
+  // Progressive map centering: geocode the chosen area (province → city →
+  // barangay) and hand the result to StorePinPicker so the map zooms toward
+  // it. `geoSeq` guards against a slow earlier response overriding a newer
+  // selection. Fails soft — a miss just leaves the map where it is.
+  const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
+  const [mapZoom, setMapZoom] = useState<number | null>(null);
+  const geoSeq = useRef(0);
+
+  const recenterMap = async (query: string, zoom: number) => {
+    const seq = ++geoSeq.current;
+    const geo = await geocodePH(query);
+    if (seq !== geoSeq.current || !geo) return;
+    setMapCenter([geo.lat, geo.lng]);
+    setMapZoom(zoom);
+  };
+
   useEffect(() => {
     let alive = true;
     setLocLoading((s) => ({ ...s, prov: true }));
@@ -171,6 +188,7 @@ export default function ApplicationPage() {
     setCities([]); setBarangays([]);
     setLocFailed((s) => ({ ...s, city: false, brgy: false }));
     if (!code) return;
+    if (name) recenterMap(`${name}, Philippines`, 10);
     setLocLoading((s) => ({ ...s, city: true }));
     fetchCities(code)
       .then((list) => setCities(list))
@@ -185,11 +203,17 @@ export default function ApplicationPage() {
     setBarangays([]);
     setLocFailed((s) => ({ ...s, brgy: false }));
     if (!code) return;
+    if (name) recenterMap(`${name}, ${form.province}, Philippines`, 13);
     setLocLoading((s) => ({ ...s, brgy: true }));
     fetchBarangays(code)
       .then((list) => setBarangays(list))
       .catch(() => setLocFailed((s) => ({ ...s, brgy: true })))
       .finally(() => setLocLoading((s) => ({ ...s, brgy: false })));
+  };
+
+  const selectBarangay = (name: string) => {
+    updateForm('barangay', name);
+    if (name) recenterMap(`${name}, ${form.city}, ${form.province}, Philippines`, 16);
   };
 
   const provinceOptions: SelectOption[] = useMemo(() => [
@@ -624,7 +648,7 @@ export default function ApplicationPage() {
                 label="Barangay"
                 options={barangayOptions}
                 value={form.barangay}
-                onChange={(e) => updateForm('barangay', e.target.value)}
+                onChange={(e) => selectBarangay(e.target.value)}
                 error={errors.barangay}
                 disabled={!form.cityCode || locLoading.brgy}
               />
@@ -639,6 +663,8 @@ export default function ApplicationPage() {
                 lat={form.lat}
                 lng={form.lng}
                 province={form.province}
+                centerOverride={mapCenter}
+                zoomOverride={mapZoom}
                 onChange={(lat, lng) => {
                   updateForm('lat', lat);
                   updateForm('lng', lng);

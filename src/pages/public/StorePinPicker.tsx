@@ -49,6 +49,11 @@ interface StorePinPickerProps {
   lat: string;
   lng: string;
   province?: string;
+  /** Optional map view override (e.g. geocoded from the selected
+   *  province/city/barangay) so the map progressively zooms toward the
+   *  chosen area. Ignored once a pin is dropped. */
+  centerOverride?: [number, number] | null;
+  zoomOverride?: number | null;
   onChange: (lat: string, lng: string) => void;
   error?: string;
 }
@@ -63,14 +68,26 @@ function ClickCapture({ onPick }: { onPick: (lat: number, lng: number) => void }
   return null;
 }
 
-// Recenters the map when the chosen province changes — but ONLY while
-// no pin has been dropped yet, so we never yank the map away from a
-// marker the applicant already placed.
-function Recenter({ center, active }: { center: [number, number]; active: boolean }) {
+// Recenters/zooms the map when the target coordinates change — but ONLY
+// while no pin has been dropped yet, so we never yank the map away from a
+// marker the applicant already placed. Deps are the primitive lat/lng/zoom
+// (not a fresh array each render) so unrelated re-renders don't reset the
+// user's manual panning.
+function Recenter({
+  lat,
+  lng,
+  zoom,
+  active,
+}: {
+  lat: number;
+  lng: number;
+  zoom: number;
+  active: boolean;
+}) {
   const map = useMap();
   useEffect(() => {
-    if (active) map.setView(center, map.getZoom());
-  }, [center, active, map]);
+    if (active) map.setView([lat, lng], zoom);
+  }, [lat, lng, zoom, active, map]);
   return null;
 }
 
@@ -78,6 +95,8 @@ export default function StorePinPicker({
   lat,
   lng,
   province,
+  centerOverride,
+  zoomOverride,
   onChange,
   error,
 }: StorePinPickerProps) {
@@ -87,7 +106,11 @@ export default function StorePinPicker({
     : null;
 
   const provinceCenter = province ? PROVINCE_CENTROIDS[province] : undefined;
-  const center: [number, number] = pinPos ?? provinceCenter ?? DEFAULT_CENTER;
+  // Priority: an already-dropped pin > geocoded override (province/city/
+  // barangay) > province centroid > national default.
+  const center: [number, number] =
+    pinPos ?? centerOverride ?? provinceCenter ?? DEFAULT_CENTER;
+  const zoom = zoomOverride ?? (province ? 13 : 11);
 
   const pick = (la: number, ln: number) => onChange(round6(la), round6(ln));
 
@@ -109,7 +132,7 @@ export default function StorePinPicker({
       >
         <MapContainer
           center={center}
-          zoom={province ? 13 : 11}
+          zoom={zoom}
           scrollWheelZoom
           style={{ height: '18rem', width: '100%' }}
         >
@@ -118,7 +141,7 @@ export default function StorePinPicker({
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
           <ClickCapture onPick={pick} />
-          <Recenter center={center} active={!hasPin} />
+          <Recenter lat={center[0]} lng={center[1]} zoom={zoom} active={!hasPin} />
           {pinPos && (
             <Marker
               position={pinPos}

@@ -31,7 +31,6 @@ import {
   Input,
   Select,
   Modal,
-  Badge,
   FileUpload,
 } from '@/components/ui';
 import type { SelectOption, UploadedFile } from '@/components/ui';
@@ -483,58 +482,6 @@ export default function ApplicationPage() {
                 <div className="flex items-center gap-2 text-green-700">
                   <CheckCircle2 size={20} />
                   <span className="font-bold">Referral Code Validated!</span>
-                </div>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <span className="text-xs font-semibold uppercase tracking-wider text-green-600">
-                      Code
-                    </span>
-                    <p className="mt-0.5 text-sm font-medium text-gray-900">
-                      {referralInfo.referral.code}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-xs font-semibold uppercase tracking-wider text-green-600">
-                      Franchise Type
-                    </span>
-                    <p className="mt-0.5">
-                      <Badge variant={referralInfo.referral.type === 'distributor' ? 'orange' : 'info'}>
-                        {referralInfo.referral.type === 'distributor'
-                          ? 'Distributor-Linked'
-                          : 'Direct to ZAPP'}
-                      </Badge>
-                    </p>
-                  </div>
-                  {referralInfo.distributor && (
-                    <div>
-                      <span className="text-xs font-semibold uppercase tracking-wider text-green-600">
-                        Distributor
-                      </span>
-                      <p className="mt-0.5 text-sm font-medium text-gray-900">
-                        {referralInfo.distributor.name}
-                      </p>
-                    </div>
-                  )}
-                  {referralInfo.areaSupervisor && (
-                    <div>
-                      <span className="text-xs font-semibold uppercase tracking-wider text-green-600">
-                        Area Supervisor
-                      </span>
-                      <p className="mt-0.5 text-sm font-medium text-gray-900">
-                        {referralInfo.areaSupervisor.name}
-                      </p>
-                    </div>
-                  )}
-                  {referralInfo.plant && (
-                    <div>
-                      <span className="text-xs font-semibold uppercase tracking-wider text-green-600">
-                        Assigned Plant
-                      </span>
-                      <p className="mt-0.5 text-sm font-medium text-gray-900">
-                        {referralInfo.plant.name} ({referralInfo.plant.region})
-                      </p>
-                    </div>
-                  )}
                 </div>
               </div>
             )}

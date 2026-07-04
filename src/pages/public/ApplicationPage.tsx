@@ -39,6 +39,7 @@ import StorePinPicker from './StorePinPicker';
 import { fetchProvinces, fetchCities, fetchBarangays } from '@/services/phLocations';
 import type { PsgcItem } from '@/services/phLocations';
 import { geocodePH } from '@/services/geocode';
+import { compressImage } from '@/lib/imageCompress';
 import { referralService } from '@/services/api';
 import { uploadFile, buildObjectPath, deleteFile, parseStorageRef } from '@/services/storage';
 import type { ReferralCode, Distributor, AreaSupervisor, Plant } from '@/types';
@@ -354,6 +355,9 @@ export default function ApplicationPage() {
     const scopeId = `pending-${Date.now().toString(36)}`;
     const uploadedRefs: string[] = [];
 
+    // Track which stage failed so we can show a specific, actionable
+    // message (photo upload vs application save).
+    let stage: 'upload' | 'save' = 'upload';
     try {
       // Store photo → public bucket (low-sensitivity, embedded directly
       // in <img src>). Gov ID + Proof of billing are NO LONGER collected
@@ -365,13 +369,18 @@ export default function ApplicationPage() {
         throw new Error('Missing required store photo upload');
       }
 
+      // Downscale big phone photos so the upload is fast + reliable on
+      // mobile (fails soft to the original file).
+      const photoToUpload = await compressImage(storePhotoFile);
+
       const storePhotoUpload = await uploadFile(
         'zapp-public',
-        buildObjectPath('store-photo', scopeId, storePhotoFile),
-        storePhotoFile,
+        buildObjectPath('store-photo', scopeId, photoToUpload),
+        photoToUpload,
       );
       uploadedRefs.push(storePhotoUpload.storageRef);
 
+      stage = 'save';
       await submitApplication({
         fullName: form.fullName,
         mobile: form.mobile,
@@ -400,7 +409,12 @@ export default function ApplicationPage() {
         }
       }
       console.error('[ApplicationPage] submission failed:', err);
-      setErrors({ consent: 'Submission failed. Please try again.' });
+      setErrors({
+        consent:
+          stage === 'upload'
+            ? 'Hindi ma-upload ang larawan ng tindahan. Pakisubukan ang mas malinaw/maliit na larawan o mas magandang koneksyon, tapos i-submit ulit.'
+            : 'Hindi na-save ang application. Pakisubukan ulit.',
+      });
     } finally {
       setSubmitting(false);
     }

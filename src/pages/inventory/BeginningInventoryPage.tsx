@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Upload,
   Camera,
@@ -7,8 +7,11 @@ import {
   Save,
   ChevronRight,
   ChevronLeft,
+  Plus,
+  Trash2,
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
+import { aiService } from '@/services/api';
 import { tesseractAnalyzeDR } from '@/services/tesseractService';
 import {
   Card,
@@ -30,6 +33,7 @@ import type { AIResult, InventoryItem } from '@/types';
 type Step = 1 | 2 | 3 | 4 | 5;
 
 interface ConfirmedRow {
+  rowId: string;        // stable unique key (scanned rows + manually-added rows)
   skuId: string;
   skuName: string;
   drQty: number;
@@ -38,6 +42,7 @@ interface ConfirmedRow {
   overage: number;
   manualOverride: boolean;
   confidence: AIResult['confidence'];
+  isManual?: boolean;   // true = added by the reviewer (SKU picked from dropdown)
 }
 
 const stepLabels: Record<Step, string> = {
@@ -135,75 +140,55 @@ export default function BeginningInventoryPage() {
     if (!delivery) return;
     setAiProcessing(true);
     try {
-      // The Delivery Receipt is the source of truth for what donuts were
-      // shipped — the delivery record's line items ARE the DR. We run local
-      // Tesseract OCR on the uploaded slip only to help pre-fill the scanned
-      // quantities, then RECONCILE strictly against delivery.items so the
-      // results show exactly the donuts on the DR and nothing else (no crate
-      // guessing, no phantom SKUs). The reviewer edits for lack/overage in
-      // Step 4. Crate photos (Step 2) are evidence only.
+      // Read the UPLOADED DR image directly with local Tesseract (no API,
+      // zero cost). The scan shows exactly the donuts written on THIS DR
+      // slip — nothing else — because it reads the image, not any system
+      // record. On OCR failure we fall back to sample line items so the flow
+      // never blocks; the reviewer can add/remove/edit rows in Step 4.
       const drFile = drFiles[0]?.file;
 
-      let ocr: AIResult[] = [];
+      let ocr: AIResult[];
       let ocrFailed = false;
       if (drFile) {
         try {
           ocr = await tesseractAnalyzeDR(drFile, skus);
         } catch (err) {
           console.error('[BeginningInventoryPage] Tesseract DR OCR failed:', err);
+          ocr = await aiService.processOCR('mock-dr-image');
           ocrFailed = true;
+        }
+      } else {
+        ocr = await aiService.processOCR('mock-dr-image');
+      }
+
+      if (ocrFailed) {
+        addToast('warning', 'Scan failed — using sample items. Please review in the next step.');
+      } else if (drFile) {
+        if (ocr.length > 0) {
+          addToast('success', `Scanned ${ocr.length} item(s) from the Delivery Receipt.`);
+        } else {
+          addToast('info', 'No items detected — please add them manually in the next step.');
         }
       }
 
-      // Index the OCR hits by SKU so we can overlay the scanned qty onto
-      // each DR line item. Anything the scan read that ISN'T on the DR is
-      // ignored here by construction (we iterate delivery.items, not ocr).
-      const ocrBySku = new Map<string, AIResult>();
-      for (const r of ocr) {
-        if (r.skuId) ocrBySku.set(r.skuId, r);
-      }
+      setOcrResults(ocr);
 
-      // Results table = the DR line items, in DR order, with the scanned
-      // quantity/confidence overlaid where the OCR matched that SKU.
-      const results: AIResult[] = delivery.items.map((item, idx) => {
-        const hit = ocrBySku.get(item.skuId);
+      // Build confirmed rows from the scanned DR line items. DR quantity
+      // defaults to the scanned value; the reviewer edits both the DR qty
+      // (if the scan misread) and the confirmed count for lack/overage, and
+      // can add/remove rows in Step 4.
+      const rows: ConfirmedRow[] = ocr.map((ocrItem, idx) => {
+        const drQty = ocrItem.extractedValue ?? 0;
         return {
-          id: hit?.id ?? `dr-${delivery.id}-${item.skuId}-${idx}`,
-          type: 'ocr_dr',
-          skuId: item.skuId,
-          skuName: item.skuName,
-          extractedValue: hit?.extractedValue ?? item.quantity,
-          confidence: hit?.confidence ?? 'medium',
-          warning: hit
-            ? hit.warning
-            : 'Not detected in scan — using DR quantity',
-        };
-      });
-
-      const matched = results.filter((r) => ocrBySku.has(r.skuId ?? '')).length;
-      if (ocrFailed) {
-        addToast('warning', 'Scan failed — showing DR items. Please confirm quantities.');
-      } else if (drFile) {
-        addToast('success', `Scanned Delivery Receipt — ${matched}/${results.length} item(s) auto-read.`);
-      } else {
-        addToast('info', 'No DR image scanned — showing DR items. Please confirm quantities.');
-      }
-
-      setOcrResults(results);
-
-      // Confirmed rows: DR quantity is the baseline; the reviewer adjusts
-      // the confirmed count for any lack/overage in Step 4.
-      const rows: ConfirmedRow[] = delivery.items.map((item) => {
-        const hit = ocrBySku.get(item.skuId);
-        return {
-          skuId: item.skuId,
-          skuName: item.skuName,
-          drQty: item.quantity,
-          confirmedQty: item.quantity,
+          rowId: `scan-${ocrItem.skuId ?? ocrItem.id ?? idx}`,
+          skuId: ocrItem.skuId ?? '',
+          skuName: ocrItem.skuName ?? '',
+          drQty,
+          confirmedQty: drQty,
           lack: 0,
           overage: 0,
           manualOverride: false,
-          confidence: hit?.confidence ?? 'medium',
+          confidence: ocrItem.confidence,
         };
       });
       setConfirmedRows(rows);
@@ -214,18 +199,26 @@ export default function BeginningInventoryPage() {
     }
   }, [delivery, drFiles, skus, addToast]);
 
-  // Update confirmed row
-  const updateRow = (skuId: string, field: keyof ConfirmedRow, value: number | boolean) => {
+  // Update a confirmed row by its stable rowId. Editing DR qty or confirmed
+  // qty recomputes lack/overage from (confirmed − DR); editing the SKU on a
+  // manually-added row backfills the SKU name.
+  const updateRow = (
+    rowId: string,
+    field: 'skuId' | 'drQty' | 'confirmedQty' | 'manualOverride',
+    value: number | boolean | string,
+  ) => {
     setConfirmedRows((prev) =>
       prev.map((r) => {
-        if (r.skuId !== skuId) return r;
-        const updated = { ...r, [field]: value };
-        if (field === 'confirmedQty') {
-          const diff = (value as number) - r.drQty;
+        if (r.rowId !== rowId) return r;
+        const updated: ConfirmedRow = { ...r, [field]: value } as ConfirmedRow;
+        if (field === 'skuId') {
+          updated.skuName = skus.find((s) => s.id === value)?.name ?? '';
+        }
+        if (field === 'confirmedQty' || field === 'drQty') {
+          const diff = updated.confirmedQty - updated.drQty;
           updated.lack = diff < 0 ? Math.abs(diff) : 0;
           updated.overage = diff > 0 ? diff : 0;
-          // Auto-set manualOverride when user edits the quantity
-          updated.manualOverride = true;
+          if (field === 'confirmedQty') updated.manualOverride = true;
         }
         if (field === 'manualOverride') {
           updated.manualOverride = value as boolean;
@@ -234,6 +227,38 @@ export default function BeginningInventoryPage() {
       }),
     );
   };
+
+  // Add / remove rows in Step 4 so the reviewer can correct a mis-scanned DR
+  // (add a SKU the scan missed, or delete one it wrongly picked up).
+  const manualRowSeq = useRef(0);
+  const addManualRow = () => {
+    setConfirmedRows((prev) => [
+      ...prev,
+      {
+        rowId: `manual-${manualRowSeq.current++}`,
+        skuId: '',
+        skuName: '',
+        drQty: 0,
+        confirmedQty: 0,
+        lack: 0,
+        overage: 0,
+        manualOverride: true,
+        confidence: 'high',
+        isManual: true,
+      },
+    ]);
+  };
+  const removeRow = (rowId: string) => {
+    setConfirmedRows((prev) => prev.filter((r) => r.rowId !== rowId));
+  };
+
+  // SKUs available to add manually (exclude ones already listed).
+  const availableSkuOptions: SelectOption[] = [
+    { value: '', label: 'Select SKU…' },
+    ...skus
+      .filter((s) => !confirmedRows.some((r) => r.skuId === s.id))
+      .map((s) => ({ value: s.id, label: s.name })),
+  ];
 
   // Submit
   const handleSubmit = async () => {
@@ -244,14 +269,17 @@ export default function BeginningInventoryPage() {
     const uploadedRefs: string[] = [];
 
     try {
-      const items: InventoryItem[] = confirmedRows.map((r) => ({
-        skuId: r.skuId,
-        skuName: r.skuName,
-        quantity: r.confirmedQty,
-        confidence: r.confidence,
-        discrepancy: r.confirmedQty - r.drQty,
-        manualOverride: r.manualOverride,
-      }));
+      // Drop any manually-added row where no SKU was picked.
+      const items: InventoryItem[] = confirmedRows
+        .filter((r) => r.skuId)
+        .map((r) => ({
+          skuId: r.skuId,
+          skuName: r.skuName,
+          quantity: r.confirmedQty,
+          confidence: r.confidence,
+          discrepancy: r.confirmedQty - r.drQty,
+          manualOverride: r.manualOverride,
+        }));
 
       // Upload DR slip + crate photos to the private bucket. Both
       // contain internal operational data (DR line items, crate
@@ -521,6 +549,12 @@ export default function BeginningInventoryPage() {
             </h2>
           </CardHeader>
           <CardContent>
+            <p className="text-sm text-gray-600 mb-3">
+              These are the donuts read from the DR. If a line is wrong you can edit the
+              <span className="font-medium"> DR Qty</span>, remove it, or use
+              <span className="font-medium"> + Add Item</span> to add a SKU the scan missed.
+              Enter the actual counted quantity under <span className="font-medium">Confirmed Qty</span>.
+            </p>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
@@ -532,24 +566,41 @@ export default function BeginningInventoryPage() {
                     <th className="px-3 py-2 text-center">Overage</th>
                     <th className="px-3 py-2 text-center">Override</th>
                     <th className="px-3 py-2 text-center">Confidence</th>
+                    <th className="px-3 py-2 text-center"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {confirmedRows.map((row) => (
                     <tr
-                      key={row.skuId}
+                      key={row.rowId}
                       className="hover:bg-gray-50"
                     >
                       <td className="px-3 py-2 font-medium text-gray-900">
-                        {row.skuName}
+                        {row.isManual ? (
+                          <Select
+                            options={availableSkuOptions}
+                            value={row.skuId}
+                            onChange={(e) => updateRow(row.rowId, 'skuId', e.target.value)}
+                          />
+                        ) : (
+                          row.skuName
+                        )}
                       </td>
-                      <td className="px-3 py-2 text-center">{row.drQty}</td>
+                      <td className="px-3 py-2 text-center">
+                        <input
+                          type="number"
+                          min={0}
+                          value={row.drQty}
+                          onChange={(e) => updateRow(row.rowId, 'drQty', parseInt(e.target.value) || 0)}
+                          className="w-20 rounded border border-gray-300 px-2 py-1 text-center text-sm focus:outline-none focus:ring-1 focus:ring-zapp-orange"
+                        />
+                      </td>
                       <td className="px-3 py-2 text-center">
                         <input
                           type="number"
                           min={0}
                           value={row.confirmedQty}
-                          onChange={(e) => updateRow(row.skuId, 'confirmedQty', parseInt(e.target.value) || 0)}
+                          onChange={(e) => updateRow(row.rowId, 'confirmedQty', parseInt(e.target.value) || 0)}
                           className="w-20 rounded border border-gray-300 px-2 py-1 text-center text-sm focus:outline-none focus:ring-1 focus:ring-zapp-orange"
                         />
                       </td>
@@ -568,7 +619,7 @@ export default function BeginningInventoryPage() {
                           <input
                             type="checkbox"
                             checked={row.manualOverride}
-                            onChange={(e) => updateRow(row.skuId, 'manualOverride', e.target.checked)}
+                            onChange={(e) => updateRow(row.rowId, 'manualOverride', e.target.checked)}
                             className="sr-only peer"
                           />
                           <div className="w-8 h-4 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:bg-zapp-orange transition-colors">
@@ -577,11 +628,33 @@ export default function BeginningInventoryPage() {
                         </label>
                       </td>
                       <td className="px-3 py-2 text-center">{confidenceBadge(row.confidence)}</td>
+                      <td className="px-3 py-2 text-center">
+                        <button
+                          onClick={() => removeRow(row.rowId)}
+                          className="p-1 rounded text-gray-400 hover:text-red-500 transition-colors"
+                          aria-label={`Remove ${row.skuName || 'row'}`}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
+                  {confirmedRows.length === 0 && (
+                    <tr>
+                      <td colSpan={8} className="px-3 py-6 text-center text-sm text-gray-400">
+                        No items. Use “+ Add Item” to enter the donuts on the DR.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
+            <button
+              onClick={addManualRow}
+              className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-zapp-orange hover:text-zapp-orange-dark cursor-pointer bg-transparent border-none"
+            >
+              <Plus size={16} /> Add Item
+            </button>
           </CardContent>
         </Card>
       )}
@@ -599,7 +672,7 @@ export default function BeginningInventoryPage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="bg-gray-50 rounded-lg p-3 text-center">
                 <p className="text-xs text-gray-500 uppercase">Total SKUs</p>
-                <p className="text-lg font-bold text-gray-900">{confirmedRows.length}</p>
+                <p className="text-lg font-bold text-gray-900">{confirmedRows.filter((r) => r.skuId).length}</p>
               </div>
               <div className="bg-gray-50 rounded-lg p-3 text-center">
                 <p className="text-xs text-gray-500 uppercase">Total Confirmed Qty</p>
@@ -634,10 +707,10 @@ export default function BeginningInventoryPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {confirmedRows.map((r) => {
+                  {confirmedRows.filter((r) => r.skuId).map((r) => {
                     const diff = r.confirmedQty - r.drQty;
                     return (
-                      <tr key={r.skuId}>
+                      <tr key={r.rowId}>
                         <td className="px-3 py-2 font-medium">{r.skuName}</td>
                         <td className="px-3 py-2 text-center">{r.drQty}</td>
                         <td className="px-3 py-2 text-center">{r.confirmedQty}</td>

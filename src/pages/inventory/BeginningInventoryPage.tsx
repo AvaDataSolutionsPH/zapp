@@ -252,13 +252,19 @@ export default function BeginningInventoryPage() {
     setConfirmedRows((prev) => prev.filter((r) => r.rowId !== rowId));
   };
 
-  // SKUs available to add manually (exclude ones already listed).
-  const availableSkuOptions: SelectOption[] = [
-    { value: '', label: 'Select SKU…' },
-    ...skus
-      .filter((s) => !confirmedRows.some((r) => r.skuId === s.id))
-      .map((s) => ({ value: s.id, label: s.name })),
-  ];
+  // SKU options for a manual row's dropdown: every SKU except ones already
+  // used by OTHER rows (the row's own pick stays selectable/visible).
+  const skuOptionsForRow = (rowId: string): SelectOption[] => {
+    const usedElsewhere = new Set(
+      confirmedRows.filter((r) => r.rowId !== rowId && r.skuId).map((r) => r.skuId),
+    );
+    return [
+      { value: '', label: 'Select SKU…' },
+      ...skus
+        .filter((s) => !usedElsewhere.has(s.id))
+        .map((s) => ({ value: s.id, label: s.name })),
+    ];
+  };
 
   // Submit
   const handleSubmit = async () => {
@@ -578,7 +584,7 @@ export default function BeginningInventoryPage() {
                       <td className="px-3 py-2 font-medium text-gray-900">
                         {row.isManual ? (
                           <Select
-                            options={availableSkuOptions}
+                            options={skuOptionsForRow(row.rowId)}
                             value={row.skuId}
                             onChange={(e) => updateRow(row.rowId, 'skuId', e.target.value)}
                           />

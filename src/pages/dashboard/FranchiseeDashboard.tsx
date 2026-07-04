@@ -206,21 +206,20 @@ export function FranchiseeDashboard() {
                   className="flex items-center justify-between p-3 border border-gray-100 rounded-lg"
                 >
                   <div>
-                    <p className="text-sm font-medium text-gray-900">
-                      {storeMap.get(d.storeId) ?? d.storeId}
+                    <p className="font-mono text-sm font-medium text-gray-900">
+                      {d.drNumber}
                     </p>
                     <p className="text-xs text-gray-500">
-                      {d.drNumber} &middot;{' '}
                       {new Date(d.date).toLocaleDateString('en-PH', {
                         month: 'short',
                         day: 'numeric',
+                        year: 'numeric',
                       })}
+                      {' · '}
+                      {storeMap.get(d.storeId) ?? d.storeId}
                     </p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold">P{d.totalDRCost.toLocaleString()}</p>
-                    <StatusBadge category="delivery" status={d.status} size="sm" />
-                  </div>
+                  <StatusBadge category="delivery" status={d.status} size="sm" />
                 </div>
               ))
             )}
@@ -288,28 +287,9 @@ export function FranchiseeDashboard() {
               </div>
             </div>
 
-            {/* DR-Based Zapp Billing */}
-            <div className="bg-orange-50 border border-orange-100 rounded-lg p-4">
-              <p className="text-xs text-gray-500 mb-2 font-medium">ZAPP BILLING (DR-BASED) - REFERENCE</p>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Total DR Sales</span>
-                  <span className="font-semibold">{fmt(financialSummary.totalDR)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Unsold Deduction</span>
-                  <span className="font-semibold text-red-600">-{fmt(financialSummary.totalUnsoldDeduction)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Packaging Charges</span>
-                  <span className="font-semibold text-blue-600">+{fmt(financialSummary.totalPackaging)}</span>
-                </div>
-                <div className="border-t border-orange-200 pt-2 flex justify-between">
-                  <span className="text-sm font-bold text-gray-900">Zapp Billing Total</span>
-                  <span className="text-sm font-bold text-zapp-orange">{fmt(financialSummary.totalPayable)}</span>
-                </div>
-              </div>
-            </div>
+            {/* ZAPP BILLING (DR-BASED) is intentionally hidden from
+                franchisees — only distributor / billing / ops supervisor /
+                area supervisor see the DR-based reference breakdown. */}
 
             <div className="flex justify-between items-center pt-2">
               <span className="text-sm text-gray-500">Franchisee Profit (15% of SRP)</span>

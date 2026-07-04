@@ -731,11 +731,11 @@ export default function ApplicationPage() {
                       </span>
                     </li>
                   </ol>
-                  {/* Optional example image — drop `store-photo-example.jpg` into
-                      /public/apply to show it; hidden gracefully if absent.
-                      See public/apply/README.txt. */}
+                  {/* Optional example image — `public/apply/example-photo.png`.
+                      Hidden gracefully if the file is absent. See
+                      public/apply/README.txt. */}
                   <img
-                    src="/apply/store-photo-example.jpg"
+                    src="/apply/example-photo.png"
                     alt="Halimbawa ng tamang store photo"
                     onError={(e) => {
                       e.currentTarget.style.display = 'none';

@@ -6,12 +6,12 @@ Ilagay dito ang example na larawan ng tindahan na ipapakita sa
 
 EKSAKTONG PANGALAN NG FILE (kailangan tugma):
 
-    store-photo-example.jpg
+    example-photo.png
 
 - Ilagay lang ang image file sa folder na ito (public/apply/).
-- Kahit PNG ang totoong format, i-save/rename mo pa rin as
-  "store-photo-example.jpg" — gagana pa rin ito sa browser.
+- Kung papalitan ang file, panatilihin ang pangalang "example-photo.png"
+  o i-update ang <img src> sa ApplicationPage.tsx.
 - Automatic itong lalabas sa panel kapag na-deploy. Kung walang file,
   naka-hide lang ang slot (walang masisira).
 
-Path na binabasa ng app:  /apply/store-photo-example.jpg
+Path na binabasa ng app:  /apply/example-photo.png

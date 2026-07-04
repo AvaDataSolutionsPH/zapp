@@ -3,6 +3,7 @@ import {
   Truck,
   CheckCircle2,
   ClipboardList,
+  ImageOff,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '@/store/useStore';
@@ -14,8 +15,34 @@ import {
   ConfirmDialog,
 } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
+import { useStorageUrl } from '@/lib/useStorageUrl';
 import type { TableColumn } from '@/components/ui';
 import type { Delivery, DeliveryItem } from '@/types';
+
+// View-only thumbnail for a stored photo ref (private-bucket refs are
+// re-signed on render via useStorageUrl). Kept as its own component so the
+// hook runs once per image instead of inside a bare .map(). Clicking opens
+// the full-size image in a new tab so franchisees can inspect the slip.
+function StoragePhoto({ imageRef, alt }: { imageRef: string; alt: string }) {
+  const url = useStorageUrl(imageRef);
+  return (
+    <a
+      href={url ?? undefined}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="block aspect-square rounded-lg border border-gray-200 overflow-hidden bg-gray-50"
+      title={alt}
+    >
+      {url ? (
+        <img src={url} alt={alt} className="w-full h-full object-cover" loading="lazy" />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center text-gray-300">
+          <ImageOff size={20} />
+        </div>
+      )}
+    </a>
+  );
+}
 
 interface DeliveryDetailDrawerProps {
   delivery: Delivery | null;
@@ -24,7 +51,7 @@ interface DeliveryDetailDrawerProps {
 
 export default function DeliveryDetailDrawer({ delivery, onClose }: DeliveryDetailDrawerProps) {
   const navigate = useNavigate();
-  const { stores, plants, updateDelivery } = useStore();
+  const { stores, plants, updateDelivery, beginningInventories, endingInventories } = useStore();
   const { addToast } = useToast();
   const [showMarkDelivered, setShowMarkDelivered] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
@@ -35,6 +62,17 @@ export default function DeliveryDetailDrawer({ delivery, onClose }: DeliveryDeta
 
   const store = stores.find((s) => s.id === delivery.storeId);
   const plant = plants.find((p) => p.id === delivery.plantId);
+
+  // Evidence photos captured during inventory for this delivery (view-only
+  // recall for franchisees). DR slip + crate photos live on the Beginning
+  // Inventory; the Ending Inventory adds its own crate photos.
+  const beginningInv = beginningInventories.find((bi) => bi.deliveryId === delivery.id);
+  const endingInv = endingInventories.find((ei) => ei.deliveryId === delivery.id);
+  const drSlipRef = beginningInv?.drImageUrl;
+  const beginningCratePhotos = beginningInv?.crateImageUrls ?? [];
+  const endingCratePhotos = endingInv?.crateImageUrls ?? [];
+  const hasPhotos =
+    !!drSlipRef || beginningCratePhotos.length > 0 || endingCratePhotos.length > 0;
 
   const handleMarkDelivered = async () => {
     setActionLoading(true);
@@ -165,6 +203,48 @@ export default function DeliveryDetailDrawer({ delivery, onClose }: DeliveryDeta
               </span>
             </div>
           </div>
+
+          {/* Delivery Photos (view-only evidence recall) */}
+          {hasPhotos && (
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">Delivery Photos</h3>
+
+              {drSlipRef && (
+                <div className="mb-4">
+                  <p className="text-xs font-medium text-gray-500 mb-2">DR Slip</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <StoragePhoto imageRef={drSlipRef} alt="DR slip" />
+                  </div>
+                </div>
+              )}
+
+              {beginningCratePhotos.length > 0 && (
+                <div className="mb-4">
+                  <p className="text-xs font-medium text-gray-500 mb-2">
+                    Beginning Crate Photos ({beginningCratePhotos.length})
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {beginningCratePhotos.map((ref, i) => (
+                      <StoragePhoto key={`bi-${i}`} imageRef={ref} alt={`Beginning crate photo ${i + 1}`} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {endingCratePhotos.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-gray-500 mb-2">
+                    Ending Crate Photos ({endingCratePhotos.length})
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {endingCratePhotos.map((ref, i) => (
+                      <StoragePhoto key={`ei-${i}`} imageRef={ref} alt={`Ending crate photo ${i + 1}`} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Timeline */}
           <div>

@@ -26,6 +26,25 @@ import DeliveryDetailDrawer from './DeliveryDetailDrawer';
 
 const PAGE_SIZE = 10;
 
+// YYYY-MM-DD for `n` days before today (local time) — used by the
+// "Last 7 / 30 days" delivery date presets. Delivery.date is stored as a
+// plain YYYY-MM-DD string, so we compare lexicographically against this.
+const daysAgoISO = (n: number): string => {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+const datePresetChips: { key: 'all' | '7d' | '30d' | 'custom'; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: '7d', label: 'Last 7 days' },
+  { key: '30d', label: 'Last 30 days' },
+  { key: 'custom', label: 'Custom' },
+];
+
 // Roles allowed to create a delivery (plant dispatch + ops/owner + PD).
 const canCreateDelivery = (role?: string) =>
   role === 'plant_manager' ||
@@ -115,8 +134,7 @@ export default function DeliveriesPage() {
   }, [canViewEnforcement, stores, billingRecords]);
 
   const [activeTab, setActiveTab] = useState('all');
-  const [plantFilter, setPlantFilter] = useState('');
-  const [storeFilter, setStoreFilter] = useState('');
+  const [datePreset, setDatePreset] = useState<'all' | '7d' | '30d' | 'custom'>('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
@@ -219,16 +237,33 @@ export default function DeliveriesPage() {
   const storeName = (id: string) => stores.find((s) => s.id === id)?.name ?? '-';
   const plantName = (id: string) => plants.find((p) => p.id === id)?.name ?? '-';
 
+  // Preset chips drive dateFrom/dateTo. "Custom" reveals the manual inputs
+  // and keeps whatever range is currently set; the others compute a rolling
+  // window ending today (open-ended "to").
+  const applyDatePreset = (preset: 'all' | '7d' | '30d' | 'custom') => {
+    setDatePreset(preset);
+    setPage(1);
+    if (preset === 'all') {
+      setDateFrom('');
+      setDateTo('');
+    } else if (preset === '7d') {
+      setDateFrom(daysAgoISO(7));
+      setDateTo('');
+    } else if (preset === '30d') {
+      setDateFrom(daysAgoISO(30));
+      setDateTo('');
+    }
+    // 'custom' → leave dateFrom/dateTo as-is, show inputs
+  };
+
   const filtered = useMemo(() => {
     let result = [...allDeliveries];
     if (activeTab !== 'all') result = result.filter((d) => d.status === activeTab);
-    if (plantFilter) result = result.filter((d) => d.plantId === plantFilter);
-    if (storeFilter) result = result.filter((d) => d.storeId === storeFilter);
     if (dateFrom) result = result.filter((d) => d.date >= dateFrom);
     if (dateTo) result = result.filter((d) => d.date <= dateTo);
     result.sort((a, b) => b.date.localeCompare(a.date));
     return result;
-  }, [allDeliveries, activeTab, plantFilter, storeFilter, dateFrom, dateTo]);
+  }, [allDeliveries, activeTab, dateFrom, dateTo]);
 
   const paged = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
@@ -242,16 +277,6 @@ export default function DeliveriesPage() {
     in_transit: allDeliveries.filter((d) => d.status === 'in_transit').length,
     delivered: allDeliveries.filter((d) => d.status === 'delivered').length,
   }), [allDeliveries]);
-
-  const plantOptions: SelectOption[] = [
-    { value: '', label: 'All Plants' },
-    ...plants.map((p) => ({ value: p.id, label: p.name })),
-  ];
-
-  const storeOptions: SelectOption[] = [
-    { value: '', label: 'All Stores' },
-    ...stores.map((s) => ({ value: s.id, label: s.name })),
-  ];
 
   const columns: TableColumn<Delivery>[] = [
     {
@@ -414,27 +439,47 @@ export default function DeliveriesPage() {
         activeTab={activeTab}
         onChange={(key) => { setActiveTab(key); setPage(1); }}
       >
-        {/* Filters */}
+        {/* Filters — date only */}
         <Card className="mb-4">
           <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <Select options={plantOptions} value={plantFilter} onChange={(e) => { setPlantFilter(e.target.value); setPage(1); }} />
-              <Select options={storeOptions} value={storeFilter} onChange={(e) => { setStoreFilter(e.target.value); setPage(1); }} />
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
-                className="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-zapp-orange/30 focus:border-zapp-orange"
-                placeholder="From Date"
-              />
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
-                className="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-zapp-orange/30 focus:border-zapp-orange"
-                placeholder="To Date"
-              />
+            <div className="flex flex-wrap items-center gap-2">
+              {datePresetChips.map((chip) => (
+                <button
+                  key={chip.key}
+                  onClick={() => applyDatePreset(chip.key)}
+                  className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors cursor-pointer border ${
+                    datePreset === chip.key
+                      ? 'bg-zapp-orange text-white border-zapp-orange'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  {chip.label}
+                </button>
+              ))}
             </div>
+
+            {datePreset === 'custom' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">From date</label>
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
+                    className="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-zapp-orange/30 focus:border-zapp-orange"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">To date</label>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
+                    className="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-zapp-orange/30 focus:border-zapp-orange"
+                  />
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 

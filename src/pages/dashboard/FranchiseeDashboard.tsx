@@ -25,6 +25,21 @@ import {
   Tooltip,
   CartesianGrid,
 } from 'recharts';
+
+// Turn a billing period key like "2026-03 (8-14)" into a human-readable
+// range like "Mar 8–14, 2026". A BillingRecord is per-cutoff and aggregates
+// multiple deliveries, so there is no single DR number to show here — the
+// franchisee needs the date range + amount, not a delivery reference.
+// Falls back to the raw period string if the format is unexpected.
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function formatBillingPeriod(period: string): string {
+  const m = period.match(/^(\d{4})-(\d{2})\s*\((\d+)-(\d+)\)$/);
+  if (!m) return period;
+  const [, year, month, startDay, endDay] = m;
+  const monthName = MONTHS[Number(month) - 1] ?? month;
+  return `${monthName} ${startDay}–${endDay}, ${year}`;
+}
+
 export function FranchiseeDashboard() {
   const [loading, setLoading] = useState(true);
 
@@ -247,7 +262,7 @@ export function FranchiseeDashboard() {
                     className="flex items-center justify-between p-3 border border-gray-100 rounded-lg"
                   >
                     <div>
-                      <p className="text-sm font-medium text-gray-900">{b.period}</p>
+                      <p className="text-sm font-medium text-gray-900">{formatBillingPeriod(b.period)}</p>
                       <p className="text-xs text-gray-500">
                         {storeMap.get(b.storeId) ?? b.storeId}
                       </p>

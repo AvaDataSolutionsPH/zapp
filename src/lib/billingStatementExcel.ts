@@ -94,19 +94,23 @@ export async function buildStatementWorkbook(p: StatementExportParams): Promise<
     cell.font = { bold, size };
     cell.alignment = { horizontal: 'center', vertical: 'middle' };
   });
-  // Give the letterhead band enough height for the (square) logo to sit in
-  // the top-left without spilling into the customer block (row 5).
+  // A tall letterhead band (rows 1–7) so a big website-sized logo fits on the
+  // left without spilling into the customer block (now at row 8). Rows 4–7 are
+  // empty spacers that just give the logo vertical room.
   ws.getRow(1).height = 24;
-  ws.getRow(2).height = 20;
+  ws.getRow(2).height = 16;
   ws.getRow(3).height = 20;
-  ws.getRow(4).height = 18;
+  ws.getRow(4).height = 16;
+  ws.getRow(5).height = 16;
+  ws.getRow(6).height = 16;
+  ws.getRow(7).height = 14;
 
   if (p.logoBuffer) {
     try {
       const imgId = wb.addImage({ buffer: p.logoBuffer as ArrayBuffer, extension: 'png' });
-      // The logo is a 500×500 SQUARE — keep the extent square (equal w/h) so it
-      // is NOT distorted, and anchor it top-left over the letterhead band.
-      ws.addImage(imgId, { tl: { col: 0.15, row: 0.15 }, ext: { width: 76, height: 76 } } as never);
+      // The logo is a 500×500 SQUARE — keep the extent square (no distortion)
+      // and sized like the website (~big), anchored top-left over rows 1–7.
+      ws.addImage(imgId, { tl: { col: 0.2, row: 0.2 }, ext: { width: 116, height: 116 } } as never);
     } catch {
       /* logo is best-effort */
     }
@@ -120,7 +124,7 @@ export async function buildStatementWorkbook(p: StatementExportParams): Promise<
     ['Address:', p.address],
   ];
   cust.forEach((pair, i) => {
-    const r = 5 + i;
+    const r = 8 + i;
     const label = ws.getCell(r, 1);
     label.value = pair[0];
     label.font = { bold: true, size: 10 };
@@ -139,7 +143,7 @@ export async function buildStatementWorkbook(p: StatementExportParams): Promise<
     ['Total Statement (Vat Inc.)', p.totalStatement, true],
   ];
   acct.forEach((row, i) => {
-    const r = 5 + i;
+    const r = 8 + i;
     ws.mergeCells(r, 7, r, 9); // G:I label
     const lab = ws.getCell(r, 7);
     lab.value = row[0];
@@ -164,7 +168,8 @@ export async function buildStatementWorkbook(p: StatementExportParams): Promise<
   });
 
   // ── Line-item table ────────────────────────────────────────
-  let r = 12;
+  // Starts below the customer block (rows 8–11) + account box (rows 8–13).
+  let r = 15;
   const headerRow = ws.getRow(r);
   TABLE_HEADERS.forEach((h, i) => {
     const cell = headerRow.getCell(i + 1);

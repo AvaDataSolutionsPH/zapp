@@ -255,8 +255,15 @@ export async function exportBillingStatementXlsx(
   const a = document.createElement('a');
   a.href = url;
   a.download = params.fileName;
+  a.rel = 'noopener';
+  a.style.display = 'none';
   document.body.appendChild(a);
   a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  // Defer cleanup so the browser finishes initiating the download (and picks
+  // up the `download` filename) before the object URL is revoked. Revoking it
+  // synchronously can make some browsers fall back to a generic blob-id name.
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 2000);
 }

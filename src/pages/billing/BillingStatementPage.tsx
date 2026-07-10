@@ -266,13 +266,13 @@ export default function BillingStatementPage() {
         <div className="bstmt-page bstmt-doc mx-auto my-6 max-w-[1100px] bg-white shadow p-8">
           {/* Letterhead */}
           <div className="flex items-center gap-4">
-            <img src="/zapp-logo.png" alt="ZAPP Donuts" className="h-24 w-auto object-contain shrink-0" />
+            <img src="/zapp-logo.png" alt="ZAPP Donuts" className="h-36 w-auto object-contain shrink-0" />
             <div className="flex-1 text-center">
               <div className="text-lg font-bold tracking-wide">{COMPANY_NAME}</div>
               <div className="text-[11px] leading-tight">{COMPANY_ADDRESS}</div>
               <div className="text-base font-bold mt-1">BILLING SUMMARY</div>
             </div>
-            <div className="w-28 shrink-0" />
+            <div className="w-44 shrink-0" />
           </div>
 
           {/* Customer + Account Summary */}

@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Receipt,
   DollarSign,
@@ -10,6 +11,7 @@ import {
   Clock,
   CheckCircle,
   CreditCard,
+  FileText,
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import {
@@ -113,8 +115,15 @@ export default function BillingPage() {
     packagingOrders,
   } = useStore();
   const { addToast } = useToast();
+  const navigate = useNavigate();
 
   const allBilling = getBillingForCurrentUser();
+
+  // The consolidated printable statement is a billing-back-office tool.
+  const canGenerateStatement =
+    currentUser?.role === 'billing_user' ||
+    currentUser?.role === 'owner' ||
+    currentUser?.role === 'operations_manager';
 
   // Franchisees get a simplified, sales-focused billing view (no DR/packaging
   // internals — those are distributor/billing concerns). Per boss: DR number,
@@ -476,6 +485,16 @@ export default function BillingPage() {
               onChange={(e) => { setPlantFilter(e.target.value); setPage(1); }}
               className="w-48"
             />
+          )}
+          {canGenerateStatement && (
+            <Button
+              variant="outline"
+              size="sm"
+              iconLeft={<FileText size={14} />}
+              onClick={() => navigate('/billing/statement')}
+            >
+              Billing Statement
+            </Button>
           )}
           <Button
             variant="outline"

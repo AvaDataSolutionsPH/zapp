@@ -46,6 +46,7 @@ import InventoryReviewsPage from '@/pages/inventory/InventoryReviewsPage'
 
 // Billing & Payments
 import BillingPage from '@/pages/billing/BillingPage'
+import BillingStatementPage from '@/pages/billing/BillingStatementPage'
 import PaymentsPage from '@/pages/payments/PaymentsPage'
 
 // Packaging
@@ -108,6 +109,17 @@ function App() {
 
       {/* Auth */}
       <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" /> : <LoginPage />} />
+
+      {/* Billing statement — standalone printable page (outside the dashboard
+          Layout for a clean Print → PDF), gated to billing roles. */}
+      <Route
+        path="/billing/statement"
+        element={
+          <ProtectedRoute allowedRoles={['billing_user', 'owner', 'operations_manager']}>
+            <BillingStatementPage />
+          </ProtectedRoute>
+        }
+      />
 
       {/* Protected ERP routes */}
       <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>

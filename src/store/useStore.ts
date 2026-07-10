@@ -422,9 +422,23 @@ export const useStore = create<AppStore>((set, get) => {
   },
 
   updateStore: (id: string, updates: Partial<Store>) => {
+    const prev = get().stores.find((st) => st.id === id);
+    if (!prev) return;
+    const updated: Store = { ...prev, ...updates };
+    // Optimistic in-memory update…
     set((s) => ({
-      stores: s.stores.map((st) => (st.id === id ? { ...st, ...updates } : st)),
+      stores: s.stores.map((st) => (st.id === id ? updated : st)),
     }));
+    // …then persist (background) and roll back on failure. Previously this
+    // action was in-memory ONLY, so edits (e.g. the New Franchisee shop code)
+    // silently vanished on the next hydrate from Supabase.
+    if (get().dataSource !== 'db') return;
+    void updateStoreDB(updated).catch((err) => {
+      console.error('[useStore] updateStore DB write failed, rolling back:', err);
+      set((s) => ({
+        stores: s.stores.map((st) => (st.id === id ? prev : st)),
+      }));
+    });
   },
 
   // ─── Delivery Enforcement ─────────────────────────────────────

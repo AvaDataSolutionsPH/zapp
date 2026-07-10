@@ -94,14 +94,19 @@ export async function buildStatementWorkbook(p: StatementExportParams): Promise<
     cell.font = { bold, size };
     cell.alignment = { horizontal: 'center', vertical: 'middle' };
   });
-  ws.getRow(1).height = 22;
-  ws.getRow(3).height = 18;
+  // Give the letterhead band enough height for the (square) logo to sit in
+  // the top-left without spilling into the customer block (row 5).
+  ws.getRow(1).height = 24;
+  ws.getRow(2).height = 20;
+  ws.getRow(3).height = 20;
+  ws.getRow(4).height = 18;
 
   if (p.logoBuffer) {
     try {
       const imgId = wb.addImage({ buffer: p.logoBuffer as ArrayBuffer, extension: 'png' });
-      // Anchor top-left, overlaying the left of the merged title band.
-      ws.addImage(imgId, { tl: { col: 0.1, row: 0.1 }, ext: { width: 150, height: 78 } } as never);
+      // The logo is a 500×500 SQUARE — keep the extent square (equal w/h) so it
+      // is NOT distorted, and anchor it top-left over the letterhead band.
+      ws.addImage(imgId, { tl: { col: 0.15, row: 0.15 }, ext: { width: 76, height: 76 } } as never);
     } catch {
       /* logo is best-effort */
     }

@@ -131,6 +131,9 @@ export default function BillingPage() {
   const isFranchisee =
     currentUser?.role === 'franchisee_distributor' ||
     currentUser?.role === 'franchisee_direct';
+  // SRP-based remittance (85%/15%) is a partner-distributor / franchisee matter —
+  // the billing user handles DR-based billing, so hide that banner for them.
+  const isBillingUser = currentUser?.role === 'billing_user';
 
   const [plantFilter, setPlantFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -508,30 +511,35 @@ export default function BillingPage() {
         </div>
       </div>
 
-      {/* Formula Banners — franchisees only see the SRP/profit split (DR-based
-          billing internals are a distributor/billing concern). */}
-      <div className={`grid grid-cols-1 gap-3 ${isFranchisee ? '' : 'lg:grid-cols-2'}`}>
-        {!isFranchisee && (
-          <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 flex items-center gap-3">
-            <Receipt size={18} className="text-zapp-orange shrink-0" />
-            <div>
-              <p className="text-xs text-gray-500 font-semibold uppercase">Zapp Billing (DR-Based)</p>
-              <p className="text-sm text-zapp-brown font-medium">
-                <span className="font-mono font-bold">Total Payable = (DR Total - Unsold Deduction) + Packaging</span>
-              </p>
+      {/* Formula Banners — DR-based shown to everyone except franchisees;
+          SRP-based (store remittance) shown to everyone except the billing user
+          (that split is a partner-distributor / franchisee concern). */}
+      {(!isFranchisee || !isBillingUser) && (
+        <div className={`grid grid-cols-1 gap-3 ${!isFranchisee && !isBillingUser ? 'lg:grid-cols-2' : ''}`}>
+          {!isFranchisee && (
+            <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 flex items-center gap-3">
+              <Receipt size={18} className="text-zapp-orange shrink-0" />
+              <div>
+                <p className="text-xs text-gray-500 font-semibold uppercase">Zapp Billing (DR-Based)</p>
+                <p className="text-sm text-zapp-brown font-medium">
+                  <span className="font-mono font-bold">Total Payable = (DR Total - Unsold Deduction) + Packaging</span>
+                </p>
+              </div>
             </div>
-          </div>
-        )}
-        <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3 flex items-center gap-3">
-          <DollarSign size={18} className="text-indigo-600 shrink-0" />
-          <div>
-            <p className="text-xs text-gray-500 font-semibold uppercase">Store Remittance (SRP-Based)</p>
-            <p className="text-sm text-indigo-800 font-medium">
-              <span className="font-mono font-bold">Remit to Distributor = 85% of SRP Sales | Franchisee Profit = 15% of SRP Sales</span>
-            </p>
-          </div>
+          )}
+          {!isBillingUser && (
+            <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3 flex items-center gap-3">
+              <DollarSign size={18} className="text-indigo-600 shrink-0" />
+              <div>
+                <p className="text-xs text-gray-500 font-semibold uppercase">Store Remittance (SRP-Based)</p>
+                <p className="text-sm text-indigo-800 font-medium">
+                  <span className="font-mono font-bold">Remit to Distributor = 85% of SRP Sales | Franchisee Profit = 15% of SRP Sales</span>
+                </p>
+              </div>
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
       {/* KPI Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">

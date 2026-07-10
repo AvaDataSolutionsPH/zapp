@@ -25,11 +25,12 @@ Applications queue.
 Removed docs still have NOT NULL columns → `handleSubmit` persists `govIdUrl: ''`
 and `proofOfBillingUrl: ''`.
 
-> **Shop Code (Mister Donut store code) — NOT captured here yet.** A shop-code
-> field was briefly added then removed: boss will supply the code **later**, not
-> at application time. No `shop_code` column exists. When it returns, capture it
-> on this step + persist to `Application`/`Store` (+ a migration) and carry it to
-> the store on approval.
+> **Shop Code (Mister Donut store code) — NOT captured here.** Deliberately not on
+> the public /apply form. MD supplies the code **after approval**, so it's assigned
+> via the admin **"New Franchisee"** form on the Franchisees page
+> (`src/pages/entities/FranchiseesPage.tsx` → pick an approved franchisee → enter
+> shop code → `updateStore`). Persisted to `Store.shopCode` / `stores.shop_code`
+> (migration `009_store_shop_code.sql`). `Application` has NO shop code.
 
 ## Location cascade (PSGC API)
 Province/City/Barangay come from `src/services/phLocations.ts` (the free,

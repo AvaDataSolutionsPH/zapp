@@ -227,6 +227,7 @@ const mapStore = (s: typeof stores[number]) => ({
   address: s.address,
   lat: s.lat,
   lng: s.lng,
+  shop_code: s.shopCode ?? null,
   plant_id: s.plantId,
   distributor_id: s.distributorId ?? null,
   sub_partner_distributor_id: s.subPartnerDistributorId ?? null,

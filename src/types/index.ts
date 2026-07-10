@@ -130,6 +130,9 @@ export interface Store {
   address: string;
   lat: number;
   lng: number;
+  // Mister Donut shop code — assigned AFTER approval via the "New Franchisee"
+  // admin form (not captured on the public /apply). Optional for back-compat.
+  shopCode?: string;
   plantId: string;
   distributorId?: string;
   subPartnerDistributorId?: string;

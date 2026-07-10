@@ -1216,14 +1216,16 @@ export const useStore = create<AppStore>((set, get) => {
     const { currentUser, stores } = get();
     if (!currentUser) return [];
 
+    // Billing is a company-wide back-office function (it invoices every
+    // distributor/store), so billing_user reads all stores — not plant-scoped.
     switch (currentUser.role) {
       case 'owner':
       case 'operations_manager':
+      case 'billing_user':
         return stores;
 
       case 'plant_manager':
       case 'forecaster':
-      case 'billing_user':
         return stores.filter((s) => s.plantId === currentUser.plantId);
 
       case 'partner_distributor':
@@ -1259,11 +1261,11 @@ export const useStore = create<AppStore>((set, get) => {
     switch (currentUser.role) {
       case 'owner':
       case 'operations_manager':
+      case 'billing_user': // company-wide billing — see all deliveries
         return deliveries;
 
       case 'plant_manager':
       case 'forecaster':
-      case 'billing_user':
         return deliveries.filter((d) => d.plantId === currentUser.plantId);
 
       case 'partner_distributor':
@@ -1297,10 +1299,10 @@ export const useStore = create<AppStore>((set, get) => {
     switch (currentUser.role) {
       case 'owner':
       case 'operations_manager':
+      case 'billing_user': // company-wide billing — see all billings
         return billingRecords;
 
       case 'plant_manager':
-      case 'billing_user':
         return billingRecords.filter((b) => b.plantId === currentUser.plantId);
 
       case 'partner_distributor':

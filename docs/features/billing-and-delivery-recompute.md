@@ -72,6 +72,31 @@ stub toast — NextPay integration is not wired yet ("coconnect natin kay NextPa
 1 = `warning`, 2+ = `hold`. Manual `requestStopDelivery` / `resumeDelivery`
 persist to `stores.delivery_status` but the next recompute may override.
 
+## Printable Billing Statement (carbon copy)
+`src/pages/billing/BillingStatementPage.tsx` (route `/billing/statement`, standalone
+— outside the dashboard Layout — for a clean Print → PDF; gated to `billing_user` /
+`owner` / `operations_manager`; entry button on `BillingPage`). Replicates the
+UBERDELI CORP. "BILLING SUMMARY" (see `docs/references/billing-statement-format/`):
+**one statement per DISTRIBUTOR (payer) per cutoff period**, rows = that
+distributor's shops' deliveries in the period, grouped by shop with subtotals +
+GRAND TOTAL. Uses `getCutoffEndDate` / `getCutoffRangeForDate` for the period math.
+Placeholders where data is missing: Shop Code (MD codes not captured yet),
+Payer Code = distributor id, Tin/Address = "—", Returns / Delivery Adjustment /
+Merch. Allowance = 0.000 (Net = DR Amount).
+
+## billing_user reads ALL (company-wide billing)
+The billing user invoices every distributor/store, so it must **read all**
+billing-relevant tables — it is NOT plant-scoped. 003 had scoped it to its plant
+via `app_store_scope()`, but the seeded billing user has no plant → it saw ZERO
+stores/deliveries/EIs (Billing page + statement were empty). Fixed on two layers:
+- **Client:** `getStoresForCurrentUser` / `getDeliveriesForCurrentUser` /
+  `getBillingForCurrentUser` now return all for `billing_user` (like owner/ops).
+- **RLS:** `008_billing_user_read_all.sql` adds `OR app_role() = 'billing_user'` to
+  the SELECT policies of stores / deliveries / beginning_inventories /
+  ending_inventories / packaging_orders / special_orders (read-only widening; write
+  scope untouched — mirrors how forecaster already reads all forecasts). **Run 008
+  in Supabase**, else billing_user still reads nothing from the DB.
+
 ## Gotchas
 - **`updateBillingRecord` is in-memory only** — no DB table, so it's recomputed
   away on the next cascade. (This is why the "Upload Billing File" button is a

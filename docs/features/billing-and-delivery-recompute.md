@@ -84,6 +84,14 @@ Placeholders where data is missing: Shop Code (MD codes not captured yet),
 Payer Code = distributor id, Tin/Address = "—", Returns / Delivery Adjustment /
 Merch. Allowance = 0.000 (Net = DR Amount).
 
+**Export to Excel (.xlsx):** the statement toolbar has an "Export to Excel" button →
+`src/lib/billingStatementExcel.ts` (`exportBillingStatementXlsx`) builds a formatted
+**exceljs** workbook that mirrors the on-screen layout — merged letterhead + embedded
+ZAPP logo, customer block, bordered account-summary box, the per-shop line-item table
+with subtotals, GRAND TOTAL, END OF STATEMENT; amounts are real numbers with a
+`#,##0.000` format. `buildStatementWorkbook` is pure (node-testable); exceljs is
+**dynamically imported** so it code-splits out of the main bundle.
+
 ## billing_user reads ALL (company-wide billing)
 The billing user invoices every distributor/store, so it must **read all**
 billing-relevant tables — it is NOT plant-scoped. 003 had scoped it to its plant

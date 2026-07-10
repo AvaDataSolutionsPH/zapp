@@ -21,7 +21,7 @@
 
 import { Fragment, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Printer } from 'lucide-react';
+import { ArrowLeft, Printer, FileSpreadsheet } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { Select } from '@/components/ui';
 import type { SelectOption } from '@/components/ui';
@@ -31,6 +31,7 @@ import {
   getCutoffEndDate,
   type CutoffRange,
 } from '@/lib/billingComputations';
+import { exportBillingStatementXlsx } from '@/lib/billingStatementExcel';
 
 // Fixed corporate letterhead (matches the reference statement).
 const COMPANY_NAME = 'UBERDELI CORP.';
@@ -193,6 +194,48 @@ export default function BillingStatementPage() {
 
   const hasStatement = !!distributorId && !!periodKey && groups.length > 0;
 
+  const [exporting, setExporting] = useState(false);
+  const handleExportExcel = async () => {
+    if (!hasStatement) return;
+    setExporting(true);
+    try {
+      const safe = (s: string) => s.replace(/[^\w.-]+/g, '_');
+      await exportBillingStatementXlsx({
+        companyName: COMPANY_NAME,
+        companyAddress: COMPANY_ADDRESS,
+        customerName: distributor?.contactPerson || distributor?.name || '—',
+        payerCode: distributor?.id ?? '—',
+        tin: '—',
+        address: '—',
+        statementDate: mmddyyyy(statementDate),
+        dueDate: mmddyyyy(dueDate),
+        currentLabel,
+        refNo: ref,
+        totalStatement: grandNet,
+        groups: groups.map((g) => ({
+          shopName: g.shopName,
+          shopCode: g.shopCode,
+          subtotalDR: g.subtotalDR,
+          subtotalNet: g.subtotalNet,
+          rows: g.rows.map((d) => ({
+            date: mmddyyyy(d.date),
+            poNumber: 'ZAPP',
+            drNumber: d.drNumber,
+            drAmount: d.totalDRCost,
+          })),
+        })),
+        grandDR,
+        grandNet,
+        logoUrl: '/zapp-logo.png',
+        fileName: `Billing-Summary-${safe(distributor?.name ?? 'statement')}-${safe(currentLabel)}.xlsx`,
+      });
+    } catch (err) {
+      console.error('[BillingStatement] Excel export failed:', err);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="bstmt-root min-h-screen bg-gray-100">
       {/* Print + local styles */}
@@ -236,9 +279,16 @@ export default function BillingStatementPage() {
           />
         </div>
         <button
+          onClick={handleExportExcel}
+          disabled={!hasStatement || exporting}
+          className="ml-auto inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <FileSpreadsheet size={16} className="text-green-600" /> {exporting ? 'Exporting…' : 'Export to Excel'}
+        </button>
+        <button
           onClick={() => window.print()}
           disabled={!hasStatement}
-          className="ml-auto inline-flex items-center gap-2 rounded-lg bg-zapp-orange px-4 py-2 text-sm font-medium text-white hover:bg-zapp-orange-dark transition-colors cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed"
+          className="inline-flex items-center gap-2 rounded-lg bg-zapp-orange px-4 py-2 text-sm font-medium text-white hover:bg-zapp-orange-dark transition-colors cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Printer size={16} /> Print / Save as PDF
         </button>

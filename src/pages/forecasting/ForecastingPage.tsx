@@ -98,6 +98,7 @@ export default function ForecastingPage() {
   const [editedForecasts, setEditedForecasts] = useState<Record<string, number>>({});
 
   const stores = useStore((s) => s.stores);
+  const getStoresForCurrentUser = useStore((s) => s.getStoresForCurrentUser);
   const plants = useStore((s) => s.plants);
   const skus = useStore((s) => s.skus);
   const forecasts = useStore((s) => s.forecasts);
@@ -107,9 +108,15 @@ export default function ForecastingPage() {
   const currentUser = useStore((s) => s.currentUser);
   const { addToast } = useToast();
 
+  // Scope the store picker to the signed-in user (owner/ops see all; PD/SPD/
+  // franchisee/plant see only theirs) so a forecaster can't pick a store outside
+  // their plant and land on an empty page.
   const activeStores = useMemo(
-    () => stores.filter((s) => s.status === 'active'),
-    [stores],
+    () => getStoresForCurrentUser().filter((s) => s.status === 'active'),
+    // getStoresForCurrentUser is a stable zustand action; recompute when the
+    // underlying stores slice or the signed-in user changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [stores, currentUser],
   );
 
   // Auto-select first store

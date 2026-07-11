@@ -30,6 +30,7 @@ export default function SpecialOrdersPage() {
     skus,
     addSpecialOrder,
     currentUser,
+    getStoresForCurrentUser,
   } = useStore();
   const { addToast } = useToast();
 
@@ -72,9 +73,11 @@ export default function SpecialOrdersPage() {
     [specialOrders],
   );
 
+  // Scope the Store picker to the signed-in user (a franchisee/PD shouldn't be
+  // able to place a special order against a store outside their scope).
   const storeOptions: SelectOption[] = [
     { value: '', label: 'Select Store' },
-    ...stores.map((s) => ({ value: s.id, label: s.name })),
+    ...getStoresForCurrentUser().map((s) => ({ value: s.id, label: s.name })),
   ];
 
   const skuOptions: SelectOption[] = [

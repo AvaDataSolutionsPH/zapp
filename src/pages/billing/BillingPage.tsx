@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   FileSpreadsheet,
   Eye,
-  Upload,
   Download,
   Clock,
   CheckCircle,
@@ -109,7 +108,6 @@ export default function BillingPage() {
     plants,
     currentUser,
     payments,
-    updateBillingRecord,
     deliveries,
     endingInventories,
     specialOrders,
@@ -157,7 +155,6 @@ export default function BillingPage() {
   const [page, setPage] = useState(1);
   const [selectedBilling, setSelectedBilling] = useState<BillingRecord | null>(null);
   const [exporting, setExporting] = useState(false);
-  const [uploadingId, setUploadingId] = useState<string | null>(null);
 
   // Re-render every minute to update due timers
   const [, setTick] = useState(0);
@@ -298,20 +295,6 @@ export default function BillingPage() {
     }
   }, [plantFilter, plants]);
 
-  // Upload handler (simulated)
-  const handleUpload = useCallback(async (billingId: string) => {
-    setUploadingId(billingId);
-    try {
-      // Simulate file selection + upload
-      await billingService.uploadFile(billingId, new File([], 'invoice.pdf'));
-      updateBillingRecord(billingId, { invoiceFileUrl: `/invoices/${billingId}.pdf` });
-    } catch {
-      // Handle error
-    } finally {
-      setUploadingId(null);
-    }
-  }, [updateBillingRecord]);
-
   // Table columns
   const columns: TableColumn<BillingRecord>[] = [
     {
@@ -419,17 +402,6 @@ export default function BillingPage() {
             title="View Details"
           >
             <Eye size={15} />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleUpload(row.id);
-            }}
-            disabled={uploadingId === row.id}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-40"
-            title="Upload Billing File"
-          >
-            <Upload size={15} />
           </button>
         </div>
       ),

@@ -42,6 +42,7 @@ export default function EndingInventoryPage() {
     endingInventories,
     currentUser,
     resubmitEndingInventory,
+    getDeliveriesForCurrentUser,
   } = useStore();
   const { addToast } = useToast();
 
@@ -54,14 +55,20 @@ export default function EndingInventoryPage() {
     [endingInventories],
   );
 
+  // Scope to the signed-in user's deliveries (owner/ops see all; PD/franchisee/
+  // plant see only theirs) so the "Select Delivery" dropdown can't offer a
+  // delivery outside the user's scope.
   const eligibleDeliveries = useMemo(
     () =>
-      deliveries.filter(
+      getDeliveriesForCurrentUser().filter(
         (d) =>
           (d.status === 'delivered' || d.status === 'reconciled') &&
           !endedDeliveryIds.has(d.id),
       ),
-    [deliveries, endedDeliveryIds],
+    // getDeliveriesForCurrentUser is a stable zustand action; recompute when the
+    // deliveries slice, the signed-in user, or the ended set changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [deliveries, currentUser, endedDeliveryIds],
   );
 
   const [selectedDeliveryId, setSelectedDeliveryId] = useState('');

@@ -20,7 +20,7 @@
 //     later.
 
 import { Fragment, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Printer, FileSpreadsheet } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { Select } from '@/components/ui';
@@ -92,9 +92,12 @@ interface ShopGroup {
 
 export default function BillingStatementPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { distributors, stores, deliveries } = useStore();
 
-  const [distributorId, setDistributorId] = useState('');
+  // Preselect the PD when arriving from the Billing list's distributor filter
+  // (?dist=<id>), so "one statement per PD" is one click from the filtered list.
+  const [distributorId, setDistributorId] = useState(() => searchParams.get('dist') ?? '');
   const [periodKey, setPeriodKey] = useState('');
 
   const distributor = distributors.find((d) => d.id === distributorId);

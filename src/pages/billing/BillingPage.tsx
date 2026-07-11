@@ -105,6 +105,7 @@ export default function BillingPage() {
     getBillingForCurrentUser,
     stores,
     distributors,
+    subPartnerDistributors,
     plants,
     currentUser,
     payments,
@@ -135,7 +136,19 @@ export default function BillingPage() {
   // the billing user handles DR-based billing, so hide that banner for them.
   const isBillingUser = currentUser?.role === 'billing_user';
 
+  // Owner / ops / billing_user see every distributor, so they can filter the
+  // billing list by PD (and jump to the consolidated per-PD statement export).
+  const canFilterDistributor =
+    currentUser?.role === 'owner' ||
+    currentUser?.role === 'operations_manager' ||
+    currentUser?.role === 'billing_user';
+  // A partner distributor filters instead by the Sub-Partner (SPD) assigned to a
+  // store, so they can see how much to bill each of their SPDs.
+  const isPartnerDistributor = currentUser?.role === 'partner_distributor';
+
   const [plantFilter, setPlantFilter] = useState('');
+  const [distributorFilter, setDistributorFilter] = useState('');
+  const [spdFilter, setSpdFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [storeSearch, setStoreSearch] = useState('');
   const [cutoffFilter, setCutoffFilter] = useState('');
@@ -167,10 +180,35 @@ export default function BillingPage() {
     ...plants.map((p) => ({ value: p.id, label: p.name })),
   ];
 
+  // PD (distributor) filter — owner/ops/billing_user only. Lets the billing user
+  // pull every store billing under one PD, then export the consolidated statement.
+  const distributorFilterOptions: SelectOption[] = [
+    { value: '', label: 'All Distributors' },
+    ...distributors.map((d) => ({ value: d.id, label: d.name })),
+  ];
+
+  // SPD filter — only the SPDs that belong to the signed-in PD.
+  const spdOptions: SelectOption[] = useMemo(
+    () => [
+      { value: '', label: 'All Sub-Partners' },
+      ...subPartnerDistributors
+        .filter((spd) => spd.parentDistributorId === currentUser?.distributorId)
+        .map((spd) => ({ value: spd.id, label: spd.name })),
+    ],
+    [subPartnerDistributors, currentUser?.distributorId],
+  );
+
   // Filter billing records
   const filtered = useMemo(() => {
     let result = [...allBilling];
     if (plantFilter) result = result.filter((b) => b.plantId === plantFilter);
+    if (distributorFilter) result = result.filter((b) => b.distributorId === distributorFilter);
+    if (spdFilter) {
+      const spdStoreIds = new Set(
+        stores.filter((s) => s.subPartnerDistributorId === spdFilter).map((s) => s.id),
+      );
+      result = result.filter((b) => spdStoreIds.has(b.storeId));
+    }
     if (statusFilter) result = result.filter((b) => b.status === statusFilter);
     if (storeSearch) {
       const q = storeSearch.toLowerCase();
@@ -184,19 +222,20 @@ export default function BillingPage() {
     if (dateTo) result = result.filter((b) => b.issuedAt <= dateTo + 'T23:59:59Z');
     result.sort((a, b) => b.issuedAt.localeCompare(a.issuedAt));
     return result;
-    // storeName is a stable lookup over the closure's `stores` slice;
-    // including it would re-run the memo every render without semantic change.
+    // storeName + the `stores` slice are stable lookups over the closure;
+    // including them would re-run the memo every render without semantic change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allBilling, plantFilter, statusFilter, storeSearch, cutoffFilter, dateFrom, dateTo]);
+  }, [allBilling, plantFilter, distributorFilter, spdFilter, statusFilter, storeSearch, cutoffFilter, dateFrom, dateTo]);
 
   const paged = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
     return filtered.slice(start, start + PAGE_SIZE);
   }, [filtered, page]);
 
-  // KPI stats
+  // KPI stats — reflect the active filters (so a PD sees the running total for
+  // the selected SPD, and the billing user sees the total under the selected PD).
   const stats = useMemo(() => {
-    const source = plantFilter ? allBilling.filter((b) => b.plantId === plantFilter) : allBilling;
+    const source = filtered;
     return {
       totalPayable: source.reduce((s, b) => s + b.totalPayable, 0),
       totalPaid: source.filter((b) => b.status === 'paid').reduce((s, b) => s + b.totalPayable, 0),
@@ -206,7 +245,7 @@ export default function BillingPage() {
       totalSRP: source.reduce((s, b) => s + b.srpTotal, 0),
       totalProfit: source.reduce((s, b) => s + b.franchiseeProfit, 0),
     };
-  }, [allBilling, plantFilter]);
+  }, [filtered]);
 
   // Franchisee view: resolve each billing's contributing DR number(s) + date.
   // A billing aggregates a store's deliveries in one cutoff, so there can be
@@ -494,7 +533,13 @@ export default function BillingPage() {
               variant="outline"
               size="sm"
               iconLeft={<FileText size={14} />}
-              onClick={() => navigate('/billing/statement')}
+              onClick={() =>
+                navigate(
+                  distributorFilter
+                    ? `/billing/statement?dist=${distributorFilter}`
+                    : '/billing/statement',
+                )
+              }
             >
               Billing Statement
             </Button>
@@ -615,7 +660,23 @@ export default function BillingPage() {
       {/* Filters */}
       <Card>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+            {canFilterDistributor && (
+              <Select
+                options={distributorFilterOptions}
+                value={distributorFilter}
+                onChange={(e) => { setDistributorFilter(e.target.value); setPage(1); }}
+                placeholder="Filter by distributor"
+              />
+            )}
+            {isPartnerDistributor && spdOptions.length > 1 && (
+              <Select
+                options={spdOptions}
+                value={spdFilter}
+                onChange={(e) => { setSpdFilter(e.target.value); setPage(1); }}
+                placeholder="Filter by sub-partner"
+              />
+            )}
             <Select
               options={statusOptions}
               value={statusFilter}

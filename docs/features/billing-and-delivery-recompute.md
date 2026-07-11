@@ -67,6 +67,30 @@ stats are hidden. DR number + date are resolved per billing via `getBillingBreak
 deliveries so DR numbers are joined, date = earliest delivery). **Pay Now** is a
 stub toast — NextPay integration is not wired yet ("coconnect natin kay NextPay").
 
+## Billing list filters by PD / SPD (BillingPage.tsx)
+Two role-scoped filters let a PD chain be read top-down:
+- **Distributor (PD) filter** — shown to `owner` / `operations_manager` /
+  `billing_user` (the roles that see every distributor). Narrows the list to one
+  PD's store billings. The **Billing Statement** button then carries the choice
+  through as `/billing/statement?dist=<id>` so the consolidated **one-statement-
+  per-PD** export opens with that PD preselected (see below).
+- **Sub-Partner (SPD) filter** — shown to `partner_distributor` only. Options are
+  the SPDs whose `parentDistributorId` matches the signed-in PD's `distributorId`
+  (`subPartnerDistributors` slice). Selecting one scopes the list to billings whose
+  store's `subPartnerDistributorId` matches — i.e. "how much to bill each SPD".
+  Per boss this is the **full store billings** under the SPD (Total Payable / Remit),
+  not a separate commission column.
+
+The KPI stat cards are computed from the **filtered** set (not just the plant
+filter as before), so the totals double as a running "total under this PD / SPD".
+
+> **Seed-data note:** billings are computed only from **approved EIs** (+ special /
+> packaging orders). In the current seed only `store-01` has an approved EI, and it
+> is *not* an SPD store, so the PD's SPD filter renders **0 rows** until an SPD store
+> (e.g. `store-02` Daraga, `store-04` Tabaco under `spd-01`) gets a billing input.
+> The DR-based **statement** (built from *deliveries*, not billings) already shows
+> those SPD shops. Real production data fills the list view naturally.
+
 ## Delivery-status auto-rule
 `Store.deliveryStatus` is auto-derived: 0 overdue billings = `active`,
 1 = `warning`, 2+ = `hold`. Manual `requestStopDelivery` / `resumeDelivery`
@@ -104,6 +128,16 @@ stores/deliveries/EIs (Billing page + statement were empty). Fixed on two layers
   ending_inventories / packaging_orders / special_orders (read-only widening; write
   scope untouched — mirrors how forecaster already reads all forecasts). **Run 008
   in Supabase**, else billing_user still reads nothing from the DB.
+
+## Billing detail drawer — no fabricated AI logs
+`BillingDetailDrawer.tsx` used to render a hardcoded **"AI Processing Logs"**
+panel (`generateAILogs` — DR OCR Scan / **Crate Count Estimation** / Discrepancy
+Check / Billing Calculation with invented confidence scores). AI crate counting
+was removed post-approval (manual counting only), so that panel referenced a
+feature that no longer exists and showed made-up numbers on real billings — it
+was **deleted entirely** (function, `ConfidenceBadge` helper, `Bot` icon). The
+drawer still shows the real **Source Breakdown** (contributing approved EIs /
+special / packaging orders). Do not re-add simulated AI logs.
 
 ## Gotchas
 - **`updateBillingRecord` is in-memory only** — no DB table, so it's recomputed

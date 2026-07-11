@@ -9,7 +9,6 @@ import {
   Building,
   Truck,
   Factory,
-  Bot,
   Image as ImageIcon,
   X,
   ClipboardCheck,
@@ -27,49 +26,6 @@ import {
 } from '@/components/ui';
 import type { BillingRecord } from '@/types';
 import { getBillingBreakdown } from '@/lib/billingComputations';
-
-// ── AI Log Entry (simulated) ────────────────────────────────────────────
-
-interface AILogEntry {
-  id: string;
-  timestamp: string;
-  action: string;
-  detail: string;
-  confidence: 'high' | 'medium' | 'low';
-}
-
-function generateAILogs(billingId: string): AILogEntry[] {
-  return [
-    {
-      id: `${billingId}-ai-1`,
-      timestamp: '2026-02-28T08:00:00Z',
-      action: 'DR OCR Scan',
-      detail: 'Scanned delivery receipt. Extracted 12 line items with 95% average confidence.',
-      confidence: 'high',
-    },
-    {
-      id: `${billingId}-ai-2`,
-      timestamp: '2026-02-28T08:02:00Z',
-      action: 'Crate Count Estimation',
-      detail: 'Processed 4 crate images. Estimated total units across 8 SKUs.',
-      confidence: 'medium',
-    },
-    {
-      id: `${billingId}-ai-3`,
-      timestamp: '2026-02-28T08:05:00Z',
-      action: 'Discrepancy Check',
-      detail: 'Cross-referenced DR quantities with crate estimates. 1 minor discrepancy flagged for manual review.',
-      confidence: 'medium',
-    },
-    {
-      id: `${billingId}-ai-4`,
-      timestamp: '2026-03-01T06:00:00Z',
-      action: 'Billing Calculation',
-      detail: 'Computed DR total, unsold deductions, and packaging costs. Generated invoice automatically.',
-      confidence: 'high',
-    },
-  ];
-}
 
 // ── Due Timer Component ─────────────────────────────────────────────────
 
@@ -154,17 +110,6 @@ function ImageModal({ url, onClose }: { url: string; onClose: () => void }) {
   );
 }
 
-// ── Confidence Badge ────────────────────────────────────────────────────
-
-function ConfidenceBadge({ level }: { level: 'high' | 'medium' | 'low' }) {
-  const variants = { high: 'success', medium: 'warning', low: 'danger' } as const;
-  return (
-    <Badge variant={variants[level]} size="sm" dot>
-      {level}
-    </Badge>
-  );
-}
-
 // ── Main Component ──────────────────────────────────────────────────────
 
 interface BillingDetailDrawerProps {
@@ -218,11 +163,6 @@ export default function BillingDetailDrawer({ billing, onClose }: BillingDetailD
   const payment = useMemo(
     () => (billing ? payments.find((p) => p.billingId === billing.id) : null),
     [billing, payments],
-  );
-
-  const aiLogs = useMemo(
-    () => (billing ? generateAILogs(billing.id) : []),
-    [billing],
   );
 
   const formatCurrency = (n: number) => `P${n.toLocaleString()}`;
@@ -561,34 +501,6 @@ export default function BillingDetailDrawer({ billing, onClose }: BillingDetailD
             </Card>
           )}
 
-          {/* AI Logs */}
-          <Card>
-            <div className="px-4 py-3 border-b border-gray-100">
-              <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                <Bot size={16} className="text-zapp-orange" />
-                AI Processing Logs
-              </h4>
-            </div>
-            <CardContent>
-              <div className="space-y-3">
-                {aiLogs.map((log) => (
-                  <div key={log.id} className="flex items-start gap-3">
-                    <div className="w-2 h-2 rounded-full bg-zapp-orange mt-2 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-medium text-gray-900">{log.action}</span>
-                        <ConfidenceBadge level={log.confidence} />
-                      </div>
-                      <p className="text-xs text-gray-500 mt-0.5">{log.detail}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        {new Date(log.timestamp).toLocaleString()}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
         </div>
       </Drawer>
 

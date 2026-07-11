@@ -1264,6 +1264,44 @@ export const endingInventories: EndingInventory[] = [
     reviewedAt: '2026-03-06T21:00:00Z',
   },
 
+  // ei-07 (NEW): store-02 (ZAPP Daraga Market — SPD spd-01 under PD dist-01) —
+  // clean approved. Gives the PD's Sub-Partner (SPD) billing filter real data:
+  // this store rolls into bill-store-02-2026-03-1-7 with a populated spdProfit.
+  {
+    id: 'ei-07', deliveryId: 'del-02', storeId: 'store-02', date: '2026-03-01',
+    crateImageUrls: ['/uploads/inventory/ei-07-crate1.jpg'],
+    unsoldItems: [
+      { skuId: 'sku-01', skuName: 'Classic Glazed', quantity: 4, aiEstimate: 4, confidence: 'high' },
+      { skuId: 'sku-06', skuName: 'Cookies & Cream', quantity: 3, aiEstimate: 3, confidence: 'high' },
+      { skuId: 'sku-10', skuName: 'Pandan Cream', quantity: 2, aiEstimate: 2, confidence: 'high' },
+    ],
+    aiResults: [
+      { id: 'air-40', type: 'crate_estimate', skuId: 'sku-01', skuName: 'Classic Glazed', estimatedValue: 4, confidence: 'high' },
+      { id: 'air-41', type: 'crate_estimate', skuId: 'sku-06', skuName: 'Cookies & Cream', estimatedValue: 3, confidence: 'high' },
+      { id: 'air-42', type: 'crate_estimate', skuId: 'sku-10', skuName: 'Pandan Cream', estimatedValue: 2, confidence: 'high' },
+    ],
+    status: 'approved',
+    submittedAt: '2026-03-01T19:45:00Z',
+    originalUnsoldItems: [
+      { skuId: 'sku-01', skuName: 'Classic Glazed', quantity: 4, aiEstimate: 4, confidence: 'high' },
+      { skuId: 'sku-06', skuName: 'Cookies & Cream', quantity: 3, aiEstimate: 3, confidence: 'high' },
+      { skuId: 'sku-10', skuName: 'Pandan Cream', quantity: 2, aiEstimate: 2, confidence: 'high' },
+    ],
+    revisions: [
+      {
+        id: 'eir-07-01', action: 'submitted', performedBy: 'user-07',
+        performedAt: '2026-03-01T19:45:00Z',
+      },
+      {
+        id: 'eir-07-02', action: 'approved', performedBy: 'user-06',
+        performedAt: '2026-03-01T21:30:00Z',
+        comment: 'Daraga crate counts match. Approved.',
+      },
+    ],
+    reviewedBy: 'user-06',
+    reviewedAt: '2026-03-01T21:30:00Z',
+  },
+
   // ei-05 (NEW): store-03 (direct franchise) — in Area Supervisor user-09 (Patricia)'s queue, pending review
   {
     id: 'ei-05', deliveryId: 'del-10', storeId: 'store-03', date: '2026-03-05',

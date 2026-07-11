@@ -583,10 +583,20 @@ export const useStore = create<AppStore>((set, get) => {
         address: updatedApp.address,
         lat: updatedApp.lat,
         lng: updatedApp.lng,
+        // Onboarding fields carried over from the application (undefined for the
+        // public /apply flow, which doesn't collect them).
+        shopCode: updatedApp.shopCode,
         plantId: updatedApp.assignedPlantId,
         distributorId: updatedApp.assignedDistributorId,
+        subPartnerDistributorId: updatedApp.assignedSubPartnerDistributorId,
         areaSupervisorId: resolvedAreaSupId,
-        franchiseType: updatedApp.referralType === 'distributor' ? 'distributor' : 'direct',
+        // Distributor AND sub-partner channels are distributor-type stores (they
+        // sit under a PD); only zapp_internal (direct) is a direct franchise.
+        franchiseType:
+          updatedApp.referralType === 'distributor' ||
+          updatedApp.referralType === 'sub_partner_distributor'
+            ? 'distributor'
+            : 'direct',
         status: 'pending',
         province: '',
         area: '',
@@ -594,6 +604,8 @@ export const useStore = create<AppStore>((set, get) => {
         email: updatedApp.email,
         createdAt: now,
         deliveryStatus: 'active',
+        deliverySchedule: updatedApp.deliverySchedule,
+        openingDate: updatedApp.openingDate,
       };
       updatedStores = [...state.stores, newStore];
     }

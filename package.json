@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "db:seed": "tsx scripts/seed-from-mock.ts"
+    "db:seed": "tsx scripts/seed-from-mock.ts",
+    "db:reset": "tsx scripts/reset-operational.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.2",

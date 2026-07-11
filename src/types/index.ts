@@ -22,7 +22,11 @@ export type StoreStatus = 'active' | 'inactive' | 'pending' | 'blocked';
 
 export type ApplicationStatus = 'pending' | 'approved' | 'declined';
 
-export type ReferralType = 'distributor' | 'zapp_internal';
+export type ReferralType = 'distributor' | 'zapp_internal' | 'sub_partner_distributor';
+
+// Franchisee delivery cadence — deliveries land only on odd- or even-numbered
+// days of the month (set by the PD at onboarding).
+export type DeliverySchedule = 'odd' | 'even';
 
 export type DeliveryStatus = 'scheduled' | 'in_transit' | 'delivered' | 'reconciled';
 
@@ -110,6 +114,8 @@ export interface SubPartnerDistributor {
   plantId: string;
   assignedStoreIds: string[];
   status: DistributorStatus;
+  // Channel code that routes an onboarding application to this SPD.
+  referralCode?: string;
 }
 
 export interface AreaSupervisor {
@@ -145,6 +151,10 @@ export interface Store {
   email: string;
   createdAt: string;
   deliveryStatus: StoreDeliveryStatus;
+  // Onboarding fields carried over from the approved application (optional for
+  // back-compat with existing seeded stores).
+  deliverySchedule?: DeliverySchedule;
+  openingDate?: string;
 }
 
 // --- Applications ---
@@ -172,8 +182,15 @@ export interface Application {
   referralCode: string;
   referralType: ReferralType;
   assignedDistributorId?: string;
+  assignedSubPartnerDistributorId?: string;
   assignedAreaSupervisorId?: string;
   assignedPlantId: string;
+  // Onboarding fields (internal "New Franchisee" application form). Optional so
+  // the public /apply flow — which does not collect them — stays valid.
+  shopCode?: string;
+  deliverySchedule?: DeliverySchedule;
+  openingDate?: string;
+  termsAcceptedAt?: string;
   status: ApplicationStatus;
   submittedAt: string;
   reviewedBy?: string;
@@ -381,6 +398,7 @@ export interface ReferralCode {
   code: string;
   type: ReferralType;
   distributorId?: string;
+  subPartnerDistributorId?: string;
   areaSupervisorId?: string;
   plantId: string;
   status: ReferralCodeStatus;

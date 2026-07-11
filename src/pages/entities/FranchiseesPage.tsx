@@ -33,6 +33,9 @@ export default function FranchiseesPage() {
   // shop code (supplied post-approval). No login is created here.
   const canOnboard =
     currentUser?.role === 'owner' || currentUser?.role === 'operations_manager';
+  // The full onboarding application form is also usable by the PD (they hold the
+  // shop code + encode their own franchisees).
+  const canOnboardApplication = canOnboard || currentUser?.role === 'partner_distributor';
 
   const [showForm, setShowForm] = useState(false);
   const [formStoreId, setFormStoreId] = useState('');
@@ -211,14 +214,24 @@ export default function FranchiseesPage() {
           <h1 className="text-2xl font-bold text-gray-900">Franchisees</h1>
           <p className="text-sm text-gray-500 mt-1">All franchise store accounts with ownership details</p>
         </div>
-        {canOnboard && (
-          <button
-            onClick={() => setShowForm(true)}
-            className="inline-flex items-center gap-2 rounded-lg bg-zapp-orange px-4 py-2 text-sm font-medium text-white hover:bg-zapp-orange-dark transition-colors cursor-pointer border-none"
-          >
-            <Plus size={16} /> New Franchisee
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {canOnboard && (
+            <button
+              onClick={() => setShowForm(true)}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
+            >
+              <Hash size={16} /> Assign Shop Code
+            </button>
+          )}
+          {canOnboardApplication && (
+            <button
+              onClick={() => navigate('/franchisees/new')}
+              className="inline-flex items-center gap-2 rounded-lg bg-zapp-orange px-4 py-2 text-sm font-medium text-white hover:bg-zapp-orange-dark transition-colors cursor-pointer border-none"
+            >
+              <Plus size={16} /> New Franchisee
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

@@ -194,6 +194,7 @@ export const subPartnerDistributors: SubPartnerDistributor[] = [
     plantId: 'plant-01',
     assignedStoreIds: ['store-02', 'store-04'],
     status: 'active',
+    referralCode: 'SPD-MARIEL',
   },
 ];
 
@@ -864,6 +865,9 @@ export const referralCodes: ReferralCode[] = [
   { id: 'ref-18', code: 'ZAPP-BICOL-MAR', type: 'zapp_internal', areaSupervisorId: 'am-01', plantId: 'plant-01', status: 'active', createdAt: '2026-03-01', usageCount: 0 },
   { id: 'ref-19', code: 'MNL-SPRING-2026', type: 'zapp_internal', areaSupervisorId: 'am-04', plantId: 'plant-02', status: 'active', createdAt: '2026-03-01', usageCount: 1 },
   { id: 'ref-20', code: 'CEBU-FIESTA', type: 'zapp_internal', areaSupervisorId: 'am-07', plantId: 'plant-03', status: 'active', createdAt: '2026-01-10', usageCount: 4 },
+  // Sub-Partner (SPD) channel code — routes an onboarding application to spd-01
+  // (under parent PD dist-01). Lets the system tell PD vs SPD vs direct.
+  { id: 'ref-21', code: 'SPD-MARIEL', type: 'sub_partner_distributor', distributorId: 'dist-01', subPartnerDistributorId: 'spd-01', plantId: 'plant-01', status: 'active', createdAt: '2026-03-01', usageCount: 0 },
 ];
 
 // ─── Sales Metrics (35 days across 12 stores) ────────────────

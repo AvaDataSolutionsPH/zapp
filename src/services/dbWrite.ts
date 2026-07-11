@@ -51,6 +51,8 @@ const mapStoreToDB = (s: Store) => ({
   email: s.email,
   created_at: s.createdAt,
   delivery_status: s.deliveryStatus,
+  delivery_schedule: s.deliverySchedule ?? null,
+  opening_date: s.openingDate ?? null,
 });
 
 const mapPackagingOrderToDB = (p: PackagingOrder) => ({
@@ -77,6 +79,7 @@ const mapReferralCodeToDB = (r: ReferralCode) => ({
   code: r.code,
   type: r.type,
   distributor_id: r.distributorId ?? null,
+  sub_partner_distributor_id: r.subPartnerDistributorId ?? null,
   area_supervisor_id: r.areaSupervisorId ?? null,
   plant_id: r.plantId,
   status: r.status,
@@ -187,8 +190,13 @@ const mapApplicationToDB = (a: Application) => ({
   referral_code: a.referralCode,
   referral_type: a.referralType,
   assigned_distributor_id: a.assignedDistributorId ?? null,
+  assigned_sub_partner_distributor_id: a.assignedSubPartnerDistributorId ?? null,
   assigned_area_supervisor_id: a.assignedAreaSupervisorId ?? null,
   assigned_plant_id: a.assignedPlantId,
+  shop_code: a.shopCode ?? null,
+  delivery_schedule: a.deliverySchedule ?? null,
+  opening_date: a.openingDate ?? null,
+  terms_accepted_at: a.termsAcceptedAt ?? null,
   status: a.status,
   submitted_at: a.submittedAt,
   reviewed_by: a.reviewedBy ?? null,

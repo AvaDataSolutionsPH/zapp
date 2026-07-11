@@ -225,8 +225,21 @@ export default function ApplicationDetailPage() {
               <div>
                 <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">Referral Type</dt>
                 <dd className="mt-1">
-                  <Badge variant={application.referralType === 'distributor' ? 'info' : 'orange'} size="sm">
-                    {application.referralType === 'distributor' ? 'Distributor' : 'ZAPP Internal'}
+                  <Badge
+                    variant={
+                      application.referralType === 'distributor'
+                        ? 'info'
+                        : application.referralType === 'sub_partner_distributor'
+                          ? 'success'
+                          : 'orange'
+                    }
+                    size="sm"
+                  >
+                    {application.referralType === 'distributor'
+                      ? 'Distributor'
+                      : application.referralType === 'sub_partner_distributor'
+                        ? 'Sub-Partner Distributor'
+                        : 'ZAPP Internal'}
                   </Badge>
                 </dd>
               </div>

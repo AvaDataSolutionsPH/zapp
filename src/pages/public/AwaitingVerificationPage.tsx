@@ -14,12 +14,15 @@ export default function AwaitingVerificationPage() {
   const pending = useStore((s) => s.pendingApplication);
   const logout = useStore((s) => s.logout);
 
+  const needsInfo = pending?.status === 'needs_more_info';
   const statusLabel =
     pending?.status === 'declined'
       ? 'Not approved'
       : pending?.status === 'approved'
         ? 'Approved — activation in progress'
-        : 'Awaiting verification';
+        : needsInfo
+          ? 'More information needed'
+          : 'Awaiting verification';
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
@@ -56,13 +59,23 @@ export default function AwaitingVerificationPage() {
           </div>
         )}
 
-        <div className="mt-6 space-y-2 rounded-xl border border-blue-100 bg-blue-50 p-4 text-left text-xs text-blue-700">
-          <p className="flex items-start gap-2">
-            <CheckCircle2 size={14} className="mt-0.5 shrink-0" />
-            Aabisuhan ka sa susunod na hakbang kapag na-verify na ang iyong dokumento at
-            impormasyon.
-          </p>
-        </div>
+        {needsInfo && pending?.notes ? (
+          <div className="mt-6 space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-left text-xs text-amber-800">
+            <p className="font-semibold">May kailangan pang impormasyon:</p>
+            <p>{pending.notes}</p>
+            <p className="text-amber-600">
+              Maki-usap sa iyong distributor / admin para maisumite ang hinihinging detalye.
+            </p>
+          </div>
+        ) : (
+          <div className="mt-6 space-y-2 rounded-xl border border-blue-100 bg-blue-50 p-4 text-left text-xs text-blue-700">
+            <p className="flex items-start gap-2">
+              <CheckCircle2 size={14} className="mt-0.5 shrink-0" />
+              Aabisuhan ka sa susunod na hakbang kapag na-verify na ang iyong dokumento at
+              impormasyon.
+            </p>
+          </div>
+        )}
 
         <button
           onClick={() => void logout()}

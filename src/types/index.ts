@@ -20,7 +20,10 @@ export type FranchiseType = 'distributor' | 'direct';
 
 export type StoreStatus = 'active' | 'inactive' | 'pending' | 'blocked';
 
-export type ApplicationStatus = 'pending' | 'approved' | 'declined';
+// 'needs_more_info' = Admin requested additional information during onboarding
+// verification (Partner Onboarding Phase 4). Applicant sees it on the awaiting
+// screen; not terminal.
+export type ApplicationStatus = 'pending' | 'approved' | 'declined' | 'needs_more_info';
 
 export type ReferralType = 'distributor' | 'zapp_internal' | 'sub_partner_distributor';
 

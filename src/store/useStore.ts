@@ -179,7 +179,7 @@ interface AppStore {
   ) => Promise<void>;
   reviewApplication: (
     id: string,
-    action: 'approved' | 'declined',
+    action: 'approved' | 'declined' | 'needs_more_info',
     reviewerId: string,
     notes?: string,
   ) => Promise<void>;
@@ -599,7 +599,7 @@ export const useStore = create<AppStore>((set, get) => {
 
   reviewApplication: async (
     id: string,
-    action: 'approved' | 'declined',
+    action: 'approved' | 'declined' | 'needs_more_info',
     reviewerId: string,
     notes?: string,
   ) => {
@@ -607,9 +607,10 @@ export const useStore = create<AppStore>((set, get) => {
     const targetApp = state.applications.find((a) => a.id === id);
     if (!targetApp) return;
 
-    // Snapshot for rollback if either DB write fails.
+    // Snapshot for rollback if any DB write fails.
     const prevApplications = state.applications;
     const prevStores = state.stores;
+    const prevDemoUsers = state.demoUsers;
 
     const now = new Date().toISOString();
     const auditEntry: AuditEntry = {
@@ -684,8 +685,34 @@ export const useStore = create<AppStore>((set, get) => {
       updatedStores = [...state.stores, newStore];
     }
 
+    // Self-service onboarding applicants (Partner Onboarding, marked by an
+    // applicationNumber) already have an auth login created at Step 1. On
+    // "Verify & Activate" we also create their franchisee `users` profile so
+    // their next login resolves to full access instead of the awaiting screen.
+    // Legacy /apply applications (no login, no applicationNumber) get a store
+    // only — unchanged.
+    let newUser: User | null = null;
+    let updatedDemoUsers = state.demoUsers;
+    if (action === 'approved' && newStore && updatedApp.applicationNumber) {
+      const isDistributorChannel =
+        updatedApp.referralType === 'distributor' ||
+        updatedApp.referralType === 'sub_partner_distributor';
+      newUser = {
+        id: `user-${uid()}`,
+        name: updatedApp.fullName,
+        email: updatedApp.email,
+        role: isDistributorChannel ? 'franchisee_distributor' : 'franchisee_direct',
+        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(updatedApp.fullName)}&background=F59E0B&color=fff`,
+        plantId: updatedApp.assignedPlantId,
+        distributorId: updatedApp.assignedDistributorId,
+        subPartnerDistributorId: updatedApp.assignedSubPartnerDistributorId,
+        assignedStoreIds: [newStore.id],
+      };
+      updatedDemoUsers = [...state.demoUsers, newUser];
+    }
+
     // Optimistic UI update.
-    set({ applications: updatedApps, stores: updatedStores });
+    set({ applications: updatedApps, stores: updatedStores, demoUsers: updatedDemoUsers });
 
     if (get().dataSource !== 'db') return;
 
@@ -721,8 +748,24 @@ export const useStore = create<AppStore>((set, get) => {
             compErr,
           );
         }
-        set({ applications: prevApplications, stores: prevStores });
+        set({ applications: prevApplications, stores: prevStores, demoUsers: prevDemoUsers });
         throw storeErr;
+      }
+    }
+
+    // Onboarding activation: create the franchisee login profile last (the
+    // store must exist first — the profile references its id). Best-effort
+    // compensating rollback if it fails; true atomicity would need an RPC.
+    if (newUser) {
+      try {
+        await insertUser(newUser);
+      } catch (userErr) {
+        console.error(
+          '[useStore] reviewApplication: user profile INSERT failed after store — manual fix may be required:',
+          userErr,
+        );
+        set({ applications: prevApplications, stores: prevStores, demoUsers: prevDemoUsers });
+        throw userErr;
       }
     }
   },

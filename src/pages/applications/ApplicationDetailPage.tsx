@@ -12,6 +12,8 @@ import {
   Receipt,
   CheckCircle2,
   XCircle,
+  ScrollText,
+  Clock,
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import {
@@ -59,6 +61,7 @@ export default function ApplicationDetailPage() {
   const [notes, setNotes] = useState(application?.notes ?? '');
   const [showApprove, setShowApprove] = useState(false);
   const [showDecline, setShowDecline] = useState(false);
+  const [showRequestInfo, setShowRequestInfo] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
   if (!application) {
@@ -82,9 +85,14 @@ export default function ApplicationDetailPage() {
     ? areaSupervisors.find((a) => a.id === application.assignedAreaSupervisorId)
     : null;
 
-  const isPending = application.status === 'pending';
+  // Self-service Partner Onboarding applications (marked by an applicationNumber)
+  // get "Verify & Activate" (creates the partner login + store) / "Request Info"
+  // / "Reject". Legacy /apply applications keep plain Approve / Decline.
+  const isOnboarding = !!application.applicationNumber;
+  const canAct =
+    application.status === 'pending' || application.status === 'needs_more_info';
 
-  const handleAction = async (action: 'approved' | 'declined') => {
+  const handleAction = async (action: 'approved' | 'declined' | 'needs_more_info') => {
     setActionLoading(true);
     try {
       await reviewApplication(
@@ -93,19 +101,20 @@ export default function ApplicationDetailPage() {
         currentUser?.id ?? 'system',
         notes || undefined,
       );
-      addToast(
-        action === 'approved' ? 'success' : 'info',
+      const msg =
         action === 'approved'
-          ? `Application from ${application.fullName} approved — store created.`
-          : `Application from ${application.fullName} declined.`,
-      );
+          ? isOnboarding
+            ? `${application.fullName} verified — partner login + store created.`
+            : `Application from ${application.fullName} approved — store created.`
+          : action === 'needs_more_info'
+            ? `Requested more information from ${application.fullName}.`
+            : `Application from ${application.fullName} ${isOnboarding ? 'rejected' : 'declined'}.`;
+      addToast(action === 'approved' ? 'success' : 'info', msg);
       setShowApprove(false);
       setShowDecline(false);
+      setShowRequestInfo(false);
     } catch {
-      addToast(
-        'error',
-        `Failed to ${action === 'approved' ? 'approve' : 'decline'} application. Please try again.`,
-      );
+      addToast('error', `Failed to update the application. Please try again.`);
     } finally {
       setActionLoading(false);
     }
@@ -141,25 +150,96 @@ export default function ApplicationDetailPage() {
             Application ID: {application.id}
           </p>
         </div>
-        {isPending && (
+        {canAct && (
           <div className="flex gap-2">
             <Button
               variant="danger"
               iconLeft={<XCircle size={16} />}
               onClick={() => setShowDecline(true)}
             >
-              Decline
+              {isOnboarding ? 'Reject' : 'Decline'}
             </Button>
+            {isOnboarding && (
+              <Button
+                variant="secondary"
+                iconLeft={<Mail size={16} />}
+                onClick={() => setShowRequestInfo(true)}
+              >
+                Request Info
+              </Button>
+            )}
             <Button
               variant="primary"
               iconLeft={<CheckCircle2 size={16} />}
               onClick={() => setShowApprove(true)}
             >
-              Approve
+              {isOnboarding ? 'Verify & Activate' : 'Approve'}
             </Button>
           </div>
         )}
       </div>
+
+      {/* Onboarding-specific details (self-service Partner Onboarding only) */}
+      {isOnboarding && (
+        <Card>
+          <CardHeader>
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <ScrollText size={18} /> Onboarding Details
+            </h2>
+          </CardHeader>
+          <CardContent>
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">Application No.</dt>
+                <dd className="mt-1 text-sm font-mono font-semibold text-gray-900">{application.applicationNumber}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">Operating Hours</dt>
+                <dd className="mt-1 text-sm text-gray-700">{application.operatingHours ?? '—'}</dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">Residential Address</dt>
+                <dd className="mt-1 text-sm text-gray-700">{application.residentialAddress ?? '—'}</dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">Facebook Link</dt>
+                <dd className="mt-1 text-sm text-gray-700 break-all">
+                  {application.facebookLink ? (
+                    <a href={application.facebookLink} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
+                      {application.facebookLink}
+                    </a>
+                  ) : '—'}
+                </dd>
+              </div>
+            </dl>
+            <div className="mt-4 border-t border-gray-100 pt-4">
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+                Accepted Agreements{application.agreementVersion ? ` (v${application.agreementVersion})` : ''}
+              </p>
+              <ul className="space-y-1.5 text-sm text-gray-700">
+                {[
+                  { label: 'Consignment Display Agreement', at: application.acceptedConsignmentAt },
+                  { label: 'Privacy Notice', at: application.acceptedPrivacyAt },
+                  { label: 'Website Terms of Use', at: application.acceptedTermsAt },
+                  { label: 'Certification (info true & authentic)', at: application.certifiedAt },
+                ].map((row) => (
+                  <li key={row.label} className="flex items-center gap-2">
+                    {row.at ? (
+                      <CheckCircle2 size={15} className="text-green-500 shrink-0" />
+                    ) : (
+                      <XCircle size={15} className="text-gray-300 shrink-0" />
+                    )}
+                    <span>{row.label}</span>
+                    {row.at && (
+                      <span className="text-xs text-gray-400">— {new Date(row.at).toLocaleString()}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Application Info */}
@@ -318,7 +398,7 @@ export default function ApplicationDetailPage() {
       </Card>
 
       {/* Reviewer Notes (read-only when already reviewed) */}
-      {!isPending && application.notes && (
+      {application.status !== 'pending' && application.notes && (
         <Card>
           <CardHeader>
             <h2 className="text-lg font-semibold text-gray-900">Reviewer Notes</h2>
@@ -397,7 +477,7 @@ export default function ApplicationDetailPage() {
       <Modal
         open={showApprove}
         onClose={() => !actionLoading && setShowApprove(false)}
-        title="Approve Application"
+        title={isOnboarding ? 'Verify & Activate Partner' : 'Approve Application'}
         size="md"
         footer={
           <>
@@ -414,16 +494,26 @@ export default function ApplicationDetailPage() {
               onClick={() => handleAction('approved')}
               loading={actionLoading}
             >
-              Approve
+              {isOnboarding ? 'Verify & Activate' : 'Approve'}
             </Button>
           </>
         }
       >
         <div className="space-y-4">
           <p className="text-sm text-gray-700">
-            Approve the application from{' '}
-            <span className="font-semibold text-gray-900">{application.fullName}</span>? This
-            will create a new franchise store account.
+            {isOnboarding ? (
+              <>
+                Verify and activate{' '}
+                <span className="font-semibold text-gray-900">{application.fullName}</span>? This
+                creates their partner login profile + store account so they gain access.
+              </>
+            ) : (
+              <>
+                Approve the application from{' '}
+                <span className="font-semibold text-gray-900">{application.fullName}</span>? This
+                will create a new franchise store account.
+              </>
+            )}
           </p>
           <div>
             <label
@@ -449,7 +539,7 @@ export default function ApplicationDetailPage() {
       <Modal
         open={showDecline}
         onClose={() => !actionLoading && setShowDecline(false)}
-        title="Decline Application"
+        title={isOnboarding ? 'Reject Application' : 'Decline Application'}
         size="md"
         footer={
           <>
@@ -466,14 +556,14 @@ export default function ApplicationDetailPage() {
               onClick={() => handleAction('declined')}
               loading={actionLoading}
             >
-              Decline
+              {isOnboarding ? 'Reject' : 'Decline'}
             </Button>
           </>
         }
       >
         <div className="space-y-4">
           <p className="text-sm text-gray-700">
-            Decline the application from{' '}
+            {isOnboarding ? 'Reject' : 'Decline'} the application from{' '}
             <span className="font-semibold text-gray-900">{application.fullName}</span>? This
             action cannot be undone.
           </p>
@@ -489,6 +579,52 @@ export default function ApplicationDetailPage() {
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Explain why this application is declined..."
+              rows={3}
+              disabled={actionLoading}
+              className="block w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-zapp-orange/30 focus:border-zapp-orange disabled:bg-gray-50"
+            />
+          </div>
+        </div>
+      </Modal>
+
+      {/* Request Additional Info Dialog (onboarding only) */}
+      <Modal
+        open={showRequestInfo}
+        onClose={() => !actionLoading && setShowRequestInfo(false)}
+        title="Request Additional Information"
+        size="md"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowRequestInfo(false)} disabled={actionLoading}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              iconLeft={<Clock size={16} />}
+              onClick={() => handleAction('needs_more_info')}
+              loading={actionLoading}
+            >
+              Request Info
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-700">
+            Ask{' '}
+            <span className="font-semibold text-gray-900">{application.fullName}</span>{' '}
+            for more information. The application stays open and the applicant will see this
+            note on their status screen.
+          </p>
+          <div>
+            <label htmlFor="req-info-notes" className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+              What's needed?
+            </label>
+            <textarea
+              id="req-info-notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="e.g. Please re-upload a clearer photo of your government ID..."
               rows={3}
               disabled={actionLoading}
               className="block w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-zapp-orange/30 focus:border-zapp-orange disabled:bg-gray-50"

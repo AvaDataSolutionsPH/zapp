@@ -12,9 +12,10 @@ interface StatusConfig {
 }
 
 const applicationStatuses: Record<string, StatusConfig> = {
-  pending:  { label: 'Pending',  variant: 'warning' },
-  approved: { label: 'Approved', variant: 'success' },
-  declined: { label: 'Declined', variant: 'danger' },
+  pending:        { label: 'Pending',        variant: 'warning' },
+  approved:       { label: 'Approved',       variant: 'success' },
+  declined:       { label: 'Declined',       variant: 'danger' },
+  needs_more_info:{ label: 'Needs More Info', variant: 'info' },
 };
 
 const deliveryStatuses: Record<string, StatusConfig> = {

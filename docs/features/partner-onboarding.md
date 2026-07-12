@@ -49,10 +49,28 @@ facebookLink, operatingHours, selfieUrl, acceptedConsignmentAt/PrivacyAt/TermsAt
 certifiedAt, agreementVersion, applicationNumber. All optional — legacy `/apply`
 and internal onboarding rows stay valid. `mapApplicationToDB` maps them.
 
+## Phase 4 — Admin Verification (live)
+`ApplicationDetailPage` shows an **Onboarding Details** card (app number,
+residential address, FB link, operating hours, accepted-agreements checklist)
+for onboarding applications (`isOnboarding = !!applicationNumber`) and three
+actions: **Verify & Activate** / **Request Info** / **Reject**.
+- **Verify & Activate** (`reviewApplication` action `'approved'`): creates the
+  Store AND — for onboarding apps — the franchisee **`users` profile**
+  (role from the channel: distributor/SPD → `franchisee_distributor`, else
+  `franchisee_direct`; `assignedStoreIds=[store.id]`). The applicant already has
+  an auth login (Step 1), so their next login now resolves to full franchisee
+  access instead of the awaiting screen. Order: app UPDATE → store INSERT → user
+  INSERT, with best-effort compensating rollback.
+- **Request Info** (`'needs_more_info'`): sets the status + note; applicant sees
+  the note on the awaiting screen. **Needs migration `014`** (widens the
+  applications status CHECK).
+- **Reject** (`'declined'`): unchanged.
+Legacy `/apply` applications (no `applicationNumber`) keep plain Approve/Decline
+and get a store only — no user profile.
+
 ## Not yet built (later phases)
 - Submission metadata (IP/device/GPS), PDF copy of the application — Phase 2.
 - ID OCR autofill (Tesseract, best-effort) — Phase 3.
-- Admin verification states + activate login + create Store — Phase 4.
 - ₱2,000 security deposit via gateway → Active — Phase 5.
 
 ## Related

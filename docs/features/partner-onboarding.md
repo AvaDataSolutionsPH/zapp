@@ -68,10 +68,20 @@ actions: **Verify & Activate** / **Request Info** / **Reject**.
 Legacy `/apply` applications (no `applicationNumber`) keep plain Approve/Decline
 and get a store only — no user profile.
 
+## Phase 5 — Security Deposit (live)
+A newly-activated onboarding partner has a **`pending`** store until the ₱2,000
+security deposit is paid. `FranchiseeDashboard` shows a **Security Deposit
+Required** banner (gated on `store.status === 'pending'` AND no verified
+`security_deposit` payment) with a **Pay ₱2,000 (Gateway)** button.
+`paySecurityDeposit(storeId)` (useStore) records a **verified** `security_deposit`
+Payment (simulated gateway, auto-confirmed), flips the store to **`active`**, and
+notifies. `Payment.type` (`'billing' | 'security_deposit'`, default billing) +
+migration `015` add the column; the deposit's synthetic `billingId` keeps it out
+of `billingComputations`.
+
 ## Not yet built (later phases)
 - Submission metadata (IP/device/GPS), PDF copy of the application — Phase 2.
 - ID OCR autofill (Tesseract, best-effort) — Phase 3.
-- ₱2,000 security deposit via gateway → Active — Phase 5.
 
 ## Related
 [[franchisee-onboarding]] · [[public-application-flow]] · [[account-creation]] ·

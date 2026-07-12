@@ -353,12 +353,18 @@ export interface BillingRecord {
   subPartnerDistributorId?: string;
 }
 
+// 'billing' = a normal consignment/billing payment (default when absent, for
+// back-compat). 'security_deposit' = the one-time ₱2,000 onboarding deposit
+// (Partner Onboarding Phase 5) — not tied to a billing record.
+export type PaymentType = 'billing' | 'security_deposit';
+
 export interface Payment {
   id: string;
   billingId: string;
   storeId: string;
   amount: number;
   method: PaymentMethod;
+  type?: PaymentType;
   referenceNumber: string;
   datePaid: string;
   proofUrl?: string;

@@ -257,6 +257,12 @@ interface AppStore {
     verifiedBy: string,
     reason?: string,
   ) => Promise<void>;
+  /**
+   * Partner Onboarding Phase 5: pay the one-time ₱2,000 security deposit via the
+   * (simulated) gateway. Records a verified security_deposit payment, flips the
+   * store from 'pending' to 'active', and notifies. Optimistic + DB write.
+   */
+  paySecurityDeposit: (storeId: string) => Promise<void>;
 
   // Packaging
   packagingCatalog: PackagingItem[];
@@ -1253,6 +1259,50 @@ export const useStore = create<AppStore>((set, get) => {
       console.error('[useStore] submitPayment DB write failed, rolling back:', err);
       set((s) => ({ payments: s.payments.filter((p) => p.id !== newPayment.id) }));
     });
+  },
+
+  paySecurityDeposit: async (storeId: string) => {
+    const store = get().stores.find((s) => s.id === storeId);
+    if (!store) return;
+    const now = new Date().toISOString();
+    // Simulated gateway: create the deposit already verified (auto-confirmed).
+    // billingId is a synthetic non-billing ref so billingComputations ignores it.
+    const deposit: Payment = {
+      id: `pay-${uid()}`,
+      billingId: `deposit-${storeId}`,
+      storeId,
+      amount: 2000,
+      method: 'gateway',
+      type: 'security_deposit',
+      referenceNumber: `GW-DEP-${Date.now().toString(36).toUpperCase()}`,
+      datePaid: now.slice(0, 10),
+      status: 'verified',
+      verifiedBy: 'gateway',
+      submittedAt: now,
+    };
+    const prevPayments = get().payments;
+    set((s) => ({ payments: [...s.payments, deposit] }));
+
+    // Flip the store to active (updateStore handles its own optimistic + DB
+    // write + rollback) and notify.
+    get().updateStore(storeId, { status: 'active' });
+    get().addNotification({
+      title: 'Security Deposit Received',
+      message: `₱2,000 security deposit verified for ${store.name}. Your partner account is now Active.`,
+      type: 'success',
+      targetStoreId: storeId,
+    });
+
+    if (get().dataSource !== 'db') return;
+    try {
+      await insertPayment(deposit);
+    } catch (err) {
+      console.error('[useStore] paySecurityDeposit DB write failed, rolling back:', err);
+      set(() => ({ payments: prevPayments }));
+      // Best-effort revert of the store status.
+      get().updateStore(storeId, { status: 'pending' });
+      throw err;
+    }
   },
 
   // PD/SPD collection step: the partner distributor collects the store's

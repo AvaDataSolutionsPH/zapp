@@ -122,6 +122,7 @@ const mapPaymentToDB = (p: Payment) => ({
   store_id: p.storeId,
   amount: p.amount,
   method: p.method,
+  type: p.type ?? 'billing',
   reference_number: p.referenceNumber,
   date_paid: p.datePaid,
   proof_url: p.proofUrl ?? null,

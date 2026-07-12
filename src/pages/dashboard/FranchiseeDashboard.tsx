@@ -10,11 +10,14 @@ import { Stat } from '@/components/ui/Stat';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { useToast } from '@/components/ui/Toast';
 import {
   DollarSign,
   Calendar,
   PackageX,
   CreditCard,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   LineChart,
@@ -49,6 +52,10 @@ export function FranchiseeDashboard() {
   const deliveries = useStore((s) => s.deliveries);
   const billingRecords = useStore((s) => s.billingRecords);
   const endingInventories = useStore((s) => s.endingInventories);
+  const payments = useStore((s) => s.payments);
+  const paySecurityDeposit = useStore((s) => s.paySecurityDeposit);
+  const { addToast } = useToast();
+  const [depositBusy, setDepositBusy] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setLoading(false), 600);
@@ -152,6 +159,40 @@ export function FranchiseeDashboard() {
 
   const isDistributor = currentUser?.role === 'franchisee_distributor';
 
+  // ── Security deposit gate (Partner Onboarding Phase 5) ──────────
+  // A newly-activated onboarding partner has a 'pending' store until the
+  // ₱2,000 security deposit is paid. Show the gate when the store is pending
+  // and no verified security_deposit payment exists for it yet.
+  const depositStore = useMemo(
+    () => stores.find((s) => myStoreIds.includes(s.id) && s.status === 'pending'),
+    [stores, myStoreIds],
+  );
+  const depositPaid = useMemo(
+    () =>
+      depositStore
+        ? payments.some(
+            (p) => p.storeId === depositStore.id && p.type === 'security_deposit' && p.status === 'verified',
+          )
+        : true,
+    [payments, depositStore],
+  );
+  const needsDeposit = !!depositStore && !depositPaid;
+
+  const handlePayDeposit = async () => {
+    if (!depositStore) return;
+    setDepositBusy(true);
+    try {
+      // Simulate the gateway round-trip.
+      await new Promise((r) => setTimeout(r, 1500));
+      await paySecurityDeposit(depositStore.id);
+      addToast('success', 'Security deposit paid. Your partner account is now Active!');
+    } catch {
+      addToast('error', 'Deposit payment failed. Please try again.');
+    } finally {
+      setDepositBusy(false);
+    }
+  };
+
   const fmt = (n: number) => `P${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 
   if (loading) {
@@ -175,6 +216,27 @@ export function FranchiseeDashboard() {
           {isDistributor ? 'Distributor-model franchise overview' : 'Direct franchise overview'}
         </p>
       </div>
+
+      {/* Security Deposit gate (Phase 5) */}
+      {needsDeposit && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="flex items-start gap-3 flex-1">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-amber-100">
+              <ShieldCheck size={22} className="text-amber-600" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-amber-900">Security Deposit Required</h2>
+              <p className="mt-0.5 text-sm text-amber-700">
+                Bayaran ang refundable na <span className="font-semibold">₱2,000 Security Deposit</span>{' '}
+                para ma-activate ang iyong ZAPP Donuts partner account at makapag-simula ng deliveries.
+              </p>
+            </div>
+          </div>
+          <Button variant="primary" loading={depositBusy} onClick={handlePayDeposit} iconLeft={<CreditCard size={16} />}>
+            Pay ₱2,000 (Gateway)
+          </Button>
+        </div>
+      )}
 
       {/* KPI Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

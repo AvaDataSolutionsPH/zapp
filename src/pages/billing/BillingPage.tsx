@@ -11,6 +11,7 @@ import {
   CheckCircle,
   CreditCard,
   FileText,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import {
@@ -669,6 +670,29 @@ export default function BillingPage() {
         <span className="text-sm font-bold text-zapp-orange tabular-nums whitespace-nowrap">{fmt3(row.netAmount)}</span>
       ),
     },
+    {
+      key: 'photos',
+      header: 'Photos',
+      // Explicit "View" affordance per DR (per boss: "cclick lang nila view") —
+      // opens the DR slip + donut-crate photos for report verification.
+      render: (row) => (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setPhotoTarget({
+              deliveryId: row.id,
+              drNumber: row.drNumber,
+              date: mmddyyyy(row.date),
+              shopName: row.shopName,
+            });
+          }}
+          className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-zapp-orange hover:bg-orange-50 transition-colors cursor-pointer whitespace-nowrap"
+          title="View DR slip + donut-crate photos"
+        >
+          <ImageIcon size={13} /> View
+        </button>
+      ),
+    },
   ];
 
   return (
@@ -904,8 +928,9 @@ export default function BillingPage() {
           other roles keep the aggregated per-billing-record table. */}
       {isBillingUser && (
         <p className="text-xs text-gray-500 -mb-2">
-          I-click ang isang DR row para makita ang Beginning/Ending DR at donut-crate
-          photos ng store (para ma-double-check ang report).
+          I-click ang <span className="font-medium text-zapp-orange">View</span> sa
+          dulo ng bawat DR row para makita ang DR slip at donut-crate photos ng store
+          (para ma-double-check ang report).
         </p>
       )}
       {isBillingUser ? (

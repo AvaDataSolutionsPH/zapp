@@ -27,7 +27,7 @@ import { useToast } from '@/components/ui/Toast';
 import type { TableColumn, SelectOption } from '@/components/ui';
 import type { BillingRecord, Delivery } from '@/types';
 import { billingService } from '@/services/api';
-import { getBillingBreakdown } from '@/lib/billingComputations';
+import { getBillingBreakdown, getCutoffRangeForDate } from '@/lib/billingComputations';
 import BillingDetailDrawer from './BillingDetailDrawer';
 
 const PAGE_SIZE = 10;
@@ -47,6 +47,33 @@ const cutoffOptions: SelectOption[] = [
   { value: '15-21', label: '15-21' },
   { value: '22-EOM', label: '22-EOM' },
 ];
+
+// Per-DR "billing statement" row shown to the billing user — mirrors the
+// UBERDELI billing-summary format (one row per delivery/DR). Returns / delivery
+// adjustment / merch. allowance are not tracked yet → 0.000, so Net Amount ==
+// DR Amount (same placeholders as the printable BillingStatementPage).
+interface BillingStatementRow {
+  id: string;
+  date: string;
+  poNumber: string;
+  drNumber: string;
+  shopCode: string;
+  shopName: string;
+  distributorId?: string;
+  drAmount: number;
+  netAmount: number;
+}
+
+// 3-decimal money with thousands separators (matches the reference statement,
+// e.g. 1,861.220). No peso sign — the reference prints plain amounts.
+const fmt3 = (n: number) =>
+  n.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+
+// MM/DD/YYYY, matching the reference statement's Delivery Date column.
+const mmddyyyy = (iso: string) => {
+  const [y, m, d] = iso.slice(0, 10).split('-');
+  return `${m}/${d}/${y}`;
+};
 
 // ── Due label helper ─────────────────────────────────────────────────────
 
@@ -266,6 +293,44 @@ export default function BillingPage() {
     return map;
   }, [isFranchisee, allBilling, endingInventories, specialOrders, packagingOrders, deliveries, stores, payments]);
 
+  // Billing user sees the UBERDELI-style billing statement — one row per
+  // delivery (DR), not per aggregated billing record. Built straight from the
+  // deliveries slice (billing_user reads all, per migration 008), the same
+  // source the printable Billing Statement uses. Filters that map to a DR line
+  // (distributor, store search, cutoff, date range) apply here too.
+  const billingUserRows = useMemo<BillingStatementRow[]>(() => {
+    if (!isBillingUser) return [];
+    let result = deliveries.map((d) => {
+      const store = stores.find((s) => s.id === d.storeId);
+      return {
+        id: d.id,
+        date: d.date,
+        poNumber: 'ZAPP',
+        drNumber: d.drNumber,
+        shopCode: store?.shopCode ?? '',
+        shopName: store?.name ?? d.storeId,
+        distributorId: store?.distributorId,
+        drAmount: d.totalDRCost,
+        netAmount: d.totalDRCost, // credits are 0 for now → Net == DR Amount
+      };
+    });
+    if (distributorFilter) result = result.filter((r) => r.distributorId === distributorFilter);
+    if (storeSearch) {
+      const q = storeSearch.toLowerCase();
+      result = result.filter((r) => r.shopName.toLowerCase().includes(q));
+    }
+    if (cutoffFilter) result = result.filter((r) => getCutoffRangeForDate(r.date) === cutoffFilter);
+    if (dateFrom) result = result.filter((r) => r.date.slice(0, 10) >= dateFrom);
+    if (dateTo) result = result.filter((r) => r.date.slice(0, 10) <= dateTo);
+    result.sort((a, b) => b.date.localeCompare(a.date));
+    return result;
+  }, [isBillingUser, deliveries, stores, distributorFilter, storeSearch, cutoffFilter, dateFrom, dateTo]);
+
+  const billingUserPaged = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return billingUserRows.slice(start, start + PAGE_SIZE);
+  }, [billingUserRows, page]);
+
   const formatCurrency = (n: number) => `P${n.toLocaleString()}`;
 
   // Pay Now — NextPay integration is not wired yet (boss: "coconnect natin yan
@@ -481,6 +546,68 @@ export default function BillingPage() {
     },
   ];
 
+  // Billing user: UBERDELI billing-summary columns (per-DR). Returns / delivery
+  // adjustment / merch. allowance aren't tracked yet → printed as 0.000.
+  const billingUserColumns: TableColumn<BillingStatementRow>[] = [
+    {
+      key: 'date',
+      header: 'Delivery Date',
+      render: (row) => <span className="text-sm text-gray-700 whitespace-nowrap">{mmddyyyy(row.date)}</span>,
+    },
+    {
+      key: 'poNumber',
+      header: 'PO Number',
+      render: (row) => <span className="text-sm text-gray-700">{row.poNumber}</span>,
+    },
+    {
+      key: 'drNumber',
+      header: 'DR Number',
+      render: (row) => (
+        <span className="font-mono text-sm font-medium text-gray-900 whitespace-nowrap">{row.drNumber}</span>
+      ),
+    },
+    {
+      key: 'shopCode',
+      header: 'Shop Code',
+      // Blank when unassigned — matches the billing user's manual files + the
+      // printable BillingStatementPage. Shop code comes from franchisee
+      // registration (store.shopCode), shown as-is once assigned.
+      render: (row) => <span className="text-sm text-gray-700">{row.shopCode || ''}</span>,
+    },
+    {
+      key: 'shopName',
+      header: 'Shop Name',
+      render: (row) => <span className="text-sm text-gray-900">{row.shopName}</span>,
+    },
+    {
+      key: 'drAmount',
+      header: 'DR Amount (Vat Inc.)',
+      render: (row) => <span className="text-sm font-medium tabular-nums whitespace-nowrap">{fmt3(row.drAmount)}</span>,
+    },
+    {
+      key: 'returns',
+      header: 'Returns (Credit) (Vat Inc.)',
+      render: () => <span className="text-sm text-gray-500 tabular-nums">0.000</span>,
+    },
+    {
+      key: 'deliveryAdjustment',
+      header: 'Delivery Adjustment (Credit) (Vat Inc.)',
+      render: () => <span className="text-sm text-gray-500 tabular-nums">0.000</span>,
+    },
+    {
+      key: 'merchAllowance',
+      header: 'Merch. Allowance (Vat Inc.)',
+      render: () => <span className="text-sm text-gray-500 tabular-nums">0.000</span>,
+    },
+    {
+      key: 'netAmount',
+      header: 'Net Amount (Vat Inc.)',
+      render: (row) => (
+        <span className="text-sm font-bold text-zapp-orange tabular-nums whitespace-nowrap">{fmt3(row.netAmount)}</span>
+      ),
+    },
+  ];
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -684,20 +811,36 @@ export default function BillingPage() {
         </CardContent>
       </Card>
 
-      {/* Table */}
-      <Table
-        columns={isFranchisee ? franchiseeColumns : columns}
-        data={paged}
-        keyExtractor={(row) => row.id}
-        onRowClick={(row) => setSelectedBilling(row)}
-        emptyMessage="No billing records found matching your filters."
-        pagination={{
-          page,
-          pageSize: PAGE_SIZE,
-          total: filtered.length,
-          onPageChange: setPage,
-        }}
-      />
+      {/* Table — billing user gets the per-DR UBERDELI statement view; all
+          other roles keep the aggregated per-billing-record table. */}
+      {isBillingUser ? (
+        <Table
+          columns={billingUserColumns}
+          data={billingUserPaged}
+          keyExtractor={(row) => row.id}
+          emptyMessage="No deliveries found matching your filters."
+          pagination={{
+            page,
+            pageSize: PAGE_SIZE,
+            total: billingUserRows.length,
+            onPageChange: setPage,
+          }}
+        />
+      ) : (
+        <Table
+          columns={isFranchisee ? franchiseeColumns : columns}
+          data={paged}
+          keyExtractor={(row) => row.id}
+          onRowClick={(row) => setSelectedBilling(row)}
+          emptyMessage="No billing records found matching your filters."
+          pagination={{
+            page,
+            pageSize: PAGE_SIZE,
+            total: filtered.length,
+            onPageChange: setPage,
+          }}
+        />
+      )}
 
       {/* Billing Detail Drawer */}
       <BillingDetailDrawer

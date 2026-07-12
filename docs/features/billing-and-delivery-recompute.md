@@ -67,6 +67,26 @@ stats are hidden. DR number + date are resolved per billing via `getBillingBreak
 deliveries so DR numbers are joined, date = earliest delivery). **Pay Now** is a
 stub toast — NextPay integration is not wired yet ("coconnect natin kay NextPay").
 
+## Billing-user statement view (BillingPage.tsx)
+When `currentUser.role` is `billing_user`, `BillingPage` renders the **per-DR
+UBERDELI billing-summary** columns (`billingUserColumns`) instead of the
+aggregated per-billing-record table — matching the printable
+`BillingStatementPage` line-item format one-to-one:
+**Delivery Date · PO Number · DR Number · Shop Code · Shop Name · DR Amount (Vat
+Inc.) · Returns (Credit) · Delivery Adjustment (Credit) · Merch. Allowance · Net
+Amount (Vat Inc.)**. Rows come from `billingUserRows`, built **straight from the
+`deliveries` slice** (billing_user reads all, migration 008) — one row per
+delivery/DR, NOT per billing record. PO Number is the literal `ZAPP`; Shop Code =
+`store.shopCode` (`—` when unassigned); DR Amount / Net = `delivery.totalDRCost`
+(3-decimal, no peso sign — matches the reference); Returns / Delivery Adjustment /
+Merch. Allowance are `0.000` (not tracked yet, same placeholders as the printable
+statement). The list filters that map to a DR line (distributor, store search,
+cutoff via `getCutoffRangeForDate`, date range) apply to these rows too; Status
+filter and the row-click detail drawer are omitted (no billing-record behind a DR
+row). The DR-based formula banner + KPI stat cards are left as-is (boss batch 4:
+keep the SRP stats for billing_user). Other roles are untouched — the aggregated
+`columns` / `franchiseeColumns` tables still render for them.
+
 ## Billing list filters by PD / SPD (BillingPage.tsx)
 Two role-scoped filters let a PD chain be read top-down:
 - **Distributor (PD) filter** — shown to `owner` / `operations_manager` /

@@ -38,7 +38,6 @@ import {
   Calendar,
   Truck,
   Image as ImageIcon,
-  ScrollText,
 } from 'lucide-react';
 import {
   Button,
@@ -53,6 +52,7 @@ import {
 import type { UploadedFile } from '@/components/ui';
 import { useStore } from '@/store/useStore';
 import StorePinPicker from '@/pages/public/StorePinPicker';
+import LegalConsent from '@/components/legal/LegalConsent';
 import { compressImage } from '@/lib/imageCompress';
 import { uploadFile, buildObjectPath, deleteFile, parseStorageRef } from '@/services/storage';
 import type {
@@ -63,21 +63,6 @@ import type {
   Plant,
   DeliverySchedule,
 } from '@/types';
-
-// Placeholder Terms & Conditions — boss will send the final contract text; swap
-// the body below when it arrives (keep the accept checkbox + termsAcceptedAt).
-const TERMS_PLACEHOLDER = `ZAPP DONUTS FRANCHISE AGREEMENT — SUMMARY OF TERMS (PLACEHOLDER)
-
-1. The Franchisee agrees to operate the ZAPP Donuts store in accordance with the
-   standards, recipes, and operating procedures provided by ZAPP Donuts Corp.
-2. The Franchisee shall remit sales and settle billings per the agreed cutoff
-   schedule (1-7, 8-14, 15-21, 22-EOM) and delivery arrangement.
-3. Deliveries follow the assigned schedule (odd- or even-numbered days).
-4. The Franchisee shall maintain valid permits and provide a valid government ID
-   and proof of billing for verification.
-5. This is a placeholder. The full, legally-binding Terms & Conditions and
-   contract will be provided by ZAPP Donuts Corp. and must be signed prior to
-   activation.`;
 
 const STEPS = [
   { label: 'Channel', icon: Hash },
@@ -256,7 +241,7 @@ export default function FranchiseeOnboardingPage() {
         if (form.proofOfBilling.length === 0) e.proofOfBilling = 'Proof of billing is required.';
         break;
       case 5:
-        if (!termsAccepted) e.terms = 'You must confirm the Terms & Conditions.';
+        if (!termsAccepted) e.terms = 'You must agree to the ZAPP Donuts Consignment Agreement.';
         break;
     }
     setErrors(e);
@@ -616,36 +601,15 @@ export default function FranchiseeOnboardingPage() {
               <div><span className="text-gray-500">Shop Code:</span> <span className="font-medium">{form.shopCode}</span> · <span className="text-gray-500">Delivery:</span> <span className="font-medium capitalize">{form.deliverySchedule}</span> · <span className="text-gray-500">Opening:</span> <span className="font-medium">{form.openingDate}</span></div>
             </div>
 
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-2">
-              <ScrollText size={18} className="mt-0.5 shrink-0 text-amber-600" />
-              <p className="text-xs text-amber-800">
-                Placeholder ang Terms & Conditions sa ibaba. Ang opisyal na kontrata mula sa ZAPP Donuts Corp.
-                ang gagamitin at kailangang pirmahan bago i-activate.
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
-              <h3 className="text-sm font-bold text-gray-900 mb-3">Terms & Conditions</h3>
-              <div className="mb-4 max-h-48 overflow-y-auto whitespace-pre-line rounded-lg border border-gray-200 bg-white p-4 text-xs leading-relaxed text-gray-600">
-                {TERMS_PLACEHOLDER}
-              </div>
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={termsAccepted}
-                  onChange={(e) => {
-                    setTermsAccepted(e.target.checked);
-                    if (e.target.checked) setErrors((prev) => ({ ...prev, terms: undefined }));
-                  }}
-                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-zapp-orange focus:ring-zapp-orange"
-                />
-                <span className="text-sm text-gray-700">
-                  Kinukumpirma ko na nabasa at sumang-ayon ang franchisee sa Terms & Conditions at
-                  pumirma sa kontrata.
-                </span>
-              </label>
-              {errors.terms && <p className="mt-2 text-xs text-red-600">{errors.terms}</p>}
-            </div>
+            <LegalConsent
+              checked={termsAccepted}
+              onChange={(v) => {
+                setTermsAccepted(v);
+                if (v) setErrors((prev) => ({ ...prev, terms: undefined }));
+              }}
+              error={errors.terms}
+              confirmingForOther
+            />
           </div>
         );
 

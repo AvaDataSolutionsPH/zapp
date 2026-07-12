@@ -36,6 +36,7 @@ import {
 import type { SelectOption, UploadedFile } from '@/components/ui';
 import { useStore } from '@/store/useStore';
 import StorePinPicker from './StorePinPicker';
+import LegalConsent from '@/components/legal/LegalConsent';
 import { fetchProvinces, fetchCities, fetchBarangays } from '@/services/phLocations';
 import type { PsgcItem } from '@/services/phLocations';
 import { geocodePH } from '@/services/geocode';
@@ -318,7 +319,7 @@ export default function ApplicationPage() {
         break;
 
       case 4:
-        if (!consent) newErrors.consent = 'You must agree to the data privacy consent.';
+        if (!consent) newErrors.consent = 'You must agree to the ZAPP Donuts Consignment Agreement.';
         break;
     }
 
@@ -897,59 +898,15 @@ export default function ApplicationPage() {
               </div>
             )}
 
-            {/* Data Privacy Consent */}
-            <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
-              <h3 className="text-sm font-bold text-gray-900 mb-3">Data Privacy Consent</h3>
-              <div className="mb-4 max-h-32 overflow-y-auto rounded-lg border border-gray-200 bg-white p-4 text-xs text-gray-600 leading-relaxed">
-                <p className="mb-2">
-                  By submitting this application, I acknowledge and consent to the collection, storage,
-                  processing, and use of my personal information by ZAPP Donuts Corp., its affiliates,
-                  partners, and authorized distributors for the following purposes:
-                </p>
-                <ul className="mb-2 list-disc pl-5 space-y-1">
-                  <li>
-                    Processing and evaluation of my franchise application, including verification of
-                    submitted documents and information.
-                  </li>
-                  <li>
-                    Communication regarding application status, franchise operations, promotions, and
-                    updates.
-                  </li>
-                  <li>
-                    Compliance with applicable laws and regulations, including the Data Privacy Act of
-                    2012 (Republic Act No. 10173) of the Philippines.
-                  </li>
-                  <li>
-                    Integration with the ZAPP Donuts ERP system for ongoing operational management,
-                    billing, inventory tracking, and analytics.
-                  </li>
-                </ul>
-                <p>
-                  I understand that I may withdraw my consent at any time by contacting ZAPP Donuts at
-                  privacy@zappdonuts.ph. I also understand that withdrawal of consent may affect the
-                  processing of my application or ongoing franchise operations.
-                </p>
-              </div>
-
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={consent}
-                  onChange={(e) => {
-                    setConsent(e.target.checked);
-                    if (e.target.checked) setErrors((prev) => ({ ...prev, consent: undefined }));
-                  }}
-                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-zapp-orange focus:ring-zapp-orange"
-                />
-                <span className="text-sm text-gray-700">
-                  I have read and agree to the Data Privacy Consent and authorize ZAPP Donuts to process my
-                  personal information as described above.
-                </span>
-              </label>
-              {errors.consent && (
-                <p className="mt-2 text-xs text-red-600">{errors.consent}</p>
-              )}
-            </div>
+            {/* Consignment Agreement + Privacy / Terms (clickable, not inline) */}
+            <LegalConsent
+              checked={consent}
+              onChange={(v) => {
+                setConsent(v);
+                if (v) setErrors((prev) => ({ ...prev, consent: undefined }));
+              }}
+              error={errors.consent}
+            />
           </div>
         );
 

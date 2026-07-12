@@ -85,6 +85,23 @@ export const fetchAreaSupervisors = (): Promise<AreaSupervisor[]> =>
   fetchAll<AreaSupervisor>('area_supervisors');
 
 export const fetchUsers = (): Promise<User[]> => fetchAll<User>('users');
+
+/**
+ * Fetch a single user profile by email (case-insensitive). Used by the auth
+ * flow to resolve accounts that exist in the DB but not in the in-memory seed
+ * (e.g. accounts created via the "New Account" admin flow). Returns null if
+ * none match or the query errors.
+ */
+export async function fetchUserByEmail(email: string): Promise<User | null> {
+  const { data, error } = await supabase
+    .from('users')
+    .select('*')
+    .ilike('email', email)
+    .limit(1);
+  if (error || !data || data.length === 0) return null;
+  return transformRow<User>(data[0] as Record<string, unknown>);
+}
+
 export const fetchStores = (): Promise<Store[]> => fetchAll<Store>('stores');
 export const fetchApplications = (): Promise<Application[]> =>
   fetchAll<Application>('applications');

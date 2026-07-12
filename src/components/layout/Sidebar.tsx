@@ -20,6 +20,7 @@ import {
   Settings,
   BookOpen,
   Boxes,
+  UserPlus,
   ChevronDown,
   ChevronRight,
   X,
@@ -108,6 +109,12 @@ const navSections: NavSection[] = [
         path: '/area-managers',
         icon: ClipboardList,
         allowedRoles: ['owner'],
+      },
+      {
+        label: 'New Account',
+        path: '/accounts/new',
+        icon: UserPlus,
+        allowedRoles: ['owner', 'operations_manager', 'partner_distributor'],
       },
       {
         label: 'Plants',

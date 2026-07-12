@@ -54,7 +54,7 @@ import {
 import { computeBillingsFromState } from '@/lib/billingComputations';
 import { computeStoreDeliveryStatus } from '@/lib/deliveryEnforcement';
 import { supabase } from '@/lib/supabase';
-import { hydrateAll } from '@/services/db';
+import { hydrateAll, fetchUserByEmail } from '@/services/db';
 import {
   insertStore,
   insertApplication,
@@ -76,7 +76,12 @@ import {
   insertSpecialOrder,
   insertNotification,
   updateNotification,
+  insertDistributor,
+  insertSubPartnerDistributor,
+  insertAreaSupervisor,
+  insertUser,
 } from '@/services/dbWrite';
+import { signUpIsolated, generateTempPassword } from '@/lib/authSignup';
 
 // Compute the initial billing list from the seeded mock entities. This replaces
 // the previously hard-coded mockBillingRecords — billings are now derived from
@@ -105,6 +110,31 @@ const delay = (ms = 400): Promise<void> =>
 
 const uid = (): string =>
   `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+export type NewAccountRole =
+  | 'partner_distributor'
+  | 'sub_partner_distributor'
+  | 'area_manager';
+
+export interface NewAccountInput {
+  role: NewAccountRole;
+  name: string;
+  email: string;
+  phone: string;
+  plantId: string;
+  /** Required when role === 'sub_partner_distributor' (the parent PD). */
+  parentDistributorId?: string;
+}
+
+/** Derive a channel/referral code from a display name (e.g. "Juan Cruz" → "JUAN-CRUZ-4F2"). */
+const codeFromName = (name: string): string => {
+  const slug = name
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 16) || 'PARTNER';
+  return `${slug}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+};
 
 // ── Store Interface ─────────────────────────────────────────────────
 
@@ -155,6 +185,12 @@ interface AppStore {
 
   // Area Supervisors
   areaSupervisors: AreaSupervisor[];
+
+  // Account creation — create a login (+ entity record) for a PD / SPD / Area
+  // Supervisor. owner/ops may create any; a PD may create SPD/AS in its scope.
+  createPartnerAccount: (
+    input: NewAccountInput,
+  ) => Promise<{ email: string; tempPassword: string }>;
 
   // Delivery enforcement
   requestStopDelivery: (storeId: string) => void;
@@ -307,10 +343,16 @@ export const useStore = create<AppStore>((set, get) => {
     if (error || !data.session) {
       return false;
     }
-    const profile = findProfileByEmail(data.user?.email);
+    const sessionEmail = data.user?.email;
+    // In-memory seed first (fast path for demo accounts); fall back to the live
+    // DB so accounts created via "New Account" (not in the seed) can log in.
+    let profile = findProfileByEmail(sessionEmail);
+    if (!profile && sessionEmail) {
+      profile = await fetchUserByEmail(sessionEmail);
+    }
     if (!profile) {
-      // Supabase auth succeeded but no matching local profile — sign out
-      // to keep the two layers in sync. Phase 2 removes this branch.
+      // Supabase auth succeeded but no matching profile row anywhere — sign out
+      // to keep the two layers in sync.
       await supabase.auth.signOut();
       return false;
     }
@@ -338,7 +380,10 @@ export const useStore = create<AppStore>((set, get) => {
   restoreSession: async (): Promise<void> => {
     const { data } = await supabase.auth.getSession();
     const sessionEmail = data.session?.user?.email;
-    const profile = findProfileByEmail(sessionEmail);
+    let profile = findProfileByEmail(sessionEmail);
+    if (!profile && sessionEmail) {
+      profile = await fetchUserByEmail(sessionEmail);
+    }
     if (profile) {
       set({ currentUser: profile, isAuthenticated: true, authLoading: false });
       // Hydrate from DB after restoring an existing session, so a reload
@@ -651,6 +696,121 @@ export const useStore = create<AppStore>((set, get) => {
         throw storeErr;
       }
     }
+  },
+
+  // ─── Account Creation ──────────────────────────────────────────
+  // Create a login (+ entity record + referral code) for a PD / SPD / Area
+  // Supervisor. Login is made via an ISOLATED signUp (temp password) so the
+  // admin's session is untouched; the temp password is returned for the admin
+  // to relay. owner/ops may create any role; a PD may create SPD/AS in its
+  // own scope (enforced client-side here AND by RLS — migration 011).
+  createPartnerAccount: async (input) => {
+    const { currentUser } = get();
+    if (!currentUser) throw new Error('Not signed in.');
+
+    const isAdmin =
+      currentUser.role === 'owner' || currentUser.role === 'operations_manager';
+    const isPD = currentUser.role === 'partner_distributor';
+    if (!isAdmin && !isPD) throw new Error('You are not allowed to create accounts.');
+    if (isPD && input.role === 'partner_distributor') {
+      throw new Error('A Partner Distributor can only create Sub-Partner or Area Supervisor accounts.');
+    }
+
+    const email = input.email.trim().toLowerCase();
+    const name = input.name.trim();
+    const phone = input.phone.trim();
+    // When a PD creates the account, confine it to the PD's own plant.
+    const plantId = isPD ? currentUser.plantId ?? input.plantId : input.plantId;
+    const now = new Date().toISOString();
+    const tempPassword = generateTempPassword();
+    const userId = `user-${uid()}`;
+    const referralCode = codeFromName(name);
+    // Non-empty avatar (matches the mock users' ui-avatars style) so the <img>
+    // doesn't get an empty src.
+    const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=F59E0B&color=fff`;
+
+    let entity: Distributor | SubPartnerDistributor | AreaSupervisor;
+    let userProfile: User;
+    let refCode: ReferralCode | null = null;
+
+    if (input.role === 'partner_distributor') {
+      const distId = `dist-${uid()}`;
+      entity = {
+        id: distId, name, contactPerson: name, email, phone, plantId,
+        referralCode, assignedAreaIds: [], status: 'active',
+      };
+      refCode = {
+        id: `ref-${uid()}`, code: referralCode, type: 'distributor',
+        distributorId: distId, plantId, status: 'active', createdAt: now, usageCount: 0,
+      };
+      userProfile = {
+        id: userId, name, email, role: 'partner_distributor', avatar, plantId,
+        distributorId: distId,
+      };
+    } else if (input.role === 'sub_partner_distributor') {
+      const parentDistributorId = isPD
+        ? currentUser.distributorId ?? ''
+        : input.parentDistributorId ?? '';
+      if (!parentDistributorId) throw new Error('A parent Partner Distributor is required for an SPD.');
+      const spdId = `spd-${uid()}`;
+      entity = {
+        id: spdId, name, contactPerson: name, email, phone, parentDistributorId,
+        plantId, assignedStoreIds: [], status: 'active', referralCode,
+      };
+      refCode = {
+        id: `ref-${uid()}`, code: referralCode, type: 'sub_partner_distributor',
+        distributorId: parentDistributorId, subPartnerDistributorId: spdId, plantId,
+        status: 'active', createdAt: now, usageCount: 0,
+      };
+      userProfile = {
+        id: userId, name, email, role: 'sub_partner_distributor', avatar, plantId,
+        distributorId: parentDistributorId, subPartnerDistributorId: spdId,
+      };
+    } else {
+      const asId = `am-${uid()}`;
+      entity = {
+        id: asId, name, email, phone, assignedAreas: [], plantId, assignedStoreIds: [],
+      };
+      userProfile = {
+        id: userId, name, email, role: 'area_manager', avatar, plantId, areaIds: [],
+      };
+    }
+
+    const persist = get().dataSource === 'db';
+
+    // 1) Create the login first (isolated). If this fails, no DB rows are written.
+    if (persist) {
+      await signUpIsolated(email, tempPassword);
+      // 2) entity → referral → user profile. Order matters: the PD `users`
+      //    RLS policy (011) subqueries the freshly-inserted SPD row.
+      try {
+        if (input.role === 'partner_distributor') await insertDistributor(entity as Distributor);
+        else if (input.role === 'sub_partner_distributor') await insertSubPartnerDistributor(entity as SubPartnerDistributor);
+        else await insertAreaSupervisor(entity as AreaSupervisor);
+        if (refCode) await insertReferralCode(refCode);
+        await insertUser(userProfile);
+      } catch (err) {
+        // The auth login now exists without a full profile — surface loudly so
+        // it can be finished/cleaned manually (login fails safe until then).
+        console.error('[useStore] createPartnerAccount: login created but profile insert failed:', err);
+        throw err;
+      }
+    }
+
+    // 3) Optimistic in-memory update so the new account shows immediately.
+    set((s) => {
+      const base = {
+        demoUsers: [...s.demoUsers, userProfile],
+        referralCodes: refCode ? [...s.referralCodes, refCode] : s.referralCodes,
+      };
+      if (input.role === 'partner_distributor')
+        return { ...base, distributors: [...s.distributors, entity as Distributor] };
+      if (input.role === 'sub_partner_distributor')
+        return { ...base, subPartnerDistributors: [...s.subPartnerDistributors, entity as SubPartnerDistributor] };
+      return { ...base, areaSupervisors: [...s.areaSupervisors, entity as AreaSupervisor] };
+    });
+
+    return { email, tempPassword };
   },
 
   // ─── Distributors ──────────────────────────────────────────────

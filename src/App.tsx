@@ -35,6 +35,7 @@ import AreaManagersPage from '@/pages/entities/AreaManagersPage'
 import PlantsPage from '@/pages/entities/PlantsPage'
 import FranchiseesPage from '@/pages/entities/FranchiseesPage'
 import FranchiseeOnboardingPage from '@/pages/entities/FranchiseeOnboardingPage'
+import NewAccountPage from '@/pages/entities/NewAccountPage'
 
 // Deliveries
 import DeliveriesPage from '@/pages/deliveries/DeliveriesPage'
@@ -137,6 +138,7 @@ function App() {
         {/* Entities */}
         <Route path="/franchisees" element={<FranchiseesPage />} />
         <Route path="/franchisees/new" element={<FranchiseeOnboardingPage />} />
+        <Route path="/accounts/new" element={<NewAccountPage />} />
         <Route path="/distributors" element={<DistributorsPage />} />
         <Route path="/area-managers" element={<AreaManagersPage />} />
         <Route path="/plants" element={<PlantsPage />} />

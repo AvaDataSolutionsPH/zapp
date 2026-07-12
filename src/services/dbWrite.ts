@@ -22,6 +22,10 @@ import type {
   ReferralCode,
   SpecialOrder,
   Notification,
+  Distributor,
+  SubPartnerDistributor,
+  AreaSupervisor,
+  User,
 } from '@/types';
 
 // ── Mappers (TS camelCase → DB snake_case) ────────────────────
@@ -322,6 +326,82 @@ export async function insertReferralCode(r: ReferralCode): Promise<void> {
   const { error } = await supabase
     .from('referral_codes')
     .insert(mapReferralCodeToDB(r) as never);
+  if (error) throw error;
+}
+
+// ── Org entities + user profiles (Account Creation) ──────────
+// Written by the "New Account" flow. Reference tables — owner/ops write via the
+// admin RLS policy; PD writes SPD/AS within scope (migration 011).
+
+const mapDistributorToDB = (d: Distributor) => ({
+  id: d.id,
+  name: d.name,
+  contact_person: d.contactPerson,
+  email: d.email,
+  phone: d.phone,
+  plant_id: d.plantId,
+  referral_code: d.referralCode,
+  assigned_area_ids: d.assignedAreaIds,
+  status: d.status,
+});
+
+const mapSubPartnerDistributorToDB = (s: SubPartnerDistributor) => ({
+  id: s.id,
+  name: s.name,
+  contact_person: s.contactPerson,
+  email: s.email,
+  phone: s.phone,
+  parent_distributor_id: s.parentDistributorId,
+  plant_id: s.plantId,
+  assigned_store_ids: s.assignedStoreIds,
+  status: s.status,
+  referral_code: s.referralCode ?? null,
+});
+
+const mapAreaSupervisorToDB = (a: AreaSupervisor) => ({
+  id: a.id,
+  name: a.name,
+  email: a.email,
+  phone: a.phone,
+  assigned_areas: a.assignedAreas,
+  plant_id: a.plantId,
+  assigned_store_ids: a.assignedStoreIds,
+});
+
+const mapUserToDB = (u: User) => ({
+  id: u.id,
+  name: u.name,
+  email: u.email,
+  role: u.role,
+  avatar: u.avatar,
+  plant_id: u.plantId ?? null,
+  distributor_id: u.distributorId ?? null,
+  sub_partner_distributor_id: u.subPartnerDistributorId ?? null,
+  area_ids: u.areaIds ?? null,
+  assigned_store_ids: u.assignedStoreIds ?? null,
+});
+
+export async function insertDistributor(d: Distributor): Promise<void> {
+  const { error } = await supabase.from('distributors').insert(mapDistributorToDB(d) as never);
+  if (error) throw error;
+}
+
+export async function insertSubPartnerDistributor(s: SubPartnerDistributor): Promise<void> {
+  const { error } = await supabase
+    .from('sub_partner_distributors')
+    .insert(mapSubPartnerDistributorToDB(s) as never);
+  if (error) throw error;
+}
+
+export async function insertAreaSupervisor(a: AreaSupervisor): Promise<void> {
+  const { error } = await supabase
+    .from('area_supervisors')
+    .insert(mapAreaSupervisorToDB(a) as never);
+  if (error) throw error;
+}
+
+export async function insertUser(u: User): Promise<void> {
+  const { error } = await supabase.from('users').insert(mapUserToDB(u) as never);
   if (error) throw error;
 }
 

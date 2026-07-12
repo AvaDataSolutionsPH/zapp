@@ -656,10 +656,11 @@ export default function BillingPage() {
       </div>
 
       {/* Formula Banners — DR-based shown to everyone except franchisees;
-          SRP-based (store remittance) shown to everyone except the billing user
-          (that split is a partner-distributor / franchisee concern). */}
-      {(!isFranchisee || !isBillingUser) && (
-        <div className={`grid grid-cols-1 gap-3 ${!isFranchisee && !isBillingUser ? 'lg:grid-cols-2' : ''}`}>
+          SRP-based (store remittance) shown to everyone except the billing user.
+          The billing user sees NEITHER (per boss: they only need the raw DR
+          prices, no formula chrome), so the whole block is hidden for them. */}
+      {!isBillingUser && (
+        <div className={`grid grid-cols-1 gap-3 ${!isFranchisee ? 'lg:grid-cols-2' : ''}`}>
           {!isFranchisee && (
             <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 flex items-center gap-3">
               <Receipt size={18} className="text-zapp-orange shrink-0" />
@@ -686,7 +687,7 @@ export default function BillingPage() {
       )}
 
       {/* KPI Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 ${isBillingUser ? 'xl:grid-cols-4' : 'xl:grid-cols-6'}`}>
         {isFranchisee ? (
           <>
             <Stat
@@ -703,6 +704,31 @@ export default function BillingPage() {
               icon={<DollarSign size={18} />}
               label="Remit to Distributor (85%)"
               value={formatCurrency(stats.totalRemittance)}
+            />
+            <Stat
+              icon={<CheckCircle size={18} />}
+              label="Total Paid"
+              value={formatCurrency(stats.totalPaid)}
+            />
+            <Stat
+              icon={<AlertTriangle size={18} />}
+              label="Overdue"
+              value={stats.overdueCount}
+            />
+            <Stat
+              icon={<FileSpreadsheet size={18} />}
+              label="Total Records"
+              value={stats.totalRecords}
+            />
+          </>
+        ) : isBillingUser ? (
+          /* Billing user: DR-focused only — no SRP remittance / SRP sales
+             (per boss: they only need the DR price). */
+          <>
+            <Stat
+              icon={<DollarSign size={18} />}
+              label="DR Total Payable"
+              value={formatCurrency(stats.totalPayable)}
             />
             <Stat
               icon={<CheckCircle size={18} />}

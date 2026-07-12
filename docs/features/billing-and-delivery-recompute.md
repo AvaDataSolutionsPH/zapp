@@ -83,8 +83,11 @@ Merch. Allowance are `0.000` (not tracked yet, same placeholders as the printabl
 statement). The list filters that map to a DR line (distributor, store search,
 cutoff via `getCutoffRangeForDate`, date range) apply to these rows too; Status
 filter and the row-click detail drawer are omitted (no billing-record behind a DR
-row). The DR-based formula banner + KPI stat cards are left as-is (boss batch 4:
-keep the SRP stats for billing_user). Other roles are untouched — the aggregated
+row). **The billing user is DR-only:** the formula banner is hidden and the KPI
+row shows just **DR Total Payable · Total Paid · Overdue · Total Records** (the
+SRP Remittance / Total SRP Sales cards are dropped — per boss, "price ng DR lang
+ang kailangan nila makita"). Other roles are untouched — the DR + SRP banners and
+the full 6-card stat set still render for owner/ops, and the aggregated
 `columns` / `franchiseeColumns` tables still render for them.
 
 ## Billing list filters by PD / SPD (BillingPage.tsx)

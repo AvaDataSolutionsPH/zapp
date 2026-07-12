@@ -216,6 +216,18 @@ export interface Application {
   certifiedAt?: string;
   agreementVersion?: string;
   applicationNumber?: string;
+  // Phase 3 — best-effort ID OCR autofill (prefilled at capture, editable by the
+  // applicant; the reviewer cross-checks against the uploaded ID image).
+  idScannedName?: string;
+  idNumber?: string;
+  // Phase 2 — submission provenance (best-effort; may be absent if the applicant
+  // denied permission or the lookup timed out) + a system-generated PDF copy.
+  submittedIp?: string;
+  userAgent?: string;
+  deviceInfo?: string;
+  gpsLat?: number;
+  gpsLng?: number;
+  pdfUrl?: string;
   status: ApplicationStatus;
   submittedAt: string;
   reviewedBy?: string;

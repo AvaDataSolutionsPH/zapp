@@ -219,6 +219,16 @@ const mapApplicationToDB = (a: Application) => ({
   certified_at: a.certifiedAt ?? null,
   agreement_version: a.agreementVersion ?? null,
   application_number: a.applicationNumber ?? null,
+  // Phase 3 — ID OCR autofill (editable).
+  id_scanned_name: a.idScannedName ?? null,
+  id_number: a.idNumber ?? null,
+  // Phase 2 — submission provenance metadata + PDF copy.
+  submitted_ip: a.submittedIp ?? null,
+  user_agent: a.userAgent ?? null,
+  device_info: a.deviceInfo ?? null,
+  gps_lat: a.gpsLat ?? null,
+  gps_lng: a.gpsLng ?? null,
+  pdf_url: a.pdfUrl ?? null,
   status: a.status,
   submitted_at: a.submittedAt,
   reviewed_by: a.reviewedBy ?? null,

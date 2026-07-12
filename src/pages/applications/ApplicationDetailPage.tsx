@@ -29,6 +29,18 @@ import {
 import { useToast } from '@/components/ui/Toast';
 import { useStorageUrl } from '@/lib/useStorageUrl';
 
+// Resolves a private storage ref to a signed URL (one hook call per render) so
+// the reviewer can open the system-generated PDF copy of the application.
+function OnboardingPdfLink({ refStr }: { refStr: string }) {
+  const url = useStorageUrl(refStr);
+  if (!url) return <span className="text-gray-400">Loading…</span>;
+  return (
+    <a href={url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
+      View / Download PDF
+    </a>
+  );
+}
+
 export default function ApplicationDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -197,6 +209,14 @@ export default function ApplicationDetailPage() {
                 <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">Operating Hours</dt>
                 <dd className="mt-1 text-sm text-gray-700">{application.operatingHours ?? '—'}</dd>
               </div>
+              <div>
+                <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">Name on ID (scanned)</dt>
+                <dd className="mt-1 text-sm text-gray-700">{application.idScannedName ?? '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">ID Number</dt>
+                <dd className="mt-1 text-sm font-mono text-gray-700">{application.idNumber ?? '—'}</dd>
+              </div>
               <div className="sm:col-span-2">
                 <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">Residential Address</dt>
                 <dd className="mt-1 text-sm text-gray-700">{application.residentialAddress ?? '—'}</dd>
@@ -237,6 +257,39 @@ export default function ApplicationDetailPage() {
                 ))}
               </ul>
             </div>
+            {(application.submittedIp || application.deviceInfo || application.gpsLat != null || application.pdfUrl) && (
+              <div className="mt-4 border-t border-gray-100 pt-4">
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+                  Submission Metadata
+                </p>
+                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">IP Address</dt>
+                    <dd className="mt-1 text-sm text-gray-700">{application.submittedIp ?? '—'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">Device</dt>
+                    <dd className="mt-1 text-sm text-gray-700 break-all">{application.deviceInfo ?? '—'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">GPS (device)</dt>
+                    <dd className="mt-1 text-sm text-gray-700">
+                      {application.gpsLat != null && application.gpsLng != null
+                        ? `${application.gpsLat.toFixed(6)}, ${application.gpsLng.toFixed(6)}`
+                        : '—'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">PDF Copy</dt>
+                    <dd className="mt-1 text-sm text-gray-700">
+                      {application.pdfUrl ? (
+                        <OnboardingPdfLink refStr={application.pdfUrl} />
+                      ) : '—'}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

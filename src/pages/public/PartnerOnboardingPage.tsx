@@ -30,6 +30,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Loader2,
+  ScanLine,
 } from 'lucide-react';
 import { Button, Card, CardContent, Input, FileUpload } from '@/components/ui';
 import type { UploadedFile } from '@/components/ui';
@@ -39,6 +40,9 @@ import LegalDocModal from '@/components/legal/LegalDocModal';
 import { LEGAL_DOCS, type LegalDocKey } from '@/data/legalContent';
 import { signUpIsolated } from '@/lib/authSignup';
 import { uploadFile, buildObjectPath } from '@/services/storage';
+import { collectSubmissionMetadata } from '@/lib/submissionMetadata';
+import { buildOnboardingPdfBlob } from '@/lib/onboardingPdf';
+import { scanGovId } from '@/lib/idOcr';
 import type { Application, ReferralType } from '@/types';
 
 const LEGAL_VERSION = '2026-07';
@@ -73,6 +77,8 @@ interface FormState {
   proofOfBilling: UploadedFile[];
   selfie: UploadedFile[];
   storePhoto: UploadedFile[];
+  idScannedName: string;
+  idNumber: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -81,6 +87,7 @@ const EMPTY_FORM: FormState = {
   storeName: '', businessAddress: '', residentialAddress: '', facebookLink: '',
   operatingHours: '', province: '', lat: '', lng: '',
   govId: [], proofOfBilling: [], selfie: [], storePhoto: [],
+  idScannedName: '', idNumber: '',
 };
 
 const CONFIRMS = [
@@ -113,6 +120,9 @@ export default function PartnerOnboardingPage() {
   const [busy, setBusy] = useState(false);
   const [openDoc, setOpenDoc] = useState<LegalDocKey | null>(null);
   const [success, setSuccess] = useState<string | null>(null); // application number
+  const [pdfBlob, setPdfBlob] = useState<Blob | null>(null); // downloadable PDF copy
+  const [idScanning, setIdScanning] = useState(false);
+  const [idScanned, setIdScanned] = useState(false);
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => {
     setForm((f) => ({ ...f, [k]: v }));
@@ -120,6 +130,39 @@ export default function PartnerOnboardingPage() {
   };
 
   const allChecked = Object.values(checks).every(Boolean);
+
+  // Gov ID upload → best-effort local OCR to prefill the editable ID fields.
+  // Only images are scanned (tesseract can't read a PDF); we never clobber a
+  // value the applicant already typed.
+  const handleGovIdChange = (files: UploadedFile[]) => {
+    set('govId', files);
+    const f = files[0]?.file;
+    if (!f || !f.type.startsWith('image/')) return;
+    setIdScanning(true);
+    setIdScanned(false);
+    scanGovId(f)
+      .then((res) => {
+        setForm((prev) => ({
+          ...prev,
+          idScannedName: prev.idScannedName || res.fullName || '',
+          idNumber: prev.idNumber || res.idNumber || '',
+        }));
+      })
+      .catch((err) => console.warn('[onboarding] ID OCR failed (best-effort):', err))
+      .finally(() => { setIdScanning(false); setIdScanned(true); });
+  };
+
+  // Soft anti-fraud hint: the scanned ID name shares no token with the account
+  // name. Never blocks submission — just flags it for the applicant + reviewer.
+  const nameMismatch = useMemo(() => {
+    const idName = form.idScannedName.trim().toLowerCase();
+    const acctTokens = [form.firstName, form.lastName]
+      .map((s) => s.trim().toLowerCase()).filter(Boolean).join(' ')
+      .split(/\s+/).filter((t) => t.length > 1);
+    if (!idName || acctTokens.length === 0) return false;
+    const idTokens = new Set(idName.split(/\s+/).filter((t) => t.length > 1));
+    return acctTokens.every((t) => !idTokens.has(t));
+  }, [form.idScannedName, form.firstName, form.lastName]);
 
   // Best-effort channel-code resolution (authoritative resolution happens at
   // Admin verification; anon applicants only have the mock referral slice).
@@ -187,6 +230,10 @@ export default function PartnerOnboardingPage() {
     setErrors({});
     try {
       const scope = `onb-${Date.now().toString(36)}`;
+      // Kick off best-effort provenance capture first so the (slow) GPS prompt
+      // and IP lookup overlap with the document uploads. Never throws.
+      const metadataPromise = collectSubmissionMetadata();
+
       // sign:false — the applicant is anonymous and can't sign every private
       // prefix (e.g. selfie/); we only persist the storageRef, which is
       // re-signed on render by an authenticated reader.
@@ -205,6 +252,43 @@ export default function PartnerOnboardingPage() {
         .map((s) => s.trim()).filter(Boolean).join(' ');
       const referralType: ReferralType = resolvedChannel?.type ?? 'zapp_internal';
       const applicationNumber = makeApplicationNumber();
+      const metadata = await metadataPromise;
+
+      // System-generated PDF copy — uploaded as a durable record AND offered to
+      // the applicant on the success screen. Non-blocking: any failure here
+      // must not stop the submission, so it's isolated in its own try/catch.
+      let pdfUrl: string | undefined;
+      let generatedPdf: Blob | null = null;
+      try {
+        generatedPdf = await buildOnboardingPdfBlob({
+          applicationNumber,
+          submittedAt: now,
+          fullName,
+          mobile: form.mobile.trim(),
+          email: form.email.trim().toLowerCase(),
+          storeName: form.storeName.trim(),
+          businessAddress: form.businessAddress.trim(),
+          residentialAddress: form.residentialAddress.trim(),
+          facebookLink: form.facebookLink.trim() || undefined,
+          operatingHours: form.operatingHours.trim(),
+          referralCode: form.referralCode.trim().toUpperCase(),
+          referralType,
+          lat: parseFloat(form.lat) || 0,
+          lng: parseFloat(form.lng) || 0,
+          agreementVersion: LEGAL_VERSION,
+          acceptedConsignmentAt: now,
+          acceptedPrivacyAt: now,
+          acceptedTermsAt: now,
+          certifiedAt: now,
+          idScannedName: form.idScannedName.trim() || undefined,
+          idNumber: form.idNumber.trim() || undefined,
+          metadata,
+        });
+        const pdfFile = new File([generatedPdf], `${applicationNumber}.pdf`, { type: 'application/pdf' });
+        pdfUrl = (await uploadFile('zapp-private', buildObjectPath('application-pdf', scope, pdfFile), pdfFile, { sign: false })).storageRef;
+      } catch (err) {
+        console.warn('[onboarding] PDF copy generation/upload failed (non-blocking):', err);
+      }
 
       const app: Omit<Application, 'id' | 'status' | 'submittedAt' | 'auditLog'> = {
         fullName,
@@ -236,15 +320,38 @@ export default function PartnerOnboardingPage() {
         certifiedAt: now,
         agreementVersion: LEGAL_VERSION,
         applicationNumber,
+        idScannedName: form.idScannedName.trim() || undefined,
+        idNumber: form.idNumber.trim() || undefined,
+        submittedIp: metadata.submittedIp,
+        userAgent: metadata.userAgent,
+        deviceInfo: metadata.deviceInfo,
+        gpsLat: metadata.gpsLat,
+        gpsLng: metadata.gpsLng,
+        pdfUrl,
       };
 
       await submitApplication(app);
+      setPdfBlob(generatedPdf);
       setSuccess(applicationNumber);
     } catch {
       setErrors({ submit: 'Submission failed. Please check your connection and try again.' });
     } finally {
       setBusy(false);
     }
+  };
+
+  const downloadPdf = () => {
+    if (!pdfBlob) return;
+    const url = URL.createObjectURL(pdfBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${success ?? 'onboarding-application'}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // Deferred revoke so the download keeps its filename (same pattern as the
+    // billing statement .xlsx export).
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
   };
 
   // ── Success screen ────────────────────────────────────────────────────
@@ -266,7 +373,12 @@ export default function PartnerOnboardingPage() {
           <p className="mt-4 text-xs text-gray-500">
             Mag-login gamit ang iyong email at password para masubaybayan ang status.
           </p>
-          <Button className="mt-6 w-full" onClick={() => navigate('/login')}>
+          {pdfBlob && (
+            <Button variant="secondary" className="mt-4 w-full" onClick={downloadPdf}>
+              Download PDF Copy
+            </Button>
+          )}
+          <Button className="mt-3 w-full" onClick={() => navigate('/login')}>
             Go to Login
           </Button>
         </div>
@@ -360,8 +472,24 @@ export default function PartnerOnboardingPage() {
                 <h2 className="text-lg font-bold text-gray-900">Upload Required Documents</h2>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">Government-Issued ID</label>
-                  <FileUpload accept="image/*,.pdf" camera onChange={(f) => set('govId', f)} />
+                  <FileUpload accept="image/*,.pdf" camera onChange={handleGovIdChange} />
                   {errors.govId && <p className="mt-1 text-xs text-red-600">{errors.govId}</p>}
+                  {(idScanning || idScanned || form.idScannedName || form.idNumber) && (
+                    <div className="mt-3 space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                      <div className="flex items-center gap-2 text-xs font-medium text-gray-600">
+                        {idScanning ? (
+                          <><Loader2 size={13} className="animate-spin" /> Scanning ID…</>
+                        ) : (
+                          <><ScanLine size={13} className="text-zapp-orange" /> Extracted from ID — pakisuri at itama kung mali</>
+                        )}
+                      </div>
+                      <Input label="Name on ID" value={form.idScannedName} onChange={(e) => set('idScannedName', e.target.value)} />
+                      <Input label="ID Number" value={form.idNumber} onChange={(e) => set('idNumber', e.target.value)} />
+                      {nameMismatch && (
+                        <p className="text-xs text-amber-600">⚠ Ang pangalan sa ID ay mukhang iba sa iyong account name — pakisuri.</p>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">Proof of Billing (Residential)</label>

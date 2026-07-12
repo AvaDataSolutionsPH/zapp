@@ -1,6 +1,7 @@
 # Feature: Partner Onboarding (self-service) — Phase 1
 
-**Status:** Phase 1 live (happy path). Phases 2–5 pending.
+**Status:** Phases 1–5 live. (1 wizard+persistence, 2 metadata+PDF, 3 ID OCR,
+4 admin verify/activate, 5 security deposit.)
 **Design:** `docs/superpowers/specs/2026-07-12-partner-onboarding-workflow-design.md`
 
 ## What it is
@@ -79,9 +80,46 @@ notifies. `Payment.type` (`'billing' | 'security_deposit'`, default billing) +
 migration `015` add the column; the deposit's synthetic `billingId` keeps it out
 of `billingComputations`.
 
-## Not yet built (later phases)
-- Submission metadata (IP/device/GPS), PDF copy of the application — Phase 2.
-- ID OCR autofill (Tesseract, best-effort) — Phase 3.
+## Phase 2 — Submission metadata + PDF copy (live)
+At submit time the wizard captures best-effort **provenance** and generates a
+**PDF copy** of the application. Both are non-blocking — a failure never stops
+the submission.
+- `src/lib/submissionMetadata.ts` → `collectSubmissionMetadata()`: public IP
+  (ipify, aborted after 4s), device fingerprint (`platform · screen · lang`),
+  and device GPS (`navigator.geolocation`, 8s timeout, resolves `{}` on
+  denial). Fired FIRST in `handleSubmit` so the slow GPS prompt overlaps the
+  document uploads. Every signal swallows its own error → `undefined`.
+- `src/lib/onboardingPdf.ts` → `buildOnboardingPdfBlob(data)`: **jsPDF**
+  (dynamically imported → own ~399KB lazy chunk, like exceljs). One-page A4
+  summary (applicant / business / channel / accepted agreements + timestamps /
+  submission metadata / optional scanned-ID section). The blob is uploaded to
+  `zapp-private` under `application-pdf/` (`sign:false`, persisted as `pdfUrl`)
+  AND held in state for a **Download PDF Copy** button on the success screen.
+- Reviewer sees IP / device / GPS + a **View/Download PDF** link (signed via
+  `OnboardingPdfLink` → `useStorageUrl`) in the Onboarding Details card.
+- Data model (additive, **migration 016**): `submittedIp`, `userAgent`,
+  `deviceInfo`, `gpsLat`, `gpsLng`, `pdfUrl`. `mapApplicationToDB` maps them;
+  read side auto-camelCases.
+
+## Phase 3 — ID OCR autofill (live)
+Best-effort local OCR on the Gov ID upload (Documents step) prefills two
+**editable** fields — Name on ID + ID Number.
+- `src/lib/idOcr.ts` → `scanGovId(file)`: **tesseract.js** (dynamically
+  imported), heuristic extract of the printed name (labelled line, else longest
+  uppercase-alpha line, title-cased) + ID number (PhilSys/UMID/DL/SSS/passport/
+  TIN regex, most-specific first). Modest accuracy BY DESIGN — the applicant
+  always confirms/edits; the reviewer cross-checks vs the ID image.
+- Wizard: `handleGovIdChange` scans **images only** (skips PDFs), never
+  clobbers a value already typed, shows a "Scanning ID…" → "Extracted from ID"
+  editable panel, and a soft **name-mismatch** hint (`nameMismatch`) when the
+  scanned name shares no token with the account name. Non-blocking.
+- Reviewer sees Name on ID (scanned) + ID Number in the Onboarding Details card.
+- Data model (additive, **migration 017**): `idScannedName`, `idNumber`.
+
+## ⚠️ Rollout order (Phases 2 & 3)
+An application INSERT with unknown columns fails entirely, so **run migrations
+016 AND 017 in Supabase BEFORE deploying/pushing the client change** — otherwise
+every real onboarding submit (and local dev submit, same DB) fails.
 
 ## Related
 [[franchisee-onboarding]] · [[public-application-flow]] · [[account-creation]] ·

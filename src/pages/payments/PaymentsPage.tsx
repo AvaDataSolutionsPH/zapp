@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import {
   CreditCard,
   CheckCircle,
@@ -8,6 +8,7 @@ import {
   Plus,
   Image as ImageIcon,
   ShieldCheck,
+  HandCoins,
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import {
@@ -27,22 +28,34 @@ import type { TableColumn, SelectOption, Tab } from '@/components/ui';
 import type { Payment } from '@/types';
 import PaymentSubmitModal from './PaymentSubmitModal';
 import PaymentVerifyModal from './PaymentVerifyModal';
+import PaymentCollectModal from './PaymentCollectModal';
 
 const PAGE_SIZE = 10;
 
 const tabDefs: Tab[] = [
   { key: 'all', label: 'All Payments', icon: <CreditCard size={14} /> },
-  { key: 'submitted', label: 'Pending Verification', icon: <Clock size={14} /> },
+  { key: 'collection', label: 'Pending Collection', icon: <HandCoins size={14} /> },
+  { key: 'verification', label: 'Pending Verification', icon: <Clock size={14} /> },
   { key: 'verified', label: 'Verified', icon: <CheckCircle size={14} /> },
   { key: 'rejected', label: 'Rejected', icon: <XCircle size={14} /> },
 ];
 
 // ── Roles ────────────────────────────────────────────────────────────────
+// Payment flow: franchisee submits → PD/SPD collects → billing verifies.
 
 const canSubmitPayment = (role?: string) =>
   role === 'franchisee_direct' ||
   role === 'franchisee_distributor' ||
   role === 'owner';
+
+// PD / SPD collect their stores' remittances before forwarding to billing.
+// owner / ops can collect too (oversight). SPD collects here even though it is
+// view-only elsewhere — this is the one action a sub-partner performs.
+const canCollectPayment = (role?: string) =>
+  role === 'partner_distributor' ||
+  role === 'sub_partner_distributor' ||
+  role === 'owner' ||
+  role === 'operations_manager';
 
 const canVerifyPayment = (role?: string) =>
   role === 'billing_user' ||
@@ -57,6 +70,7 @@ export default function PaymentsPage() {
     stores,
     currentUser,
     demoUsers,
+    getStoresForCurrentUser,
   } = useStore();
 
   const [activeTab, setActiveTab] = useState('all');
@@ -67,6 +81,33 @@ export default function PaymentsPage() {
   const [page, setPage] = useState(1);
   const [submitModalOpen, setSubmitModalOpen] = useState(false);
   const [verifyPayment, setVerifyPayment] = useState<Payment | null>(null);
+  const [collectPaymentTarget, setCollectPaymentTarget] = useState<Payment | null>(null);
+
+  // A store "has a PD" when it belongs to a distributor (or sub-partner).
+  // These go through the PD/SPD collection step. Direct franchisees have no
+  // distributor, so their payments skip collection and go straight to billing.
+  const storeHasPd = useCallback(
+    (storeId: string) => {
+      const store = stores.find((s) => s.id === storeId);
+      return !!(store?.distributorId || store?.subPartnerDistributorId);
+    },
+    [stores],
+  );
+
+  // Derived workflow stage (independent of the raw status enum) used for tabs,
+  // stats and action routing.
+  const paymentStage = useCallback(
+    (
+      p: Payment,
+    ): 'awaiting_collection' | 'awaiting_verification' | 'verified' | 'rejected' => {
+      if (p.status === 'verified') return 'verified';
+      if (p.status === 'rejected') return 'rejected';
+      if (p.status === 'collected') return 'awaiting_verification';
+      // status === 'submitted'
+      return storeHasPd(p.storeId) ? 'awaiting_collection' : 'awaiting_verification';
+    },
+    [storeHasPd],
+  );
 
   // Filter payments based on user role
   const userPayments = useMemo(() => {
@@ -77,18 +118,30 @@ export default function PaymentsPage() {
       return payments;
     }
 
+    // PD / SPD see the payments of the stores in their distributor scope.
+    if (role === 'partner_distributor' || role === 'sub_partner_distributor') {
+      const scoped = new Set(getStoresForCurrentUser().map((s) => s.id));
+      return payments.filter((p) => scoped.has(p.storeId));
+    }
+
     // Franchisees see only their store payments
     const userStoreIds = currentUser.assignedStoreIds ?? [];
     return payments.filter((p) => userStoreIds.includes(p.storeId));
-  }, [payments, currentUser]);
+  }, [payments, currentUser, getStoresForCurrentUser]);
 
   // Filter and search
   const filtered = useMemo(() => {
     let result = [...userPayments];
 
-    // Tab filter
-    if (activeTab !== 'all') {
-      result = result.filter((p) => p.status === activeTab);
+    // Tab filter (stage-based: pending tabs split by collection vs verification)
+    if (activeTab === 'collection') {
+      result = result.filter((p) => paymentStage(p) === 'awaiting_collection');
+    } else if (activeTab === 'verification') {
+      result = result.filter((p) => paymentStage(p) === 'awaiting_verification');
+    } else if (activeTab === 'verified') {
+      result = result.filter((p) => p.status === 'verified');
+    } else if (activeTab === 'rejected') {
+      result = result.filter((p) => p.status === 'rejected');
     }
 
     // Status filter (for "all" tab)
@@ -111,7 +164,7 @@ export default function PaymentsPage() {
 
     result.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
     return result;
-  }, [userPayments, activeTab, statusFilter, storeSearch, dateFrom, dateTo, stores]);
+  }, [userPayments, activeTab, statusFilter, storeSearch, dateFrom, dateTo, stores, paymentStage]);
 
   const paged = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
@@ -121,11 +174,11 @@ export default function PaymentsPage() {
   // Stats
   const stats = useMemo(() => ({
     total: userPayments.length,
-    pending: userPayments.filter((p) => p.status === 'submitted').length,
+    pendingCollection: userPayments.filter((p) => paymentStage(p) === 'awaiting_collection').length,
+    pendingVerification: userPayments.filter((p) => paymentStage(p) === 'awaiting_verification').length,
     verified: userPayments.filter((p) => p.status === 'verified').length,
-    rejected: userPayments.filter((p) => p.status === 'rejected').length,
     totalAmount: userPayments.filter((p) => p.status === 'verified').reduce((s, p) => s + p.amount, 0),
-  }), [userPayments]);
+  }), [userPayments, paymentStage]);
 
   // Helpers
   const storeName = (id: string) => stores.find((s) => s.id === id)?.name ?? id;
@@ -136,9 +189,31 @@ export default function PaymentsPage() {
   };
   const formatCurrency = (n: number) => `P${n.toLocaleString()}`;
 
+  // Route a row click / "view" to the modal appropriate for the viewer's role
+  // and the payment's current stage.
+  const openDetail = (row: Payment) => {
+    const role = currentUser?.role;
+    const stage = paymentStage(row);
+    if (stage === 'awaiting_collection' && canCollectPayment(role)) {
+      setCollectPaymentTarget(row);
+      return;
+    }
+    if (canVerifyPayment(role)) {
+      setVerifyPayment(row);
+      return;
+    }
+    if (canCollectPayment(role)) {
+      setCollectPaymentTarget(row);
+      return;
+    }
+    // Franchisees / others: read-only detail via the verify modal.
+    setVerifyPayment(row);
+  };
+
   const statusOptions: SelectOption[] = [
     { value: '', label: 'All Statuses' },
-    { value: 'submitted', label: 'Pending' },
+    { value: 'submitted', label: 'Submitted' },
+    { value: 'collected', label: 'Collected' },
     { value: 'verified', label: 'Verified' },
     { value: 'rejected', label: 'Rejected' },
   ];
@@ -214,40 +289,66 @@ export default function PaymentsPage() {
     },
     {
       key: 'verifiedBy',
-      header: 'Verified By',
-      render: (row) => (
-        <span className="text-sm text-gray-600">{verifierName(row.verifiedBy)}</span>
-      ),
+      header: 'Handled By',
+      render: (row) => {
+        if (row.verifiedBy) {
+          return <span className="text-sm text-gray-600">{verifierName(row.verifiedBy)}</span>;
+        }
+        if (row.collectedBy) {
+          return (
+            <span className="text-sm text-blue-600">
+              {verifierName(row.collectedBy)}
+              <span className="text-xs text-gray-400"> (collected)</span>
+            </span>
+          );
+        }
+        return <span className="text-sm text-gray-600">-</span>;
+      },
     },
     {
       key: 'actions',
       header: '',
-      render: (row) => (
-        <div className="flex items-center gap-1">
-          {row.status === 'submitted' && canVerifyPayment(currentUser?.role) && (
+      render: (row) => {
+        const stage = paymentStage(row);
+        return (
+          <div className="flex items-center gap-1">
+            {stage === 'awaiting_collection' && canCollectPayment(currentUser?.role) && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCollectPaymentTarget(row);
+                }}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                title="Collect Payment"
+              >
+                <HandCoins size={15} />
+              </button>
+            )}
+            {stage === 'awaiting_verification' && canVerifyPayment(currentUser?.role) && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setVerifyPayment(row);
+                }}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
+                title="Verify / Reject"
+              >
+                <ShieldCheck size={15} />
+              </button>
+            )}
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                setVerifyPayment(row);
+                openDetail(row);
               }}
-              className="p-1.5 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
-              title="Verify / Reject"
+              className="p-1.5 rounded-lg text-gray-400 hover:text-zapp-orange hover:bg-orange-50 transition-colors"
+              title="View Details"
             >
-              <ShieldCheck size={15} />
+              <Eye size={15} />
             </button>
-          )}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setVerifyPayment(row);
-            }}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-zapp-orange hover:bg-orange-50 transition-colors"
-            title="View Details"
-          >
-            <Eye size={15} />
-          </button>
-        </div>
-      ),
+          </div>
+        );
+      },
     },
   ];
 
@@ -273,10 +374,10 @@ export default function PaymentsPage() {
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Stat icon={<CreditCard size={18} />} label="Total Payments" value={stats.total} />
-        <Stat icon={<Clock size={18} />} label="Pending Verification" value={stats.pending} />
-        <Stat icon={<CheckCircle size={18} />} label="Verified" value={stats.verified} />
+        <Stat icon={<HandCoins size={18} />} label="Pending Collection" value={stats.pendingCollection} />
+        <Stat icon={<Clock size={18} />} label="Pending Verification" value={stats.pendingVerification} />
         <Stat
-          icon={<CreditCard size={18} />}
+          icon={<CheckCircle size={18} />}
           label="Total Verified Amount"
           value={formatCurrency(stats.totalAmount)}
         />
@@ -325,7 +426,7 @@ export default function PaymentsPage() {
           columns={columns}
           data={paged}
           keyExtractor={(row) => row.id}
-          onRowClick={(row) => setVerifyPayment(row)}
+          onRowClick={(row) => openDetail(row)}
           emptyMessage="No payments found matching your filters."
           pagination={{
             page,
@@ -388,6 +489,13 @@ export default function PaymentsPage() {
       <PaymentSubmitModal
         open={submitModalOpen}
         onClose={() => setSubmitModalOpen(false)}
+      />
+
+      {/* Collect Payment Modal (PD / SPD) */}
+      <PaymentCollectModal
+        open={!!collectPaymentTarget}
+        onClose={() => setCollectPaymentTarget(null)}
+        payment={collectPaymentTarget}
       />
 
       {/* Verify Payment Modal */}

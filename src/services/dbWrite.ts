@@ -126,6 +126,8 @@ const mapPaymentToDB = (p: Payment) => ({
   date_paid: p.datePaid,
   proof_url: p.proofUrl ?? null,
   status: p.status,
+  collected_by: p.collectedBy ?? null,
+  collected_at: p.collectedAt ?? null,
   verified_by: p.verifiedBy ?? null,
   rejected_reason: p.rejectedReason ?? null,
   submitted_at: p.submittedAt,

@@ -161,8 +161,8 @@ export default function PaymentSubmitModal({ open, onClose }: PaymentSubmitModal
       addToast(
         'success',
         method === 'gateway'
-          ? 'Payment processed. Awaiting billing verification.'
-          : 'Payment submitted. Awaiting billing verification.',
+          ? 'Payment processed. Awaiting collection & verification.'
+          : 'Payment submitted. Awaiting collection & verification.',
       );
       setSuccess(true);
       setTimeout(() => {

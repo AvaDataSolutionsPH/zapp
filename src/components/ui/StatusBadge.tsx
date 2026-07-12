@@ -26,6 +26,7 @@ const deliveryStatuses: Record<string, StatusConfig> = {
 
 const paymentStatuses: Record<string, StatusConfig> = {
   submitted: { label: 'Submitted', variant: 'warning' },
+  collected: { label: 'Collected', variant: 'info' },
   verified:  { label: 'Verified',  variant: 'success' },
   rejected:  { label: 'Rejected',  variant: 'danger' },
 };

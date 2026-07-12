@@ -57,7 +57,11 @@ export type StoreDeliveryStatus = 'active' | 'warning' | 'hold';
 
 export type PaymentMethod = 'gateway' | 'manual';
 
-export type PaymentStatus = 'submitted' | 'verified' | 'rejected';
+// submitted → collected → verified (with rejected reachable from either stage).
+// 'collected' = the store's remittance has been collected by its PD/SPD and
+// forwarded to Billing; billing marks it 'verified' (which is what actually
+// flips the billing record to paid — see billingComputations).
+export type PaymentStatus = 'submitted' | 'collected' | 'verified' | 'rejected';
 
 export type PackagingOrderStatus = 'pending' | 'included_in_delivery' | 'billed';
 
@@ -338,6 +342,12 @@ export interface Payment {
   datePaid: string;
   proofUrl?: string;
   status: PaymentStatus;
+  // PD/SPD collection step (franchisee → PD/SPD → billing). Set when the
+  // partner distributor collects the store's remittance before forwarding
+  // it to billing for verification. Absent for direct-franchisee payments
+  // that go straight to billing (those stores have no PD).
+  collectedBy?: string;
+  collectedAt?: string;
   verifiedBy?: string;
   rejectedReason?: string;
   submittedAt: string;

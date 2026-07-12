@@ -238,6 +238,12 @@ interface AppStore {
   // Payments
   payments: Payment[];
   submitPayment: (payment: Omit<Payment, 'id' | 'status' | 'submittedAt'>) => void;
+  collectPayment: (
+    id: string,
+    action: 'collected' | 'rejected',
+    collectedBy: string,
+    reason?: string,
+  ) => Promise<void>;
   verifyPayment: (
     id: string,
     action: 'verified' | 'rejected',
@@ -1181,6 +1187,43 @@ export const useStore = create<AppStore>((set, get) => {
       console.error('[useStore] submitPayment DB write failed, rolling back:', err);
       set((s) => ({ payments: s.payments.filter((p) => p.id !== newPayment.id) }));
     });
+  },
+
+  // PD/SPD collection step: the partner distributor collects the store's
+  // remittance and forwards it to billing (status → 'collected'), or rejects
+  // it back to the store. Collection does NOT mark the billing paid — only
+  // billing verification does (billingComputations keys on 'verified') — so
+  // no billing recompute is needed here.
+  collectPayment: async (
+    id: string,
+    action: 'collected' | 'rejected',
+    collectedBy: string,
+    reason?: string,
+  ) => {
+    const prevPayment = get().payments.find((p) => p.id === id);
+    if (!prevPayment) return;
+    const updatedPayment: Payment = {
+      ...prevPayment,
+      status: action as Payment['status'],
+      collectedBy: action === 'collected' ? collectedBy : prevPayment.collectedBy,
+      collectedAt: action === 'collected' ? new Date().toISOString() : prevPayment.collectedAt,
+      rejectedReason: action === 'rejected' ? reason : prevPayment.rejectedReason,
+    };
+
+    set((s) => ({
+      payments: s.payments.map((p) => (p.id === id ? updatedPayment : p)),
+    }));
+
+    if (get().dataSource !== 'db') return;
+    try {
+      await updatePayment(updatedPayment);
+    } catch (err) {
+      console.error('[useStore] collectPayment DB write failed, rolling back:', err);
+      set((s) => ({
+        payments: s.payments.map((p) => (p.id === id ? prevPayment : p)),
+      }));
+      throw err;
+    }
   },
 
   verifyPayment: async (

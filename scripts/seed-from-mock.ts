@@ -327,6 +327,10 @@ const mapPayment = (p: typeof payments[number]) => ({
   date_paid: p.datePaid,
   proof_url: p.proofUrl ?? null,
   status: p.status,
+  // collectedBy/collectedAt aren't present on any seeded mock row, so they're
+  // absent from the inferred literal type — read them defensively.
+  collected_by: (p as { collectedBy?: string }).collectedBy ?? null,
+  collected_at: (p as { collectedAt?: string }).collectedAt ?? null,
   verified_by: p.verifiedBy ?? null,
   rejected_reason: p.rejectedReason ?? null,
   submitted_at: p.submittedAt,

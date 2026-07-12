@@ -227,8 +227,10 @@ const navSections: NavSection[] = [
         icon: DollarSign,
         allowedRoles: [
           'owner',
+          'operations_manager',
           'billing_user',
           'partner_distributor',
+          'sub_partner_distributor',
           'franchisee_distributor',
           'franchisee_direct',
         ],

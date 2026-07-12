@@ -44,6 +44,14 @@ throws (offline / API down / CORS) via the `locFailed` flags, so the form never
 hard-blocks. The composed address is
 `"<address>, Brgy. <barangay>, <city>, <province>"`.
 
+**Metro Manila / NCR:** Metro Manila is NOT a PSGC province — it is a *region*
+(NCR, code `130000000`) made of cities, so the `/provinces/` endpoint omits it.
+`fetchProvinces()` injects a synthetic `NCR_PROVINCE` (`Metro Manila (NCR)`,
+sorted into the M's) so Metro Manila applicants can pick their location, and
+`fetchCities()` routes that one code to `/regions/{code}/cities-municipalities/`
+instead of `/provinces/...`. Barangays use the normal city endpoint (NCR cities
+are ordinary city-municipality codes). All in `phLocations.ts` — no page change.
+
 ## Progressive map zoom (geocoding)
 PSGC returns names only (no coordinates), so to make the map **zoom toward the
 chosen area** as the applicant selects Province → City → Barangay, each

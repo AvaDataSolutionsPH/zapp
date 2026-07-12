@@ -46,11 +46,28 @@ async function fetchList(path: string): Promise<PsgcItem[]> {
   return items;
 }
 
-export function fetchProvinces(): Promise<PsgcItem[]> {
-  return fetchList('/provinces/');
+// Metro Manila is NOT a PSGC province — it is the National Capital Region
+// (NCR), a region composed of cities, so the /provinces/ endpoint omits it
+// entirely. We inject it as a synthetic "province" so applicants in Metro
+// Manila can still pick their location; its cities are fetched from the
+// /regions/ endpoint instead (see fetchCities). `code` is NCR's PSGC region
+// code — distinct from any province code, so the branch below is unambiguous.
+export const NCR_PROVINCE: PsgcItem = { code: '130000000', name: 'Metro Manila (NCR)' };
+
+export async function fetchProvinces(): Promise<PsgcItem[]> {
+  const provinces = await fetchList('/provinces/');
+  // Merge NCR in and re-sort (lands under the M's) WITHOUT mutating the
+  // cached /provinces/ array. Guard against a double-inject if the raw list
+  // ever starts including NCR itself.
+  if (provinces.some((p) => p.code === NCR_PROVINCE.code)) return provinces;
+  return [...provinces, NCR_PROVINCE].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export function fetchCities(provinceCode: string): Promise<PsgcItem[]> {
+  // NCR has no province code — its cities live under the region endpoint.
+  if (provinceCode === NCR_PROVINCE.code) {
+    return fetchList(`/regions/${provinceCode}/cities-municipalities/`);
+  }
   return fetchList(`/provinces/${provinceCode}/cities-municipalities/`);
 }
 

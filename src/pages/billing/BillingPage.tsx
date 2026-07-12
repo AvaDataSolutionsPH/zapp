@@ -29,6 +29,7 @@ import type { BillingRecord, Delivery } from '@/types';
 import { exportTableXlsx, type XlsxColumn } from '@/lib/tableExcel';
 import { getBillingBreakdown, getCutoffRangeForDate } from '@/lib/billingComputations';
 import BillingDetailDrawer from './BillingDetailDrawer';
+import DrPhotosDrawer, { type DrPhotoTarget } from './DrPhotosDrawer';
 
 const PAGE_SIZE = 10;
 
@@ -181,6 +182,8 @@ export default function BillingPage() {
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
   const [selectedBilling, setSelectedBilling] = useState<BillingRecord | null>(null);
+  // Billing user: the DR row whose Beginning/Ending photos are being viewed.
+  const [photoTarget, setPhotoTarget] = useState<DrPhotoTarget | null>(null);
   const [exporting, setExporting] = useState(false);
 
   // Re-render every minute to update due timers
@@ -899,11 +902,25 @@ export default function BillingPage() {
 
       {/* Table — billing user gets the per-DR UBERDELI statement view; all
           other roles keep the aggregated per-billing-record table. */}
+      {isBillingUser && (
+        <p className="text-xs text-gray-500 -mb-2">
+          I-click ang isang DR row para makita ang Beginning/Ending DR at donut-crate
+          photos ng store (para ma-double-check ang report).
+        </p>
+      )}
       {isBillingUser ? (
         <Table
           columns={billingUserColumns}
           data={billingUserPaged}
           keyExtractor={(row) => row.id}
+          onRowClick={(row) =>
+            setPhotoTarget({
+              deliveryId: row.id,
+              drNumber: row.drNumber,
+              date: mmddyyyy(row.date),
+              shopName: row.shopName,
+            })
+          }
           emptyMessage="No deliveries found matching your filters."
           pagination={{
             page,
@@ -933,6 +950,9 @@ export default function BillingPage() {
         billing={selectedBilling}
         onClose={() => setSelectedBilling(null)}
       />
+
+      {/* Billing user: per-DR Beginning/Ending photos (report verification) */}
+      <DrPhotosDrawer target={photoTarget} onClose={() => setPhotoTarget(null)} />
     </div>
   );
 }

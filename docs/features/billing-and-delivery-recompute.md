@@ -90,6 +90,14 @@ ang kailangan nila makita"). Other roles are untouched — the DR + SRP banners 
 the full 6-card stat set still render for owner/ops, and the aggregated
 `columns` / `franchiseeColumns` tables still render for them.
 
+**Per-DR photo verification:** each billing-user DR row is clickable → opens
+`src/pages/billing/DrPhotosDrawer.tsx`, a view-only drawer that shows the store's
+captured evidence for that delivery — **Beginning DR slip** (`beginningInventory.
+drImageUrl`), **Beginning crate photos** + **Ending crate photos** (`crateImageUrls`,
+matched by `deliveryId`) — so billing can double-check the store's reported
+inventory per DR. Same signed-URL rendering as DeliveryDetailDrawer's "Delivery
+Photos" section (`useStorageUrl`); empty state when the store hasn't uploaded yet.
+
 ## Billing list filters by PD / SPD (BillingPage.tsx)
 Two role-scoped filters let a PD chain be read top-down:
 - **Distributor (PD) filter** — shown to `owner` / `operations_manager` /

@@ -114,6 +114,20 @@ filter as before), so the totals double as a running "total under this PD / SPD"
 > The DR-based **statement** (built from *deliveries*, not billings) already shows
 > those SPD shops. Real production data fills the list view naturally.
 
+## Toolbar "Export Excel" (WYSIWYG table export)
+The Billing page toolbar **Export Excel** button exports the table the current
+user is actually looking at, honoring the active filters, as a real `.xlsx` via
+`src/lib/tableExcel.ts` (`exportTableXlsx` / pure `buildTableWorkbook`; exceljs,
+dynamically imported → shares the lazy chunk with the statement export). Two
+shapes: **billing user** → the per-DR statement rows (`billingUserRows`, the same
+10 columns shown on screen, amounts as real numbers with `#,##0.000`); **everyone
+else** → the aggregated billing records (`filtered`, invoice/store/distributor/
+period/DR totals/…, `#,##0.00`). This **replaced the old `billingService.exportToExcel`
+CSV stub**, which pulled from the now-empty mock `billingRecords` and produced a
+near-blank file that never matched the printable statement (boss: "ibang excel
+pala nalabas dito"). Distinct from the **printable Billing Statement** export
+below (that one is the grouped per-PD-per-cutoff carbon copy with letterhead).
+
 ## Delivery-status auto-rule
 `Store.deliveryStatus` is auto-derived: 0 overdue billings = `active`,
 1 = `warning`, 2+ = `hold`. Manual `requestStopDelivery` / `resumeDelivery`

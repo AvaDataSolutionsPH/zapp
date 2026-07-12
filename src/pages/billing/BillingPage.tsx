@@ -26,7 +26,7 @@ import {
 import { useToast } from '@/components/ui/Toast';
 import type { TableColumn, SelectOption } from '@/components/ui';
 import type { BillingRecord, Delivery } from '@/types';
-import { billingService } from '@/services/api';
+import { exportTableXlsx, type XlsxColumn } from '@/lib/tableExcel';
 import { getBillingBreakdown, getCutoffRangeForDate } from '@/lib/billingComputations';
 import BillingDetailDrawer from './BillingDetailDrawer';
 
@@ -339,26 +339,86 @@ export default function BillingPage() {
     addToast('info', `Pay Now for ${b.id.toUpperCase()} — NextPay integration coming soon.`);
   };
 
-  // Export handler
+  // Export handler — "what you see is what you get": exports the table the
+  // current user is actually looking at (the per-DR statement rows for the
+  // billing user, the aggregated billing records for everyone else), honoring
+  // the active filters, as a real .xlsx. Replaces the old plain-CSV stub that
+  // pulled from empty mock data and never matched the printable statement.
   const handleExport = useCallback(async () => {
     setExporting(true);
     try {
-      const plantId = plantFilter || (plants[0]?.id ?? '');
-      const blob = await billingService.exportToExcel(plantId);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `billing-export-${new Date().toISOString().slice(0, 10)}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch {
-      // Handle error silently in demo
+      const stamp = new Date().toISOString().slice(0, 10);
+      if (isBillingUser) {
+        const columns: XlsxColumn[] = [
+          { header: 'Delivery Date', key: 'date', width: 12 },
+          { header: 'PO Number', key: 'poNumber', width: 10 },
+          { header: 'DR Number', key: 'drNumber', width: 20 },
+          { header: 'Shop Code', key: 'shopCode', width: 12 },
+          { header: 'Shop Name', key: 'shopName', width: 28 },
+          { header: 'DR Amount (Vat Inc.)', key: 'drAmount', width: 16, numFmt: '#,##0.000' },
+          { header: 'Returns (Credit) (Vat Inc.)', key: 'returns', width: 16, numFmt: '#,##0.000' },
+          { header: 'Delivery Adjustment (Credit) (Vat Inc.)', key: 'deliveryAdjustment', width: 18, numFmt: '#,##0.000' },
+          { header: 'Merch. Allowance (Vat Inc.)', key: 'merchAllowance', width: 16, numFmt: '#,##0.000' },
+          { header: 'Net Amount (Vat Inc.)', key: 'netAmount', width: 16, numFmt: '#,##0.000' },
+        ];
+        const rows = billingUserRows.map((r) => ({
+          date: mmddyyyy(r.date),
+          poNumber: r.poNumber,
+          drNumber: r.drNumber,
+          shopCode: r.shopCode,
+          shopName: r.shopName,
+          drAmount: r.drAmount,
+          returns: 0,
+          deliveryAdjustment: 0,
+          merchAllowance: 0,
+          netAmount: r.netAmount,
+        }));
+        await exportTableXlsx(`Billing-DR-Export-${stamp}.xlsx`, 'DR Billing', columns, rows);
+      } else {
+        const columns: XlsxColumn[] = [
+          { header: 'Invoice #', key: 'invoice', width: 22 },
+          { header: 'Store', key: 'store', width: 24 },
+          { header: 'Distributor', key: 'distributor', width: 22 },
+          { header: 'Period', key: 'period', width: 16 },
+          { header: 'DR Total', key: 'drTotal', width: 14, numFmt: '#,##0.00' },
+          { header: 'Unsold Deduction', key: 'unsold', width: 15, numFmt: '#,##0.00' },
+          { header: 'Packaging', key: 'packaging', width: 13, numFmt: '#,##0.00' },
+          { header: 'Total Payable', key: 'totalPayable', width: 15, numFmt: '#,##0.00' },
+          { header: 'SRP Total', key: 'srpTotal', width: 14, numFmt: '#,##0.00' },
+          { header: 'Profit (15%)', key: 'profit', width: 13, numFmt: '#,##0.00' },
+          { header: 'Remit to PD (85%)', key: 'remit', width: 16, numFmt: '#,##0.00' },
+          { header: 'Status', key: 'status', width: 12 },
+          { header: 'Issued', key: 'issued', width: 14 },
+          { header: 'Due', key: 'due', width: 14 },
+        ];
+        const rows = filtered.map((b) => ({
+          invoice: b.id.toUpperCase(),
+          store: storeName(b.storeId),
+          distributor: distributorName(b.distributorId),
+          period: b.period,
+          drTotal: b.drTotal,
+          unsold: b.unsoldDeduction,
+          packaging: b.packagingTotal,
+          totalPayable: b.totalPayable,
+          srpTotal: b.srpTotal,
+          profit: b.franchiseeProfit,
+          remit: b.remitToPD,
+          status: b.status,
+          issued: new Date(b.issuedAt).toLocaleDateString(),
+          due: new Date(b.dueAt).toLocaleDateString(),
+        }));
+        await exportTableXlsx(`Billing-Export-${stamp}.xlsx`, 'Billing', columns, rows);
+      }
+    } catch (err) {
+      console.error('[BillingPage] export failed:', err);
+      addToast('error', 'Hindi ma-export ang Excel. Pakisubukan ulit.');
     } finally {
       setExporting(false);
     }
-  }, [plantFilter, plants]);
+    // storeName/distributorName are stable closures over the `stores`/`distributors`
+    // slices; including them would rebuild the callback every render for no gain.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isBillingUser, billingUserRows, filtered, addToast]);
 
   // Table columns
   const columns: TableColumn<BillingRecord>[] = [

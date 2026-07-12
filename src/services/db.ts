@@ -106,6 +106,24 @@ export const fetchStores = (): Promise<Store[]> => fetchAll<Store>('stores');
 export const fetchApplications = (): Promise<Application[]> =>
   fetchAll<Application>('applications');
 
+/**
+ * Fetch the most recent application for an email (case-insensitive). Used by the
+ * auth flow to show the "Awaiting verification" screen to a self-service
+ * onboarding applicant who has an auth login but no `users` profile yet.
+ * Relies on the `apps_select_own` RLS policy (migration 013). Returns null if
+ * none match or the query errors.
+ */
+export async function fetchApplicationByEmail(email: string): Promise<Application | null> {
+  const { data, error } = await supabase
+    .from('applications')
+    .select('*')
+    .ilike('email', email)
+    .order('submitted_at', { ascending: false })
+    .limit(1);
+  if (error || !data || data.length === 0) return null;
+  return transformRow<Application>(data[0] as Record<string, unknown>);
+}
+
 export const fetchDeliveries = (): Promise<Delivery[]> => fetchAll<Delivery>('deliveries');
 export const fetchBeginningInventories = (): Promise<BeginningInventory[]> =>
   fetchAll<BeginningInventory>('beginning_inventories');

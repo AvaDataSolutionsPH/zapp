@@ -135,6 +135,7 @@ export async function uploadFile(
   bucket: Bucket,
   path: string,
   file: File,
+  opts?: { sign?: boolean },
 ): Promise<UploadResult> {
   const { error } = await supabase.storage
     .from(bucket)
@@ -151,7 +152,15 @@ export async function uploadFile(
     return { bucket, path, url: data.publicUrl, storageRef };
   }
 
-  // Private bucket — signed URL valid for 1 hour by default.
+  // Private bucket. Signing a just-uploaded object requires read access to its
+  // prefix — which anon only has for gov-id/ and proof-of-billing/ (see the
+  // storage RLS). Callers that only need the persisted `storageRef` (the ref is
+  // re-signed later on render via useStorageUrl by an authenticated reader) can
+  // pass { sign: false } to skip the signed-URL round-trip and avoid a 400 on
+  // prefixes anon can't read (e.g. the onboarding selfie).
+  if (opts?.sign === false) {
+    return { bucket, path, url: '', storageRef };
+  }
   const url = await getSignedUrl(bucket, path);
   return { bucket, path, url, storageRef };
 }

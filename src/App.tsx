@@ -13,6 +13,8 @@ import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import LandingPage from '@/pages/public/LandingPage'
 import StoreDirectoryPage from '@/pages/public/StoreDirectoryPage'
 import ApplicationPage from '@/pages/public/ApplicationPage'
+import PartnerOnboardingPage from '@/pages/public/PartnerOnboardingPage'
+import AwaitingVerificationPage from '@/pages/public/AwaitingVerificationPage'
 import ReferralEntryPage from '@/pages/public/ReferralEntryPage'
 
 // Auth
@@ -72,6 +74,7 @@ import SettingsPage from '@/pages/admin/SettingsPage'
 function App() {
   const isAuthenticated = useStore((s) => s.isAuthenticated)
   const authLoading = useStore((s) => s.authLoading)
+  const pendingApplication = useStore((s) => s.pendingApplication)
   const restoreSession = useStore((s) => s.restoreSession)
 
   // Hydrate currentUser from any persisted Supabase session on first mount, and
@@ -80,7 +83,7 @@ function App() {
     void restoreSession()
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') {
-        useStore.setState({ currentUser: null, isAuthenticated: false, authLoading: false })
+        useStore.setState({ currentUser: null, isAuthenticated: false, pendingApplication: null, authLoading: false })
       } else if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') {
         void restoreSession()
       }
@@ -94,6 +97,13 @@ function App() {
     return <LoadingScreen />
   }
 
+  // A self-service onboarding applicant (valid login, application pending, not
+  // yet activated) has no ERP access — show the awaiting-verification screen
+  // instead of the app.
+  if (pendingApplication) {
+    return <AwaitingVerificationPage />
+  }
+
   return (
     <Routes>
       {/* Landing page: standalone (own dark nav + footer, no PublicLayout chrome) */}
@@ -101,6 +111,9 @@ function App() {
 
       {/* Dev preview of the boot loading splash (always renders it) */}
       <Route path="/loading-preview" element={<LoadingScreen />} />
+
+      {/* Self-service Partner Onboarding — standalone full-screen wizard */}
+      <Route path="/onboarding" element={<PartnerOnboardingPage />} />
 
       {/* Public routes */}
       <Route element={<PublicLayout />}>

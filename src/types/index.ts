@@ -195,6 +195,24 @@ export interface Application {
   deliverySchedule?: DeliverySchedule;
   openingDate?: string;
   termsAcceptedAt?: string;
+  // Self-service Partner Onboarding (/onboarding) fields — all optional so the
+  // legacy /apply and internal onboarding forms stay valid. See
+  // docs/superpowers/specs/2026-07-12-partner-onboarding-workflow-design.md.
+  firstName?: string;
+  middleName?: string;
+  lastName?: string;
+  suffix?: string;
+  residentialAddress?: string;
+  facebookLink?: string;
+  operatingHours?: string;
+  selfieUrl?: string;
+  // Per-document electronic acceptance timestamps (Step 6, four confirmations).
+  acceptedConsignmentAt?: string;
+  acceptedPrivacyAt?: string;
+  acceptedTermsAt?: string;
+  certifiedAt?: string;
+  agreementVersion?: string;
+  applicationNumber?: string;
   status: ApplicationStatus;
   submittedAt: string;
   reviewedBy?: string;

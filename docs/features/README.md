@@ -39,6 +39,7 @@ Copy `_TEMPLATE.md` when adding a feature doc.
 
 - [public-application-flow](public-application-flow.md) — `/apply` wizard incl. the required Grab-style store map pin
 - [franchisee-onboarding](franchisee-onboarding.md) — internal "New Franchisee" onboarding form (`/franchisees/new`): channel code (PD/SPD/direct), shop code, delivery schedule, opening date, ID + proof, T&C
+- [partner-onboarding](partner-onboarding.md) — self-service applicant flow (`/onboarding`): account creation + docs + selfie + 4 confirmations; awaiting-verification screen (Phase 1)
 - [account-creation](account-creation.md) — "New Account" (`/accounts/new`): create a login + entity for a PD/SPD/Area Supervisor with a temp password (owner/ops any; PD scoped)
 - [inventory-capture](inventory-capture.md) — Beginning/Ending Inventory data entry (manual-only counting, local DR OCR, no Gemini)
 - [ending-inventory-review](ending-inventory-review.md) — reviewer state machine (approve / needs-review / correction)

@@ -54,7 +54,7 @@ import {
 import { computeBillingsFromState } from '@/lib/billingComputations';
 import { computeStoreDeliveryStatus } from '@/lib/deliveryEnforcement';
 import { supabase } from '@/lib/supabase';
-import { hydrateAll, fetchUserByEmail } from '@/services/db';
+import { hydrateAll, fetchUserByEmail, fetchApplicationByEmail } from '@/services/db';
 import {
   insertStore,
   insertApplication,
@@ -142,6 +142,13 @@ interface AppStore {
   // Auth
   currentUser: User | null;
   isAuthenticated: boolean;
+  /**
+   * Set when a signed-in user has a valid auth login but no `users` profile yet
+   * AND a pending self-service onboarding application exists for their email.
+   * Drives the "Awaiting verification" screen (see PartnerOnboarding). Distinct
+   * from `currentUser`: these applicants have no ERP access until Admin activates.
+   */
+  pendingApplication: Application | null;
   /** True while restoring an existing Supabase session at app boot. */
   authLoading: boolean;
   /** Where the entity slices currently come from: mock seed or Supabase DB. */
@@ -338,6 +345,7 @@ export const useStore = create<AppStore>((set, get) => {
   // Boot with no session; restoreSession() re-hydrates from Supabase on mount.
   currentUser: null,
   isAuthenticated: false,
+  pendingApplication: null,
   authLoading: true,
   dataSource: 'mock',
 
@@ -357,12 +365,19 @@ export const useStore = create<AppStore>((set, get) => {
       profile = await fetchUserByEmail(sessionEmail);
     }
     if (!profile) {
-      // Supabase auth succeeded but no matching profile row anywhere — sign out
-      // to keep the two layers in sync.
+      // No ERP profile. Before signing out, check whether this is a self-service
+      // onboarding applicant (valid login, application pending, not yet
+      // activated) — if so, show the "Awaiting verification" screen instead.
+      const pending = sessionEmail ? await fetchApplicationByEmail(sessionEmail) : null;
+      if (pending) {
+        set({ currentUser: null, isAuthenticated: false, pendingApplication: pending, authLoading: false });
+        return true;
+      }
+      // Otherwise sign out to keep the two layers in sync.
       await supabase.auth.signOut();
       return false;
     }
-    set({ currentUser: profile, isAuthenticated: true, authLoading: false });
+    set({ currentUser: profile, isAuthenticated: true, pendingApplication: null, authLoading: false });
     // Fire-and-forget DB hydration. If the schema isn't migrated yet (or
     // network fails) the store keeps the mock data and stays usable.
     void get().hydrateFromDB();
@@ -371,7 +386,7 @@ export const useStore = create<AppStore>((set, get) => {
 
   logout: async (): Promise<void> => {
     await supabase.auth.signOut();
-    set({ currentUser: null, isAuthenticated: false, authLoading: false });
+    set({ currentUser: null, isAuthenticated: false, pendingApplication: null, authLoading: false });
   },
 
   switchRole: (role: UserRole) => {
@@ -391,12 +406,20 @@ export const useStore = create<AppStore>((set, get) => {
       profile = await fetchUserByEmail(sessionEmail);
     }
     if (profile) {
-      set({ currentUser: profile, isAuthenticated: true, authLoading: false });
+      set({ currentUser: profile, isAuthenticated: true, pendingApplication: null, authLoading: false });
       // Hydrate from DB after restoring an existing session, so a reload
       // doesn't drop the user back to mock data.
       void get().hydrateFromDB();
     } else {
-      set({ currentUser: null, isAuthenticated: false, authLoading: false });
+      // No profile — surface the "Awaiting verification" screen for a pending
+      // self-service onboarding applicant; otherwise land on /login.
+      const pending = sessionEmail ? await fetchApplicationByEmail(sessionEmail) : null;
+      set({
+        currentUser: null,
+        isAuthenticated: false,
+        pendingApplication: pending,
+        authLoading: false,
+      });
     }
   },
 

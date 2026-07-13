@@ -159,8 +159,10 @@ export default function FranchiseeOnboardingPage() {
   }, []);
 
   // ── Channel/referral resolution against LIVE data ───────────
-  const resolveChannel = () => {
-    const code = form.channelCode.trim();
+  // `codeArg` lets the PD auto-prefill path resolve immediately without waiting
+  // for the async setForm to flush; the button passes none and uses form state.
+  const resolveChannel = (codeArg?: string) => {
+    const code = (codeArg ?? form.channelCode).trim();
     if (!code) {
       setChannelError('Please enter a channel / referral code.');
       setChannelInfo(null);
@@ -206,6 +208,26 @@ export default function FranchiseeOnboardingPage() {
     }
     setChannelError('');
   };
+
+  // A PD is already logged in — pre-fill (and resolve) THEIR OWN channel code so
+  // they never have to type it. Editable still (pre-fill, not lock); only runs
+  // once while the box is empty so it never clobbers a manual change.
+  useEffect(() => {
+    if (currentUser?.role !== 'partner_distributor') return;
+    if (form.channelCode) return;
+    const pdCode = referralCodes.find(
+      (r) =>
+        r.type === 'distributor' &&
+        r.distributorId === currentUser.distributorId &&
+        r.status === 'active',
+    );
+    if (!pdCode) return;
+    setForm((prev) => ({ ...prev, channelCode: pdCode.code }));
+    resolveChannel(pdCode.code);
+    // Run once when the PD's referral code becomes available; resolveChannel is a
+    // stable closure over the live slices.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser, referralCodes]);
 
   // ── Validation per step ─────────────────────────────────────
   const validateStep = (currentStep: number): boolean => {
@@ -402,7 +424,7 @@ export default function FranchiseeOnboardingPage() {
                 iconLeft={<Hash size={16} />}
               />
               <div className="flex items-end">
-                <Button variant="primary" onClick={resolveChannel} disabled={!form.channelCode.trim()}>
+                <Button variant="primary" onClick={() => resolveChannel()} disabled={!form.channelCode.trim()}>
                   Resolve
                 </Button>
               </div>

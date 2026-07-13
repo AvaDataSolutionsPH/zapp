@@ -36,6 +36,10 @@ export default function FranchiseesPage() {
   // The full onboarding application form is also usable by the PD (they hold the
   // shop code + encode their own franchisees).
   const canOnboardApplication = canOnboard || currentUser?.role === 'partner_distributor';
+  // A PD only ever sees its own distributor's stores (RLS-scoped), so the
+  // Distributor filter is pointless, and the meaningful split is franchisee-
+  // direct-under-PD vs under-one-of-its-SPDs (not the generic distributor/direct).
+  const isPD = currentUser?.role === 'partner_distributor';
 
   const [showForm, setShowForm] = useState(false);
   const [formStoreId, setFormStoreId] = useState('');
@@ -55,7 +59,17 @@ export default function FranchiseesPage() {
   const filtered = useMemo(() => {
     let result = [...stores];
     if (plantFilter) result = result.filter((s) => s.plantId === plantFilter);
-    if (typeFilter) result = result.filter((s) => s.franchiseType === typeFilter);
+    if (typeFilter) {
+      if (isPD) {
+        // PD split: 'spd' = store under one of the PD's sub-partners; 'franchisee'
+        // = store direct under the PD (no SPD).
+        result = result.filter((s) =>
+          typeFilter === 'spd' ? !!s.subPartnerDistributorId : !s.subPartnerDistributorId,
+        );
+      } else {
+        result = result.filter((s) => s.franchiseType === typeFilter);
+      }
+    }
     if (statusFilter) result = result.filter((s) => s.status === statusFilter);
     if (distributorFilter) result = result.filter((s) => s.distributorId === distributorFilter);
     if (search) {
@@ -68,7 +82,7 @@ export default function FranchiseesPage() {
     }
     result.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     return result;
-  }, [stores, plantFilter, typeFilter, statusFilter, distributorFilter, search]);
+  }, [stores, plantFilter, typeFilter, statusFilter, distributorFilter, search, isPD]);
 
   const paged = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
@@ -79,11 +93,17 @@ export default function FranchiseesPage() {
     { value: '', label: 'All Plants' },
     ...plants.map((p) => ({ value: p.id, label: p.name })),
   ];
-  const typeOptions: SelectOption[] = [
-    { value: '', label: 'All Types' },
-    { value: 'distributor', label: 'Distributor' },
-    { value: 'direct', label: 'Direct' },
-  ];
+  const typeOptions: SelectOption[] = isPD
+    ? [
+        { value: '', label: 'All Types' },
+        { value: 'franchisee', label: 'Franchisee (under PD)' },
+        { value: 'spd', label: 'SPD (under PD)' },
+      ]
+    : [
+        { value: '', label: 'All Types' },
+        { value: 'distributor', label: 'Distributor' },
+        { value: 'direct', label: 'Direct' },
+      ];
   const statusOptions: SelectOption[] = [
     { value: '', label: 'All Statuses' },
     { value: 'active', label: 'Active' },
@@ -158,11 +178,18 @@ export default function FranchiseesPage() {
     {
       key: 'franchiseType',
       header: 'Type',
-      render: (row) => (
-        <Badge variant={row.franchiseType === 'distributor' ? 'info' : 'orange'} size="sm">
-          {row.franchiseType === 'distributor' ? 'Distributor' : 'Direct'}
-        </Badge>
-      ),
+      // For a PD the meaningful split is under-an-SPD vs direct-under-PD; other
+      // roles keep the generic distributor/direct label.
+      render: (row) =>
+        isPD ? (
+          <Badge variant={row.subPartnerDistributorId ? 'info' : 'orange'} size="sm">
+            {row.subPartnerDistributorId ? 'SPD' : 'Franchisee'}
+          </Badge>
+        ) : (
+          <Badge variant={row.franchiseType === 'distributor' ? 'info' : 'orange'} size="sm">
+            {row.franchiseType === 'distributor' ? 'Distributor' : 'Direct'}
+          </Badge>
+        ),
     },
     {
       key: 'distributorId',
@@ -243,11 +270,14 @@ export default function FranchiseesPage() {
 
       <Card>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+          <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 ${isPD ? 'xl:grid-cols-4' : 'xl:grid-cols-5'}`}>
             <Select options={plantOptions} value={plantFilter} onChange={(e) => { setPlantFilter(e.target.value); setPage(1); }} />
             <Select options={typeOptions} value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }} />
             <Select options={statusOptions} value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }} />
-            <Select options={distOptions} value={distributorFilter} onChange={(e) => { setDistributorFilter(e.target.value); setPage(1); }} />
+            {/* Distributor filter is meaningless for a PD (only its own) — hidden. */}
+            {!isPD && (
+              <Select options={distOptions} value={distributorFilter} onChange={(e) => { setDistributorFilter(e.target.value); setPage(1); }} />
+            )}
             <SearchInput value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search store or owner..." />
           </div>
         </CardContent>

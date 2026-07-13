@@ -106,12 +106,16 @@ Two role-scoped filters let a PD chain be read top-down:
   PD's store billings. The **Billing Statement** button then carries the choice
   through as `/billing/statement?dist=<id>` so the consolidated **one-statement-
   per-PD** export opens with that PD preselected (see below).
-- **Sub-Partner (SPD) filter** — shown to `partner_distributor` only. Options are
-  the SPDs whose `parentDistributorId` matches the signed-in PD's `distributorId`
-  (`subPartnerDistributors` slice). Selecting one scopes the list to billings whose
-  store's `subPartnerDistributorId` matches — i.e. "how much to bill each SPD".
-  Per boss this is the **full store billings** under the SPD (Total Payable / Remit),
-  not a separate commission column.
+- **PD payer filter (cascade)** — shown to `partner_distributor` only. Replaces
+  the plain SPD dropdown with the same payer cascade as Payments: **Plant →
+  Sub-Partner (SPD) / Franchisee (Direct) → dependent entity → Cutoff**, and the
+  From/To date range is **kept** (boss: needed to review past transactions).
+  `payerType` derives from the billing's store links (`subPartnerDistributorId`
+  → SPD; none → direct franchisee under the PD); the entity list
+  (`payerEntityOptions`) shows only the SPDs / direct stores that actually have
+  billings, optionally within the chosen plant. Status + store-search are dropped
+  for the PD. Selecting an SPD/franchisee scopes the list to that payer's full
+  store billings — i.e. "how much to bill each SPD / franchisee".
 
 The KPI stat cards are computed from the **filtered** set (not just the plant
 filter as before), so the totals double as a running "total under this PD / SPD".

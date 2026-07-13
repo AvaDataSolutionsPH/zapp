@@ -175,7 +175,9 @@ export default function BillingPage() {
 
   const [plantFilter, setPlantFilter] = useState('');
   const [distributorFilter, setDistributorFilter] = useState('');
-  const [spdFilter, setSpdFilter] = useState('');
+  // PD billing filter: Sub-Partner / Franchisee (direct) → dependent entity.
+  const [payerType, setPayerType] = useState<'' | 'spd' | 'franchisee'>('');
+  const [payerEntity, setPayerEntity] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [storeSearch, setStoreSearch] = useState('');
   const [cutoffFilter, setCutoffFilter] = useState('');
@@ -215,27 +217,53 @@ export default function BillingPage() {
     ...distributors.map((d) => ({ value: d.id, label: d.name })),
   ];
 
-  // SPD filter — only the SPDs that belong to the signed-in PD.
-  const spdOptions: SelectOption[] = useMemo(
-    () => [
-      { value: '', label: 'All Sub-Partners' },
-      ...subPartnerDistributors
-        .filter((spd) => spd.parentDistributorId === currentUser?.distributorId)
-        .map((spd) => ({ value: spd.id, label: spd.name })),
-    ],
-    [subPartnerDistributors, currentUser?.distributorId],
-  );
+  // PD billing filter: pick Sub-Partner or Franchisee (direct), then the specific
+  // entity. Mirrors the Payments payer filter — a PD's billings are its SPD
+  // stores + its direct franchisee stores.
+  const payerTypeOptions: SelectOption[] = [
+    { value: '', label: 'All Payers' },
+    { value: 'spd', label: 'Sub-Partner (SPD)' },
+    { value: 'franchisee', label: 'Franchisee (Direct)' },
+  ];
+  // Dependent entity list — only payers of that type that actually have billings
+  // (optionally within the chosen plant), so the options are real.
+  const payerEntityOptions: SelectOption[] = useMemo(() => {
+    const billedStoreIds = new Set(allBilling.map((b) => b.storeId));
+    const relevant = stores.filter(
+      (s) => billedStoreIds.has(s.id) && (!plantFilter || s.plantId === plantFilter),
+    );
+    if (payerType === 'spd') {
+      const ids = [...new Set(relevant.filter((s) => s.subPartnerDistributorId).map((s) => s.subPartnerDistributorId!))];
+      return [
+        { value: '', label: 'All Sub-Partners' },
+        ...ids.map((id) => ({ value: id, label: subPartnerDistributors.find((sp) => sp.id === id)?.name ?? id })),
+      ];
+    }
+    if (payerType === 'franchisee') {
+      const direct = relevant.filter((s) => !s.subPartnerDistributorId);
+      return [{ value: '', label: 'All Franchisees' }, ...direct.map((s) => ({ value: s.id, label: s.name }))];
+    }
+    return [{ value: '', label: 'Select payer type first' }];
+  }, [allBilling, stores, plantFilter, payerType, subPartnerDistributors]);
 
   // Filter billing records
   const filtered = useMemo(() => {
     let result = [...allBilling];
     if (plantFilter) result = result.filter((b) => b.plantId === plantFilter);
     if (distributorFilter) result = result.filter((b) => b.distributorId === distributorFilter);
-    if (spdFilter) {
-      const spdStoreIds = new Set(
-        stores.filter((s) => s.subPartnerDistributorId === spdFilter).map((s) => s.id),
-      );
-      result = result.filter((b) => spdStoreIds.has(b.storeId));
+    if (isPartnerDistributor && payerType) {
+      result = result.filter((b) => {
+        const s = stores.find((st) => st.id === b.storeId);
+        if (!s) return false;
+        return payerType === 'spd' ? !!s.subPartnerDistributorId : !s.subPartnerDistributorId;
+      });
+      if (payerEntity) {
+        result = result.filter((b) => {
+          const s = stores.find((st) => st.id === b.storeId);
+          if (!s) return false;
+          return payerType === 'spd' ? s.subPartnerDistributorId === payerEntity : s.id === payerEntity;
+        });
+      }
     }
     if (statusFilter) result = result.filter((b) => b.status === statusFilter);
     if (storeSearch) {
@@ -253,7 +281,7 @@ export default function BillingPage() {
     // storeName + the `stores` slice are stable lookups over the closure;
     // including them would re-run the memo every render without semantic change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allBilling, plantFilter, distributorFilter, spdFilter, statusFilter, storeSearch, cutoffFilter, dateFrom, dateTo]);
+  }, [allBilling, plantFilter, distributorFilter, isPartnerDistributor, payerType, payerEntity, statusFilter, storeSearch, cutoffFilter, dateFrom, dateTo]);
 
   const paged = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
@@ -873,39 +901,66 @@ export default function BillingPage() {
       <Card>
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
-            {canFilterDistributor && (
-              <Select
-                options={distributorFilterOptions}
-                value={distributorFilter}
-                onChange={(e) => { setDistributorFilter(e.target.value); setPage(1); }}
-                placeholder="Filter by distributor"
-              />
+            {isPartnerDistributor ? (
+              // PD: Plant → Sub-Partner/Franchisee → entity → cutoff, plus the
+              // From/To dates (kept — needed to review past transactions).
+              <>
+                <Select
+                  options={plantOptions}
+                  value={plantFilter}
+                  onChange={(e) => { setPlantFilter(e.target.value); setPayerEntity(''); setPage(1); }}
+                />
+                <Select
+                  options={payerTypeOptions}
+                  value={payerType}
+                  onChange={(e) => {
+                    setPayerType(e.target.value as typeof payerType);
+                    setPayerEntity('');
+                    setPage(1);
+                  }}
+                />
+                <Select
+                  options={payerEntityOptions}
+                  value={payerEntity}
+                  onChange={(e) => { setPayerEntity(e.target.value); setPage(1); }}
+                  disabled={!payerType}
+                />
+                <Select
+                  options={cutoffOptions}
+                  value={cutoffFilter}
+                  onChange={(e) => { setCutoffFilter(e.target.value); setPage(1); }}
+                  placeholder="Cutoff period"
+                />
+              </>
+            ) : (
+              <>
+                {canFilterDistributor && (
+                  <Select
+                    options={distributorFilterOptions}
+                    value={distributorFilter}
+                    onChange={(e) => { setDistributorFilter(e.target.value); setPage(1); }}
+                    placeholder="Filter by distributor"
+                  />
+                )}
+                <Select
+                  options={statusOptions}
+                  value={statusFilter}
+                  onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+                  placeholder="Filter by status"
+                />
+                <Select
+                  options={cutoffOptions}
+                  value={cutoffFilter}
+                  onChange={(e) => { setCutoffFilter(e.target.value); setPage(1); }}
+                  placeholder="Cutoff period"
+                />
+                <SearchInput
+                  value={storeSearch}
+                  onChange={(val) => { setStoreSearch(val); setPage(1); }}
+                  placeholder="Search store..."
+                />
+              </>
             )}
-            {isPartnerDistributor && spdOptions.length > 1 && (
-              <Select
-                options={spdOptions}
-                value={spdFilter}
-                onChange={(e) => { setSpdFilter(e.target.value); setPage(1); }}
-                placeholder="Filter by sub-partner"
-              />
-            )}
-            <Select
-              options={statusOptions}
-              value={statusFilter}
-              onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-              placeholder="Filter by status"
-            />
-            <Select
-              options={cutoffOptions}
-              value={cutoffFilter}
-              onChange={(e) => { setCutoffFilter(e.target.value); setPage(1); }}
-              placeholder="Cutoff period"
-            />
-            <SearchInput
-              value={storeSearch}
-              onChange={(val) => { setStoreSearch(val); setPage(1); }}
-              placeholder="Search store..."
-            />
             <input
               type="date"
               value={dateFrom}

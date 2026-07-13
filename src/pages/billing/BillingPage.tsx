@@ -29,6 +29,7 @@ import type { TableColumn, SelectOption } from '@/components/ui';
 import type { BillingRecord, Delivery } from '@/types';
 import { exportTableXlsx, type XlsxColumn } from '@/lib/tableExcel';
 import { getBillingBreakdown, getCutoffRangeForDate } from '@/lib/billingComputations';
+import { computeDrReview, type DrReview } from '@/lib/drReviewComputations';
 import BillingDetailDrawer from './BillingDetailDrawer';
 import DrPhotosDrawer, { type DrPhotoTarget } from './DrPhotosDrawer';
 
@@ -64,6 +65,21 @@ interface BillingStatementRow {
   distributorId?: string;
   drAmount: number;
   netAmount: number;
+}
+
+// Per-DR review row for the Partner Distributor billing view (boss's revised
+// PD table: DR-based, with sold/unsold/lacking/overage + profit split).
+interface PdReviewRow {
+  deliveryId: string;
+  drNumber: string;
+  date: string;
+  shopName: string;
+  storeId: string;
+  plantId: string;
+  distributorId?: string;
+  subPartnerDistributorId?: string;
+  status: string;
+  review: DrReview;
 }
 
 // 3-decimal money with thousands separators (matches the reference statement,
@@ -138,6 +154,7 @@ export default function BillingPage() {
     currentUser,
     payments,
     deliveries,
+    beginningInventories,
     endingInventories,
     specialOrders,
     packagingOrders,
@@ -362,6 +379,51 @@ export default function BillingPage() {
     const start = (page - 1) * PAGE_SIZE;
     return billingUserRows.slice(start, start + PAGE_SIZE);
   }, [billingUserRows, page]);
+
+  // Partner Distributor: per-DR review rows (boss's revised PD billing view).
+  // Built from the PD's deliveries (RLS-scoped) + the store's Beginning/Ending
+  // inventories, honoring the PD payer/plant/cutoff/date filters.
+  const pdReviewRows = useMemo<PdReviewRow[]>(() => {
+    if (!isPartnerDistributor) return [];
+    let rows: PdReviewRow[] = deliveries.map((d) => {
+      const store = stores.find((s) => s.id === d.storeId);
+      const beginningInv = beginningInventories.find((bi) => bi.deliveryId === d.id);
+      const endingInv = endingInventories.find((ei) => ei.deliveryId === d.id);
+      return {
+        deliveryId: d.id,
+        drNumber: d.drNumber,
+        date: d.date,
+        shopName: store?.name ?? d.storeId,
+        storeId: d.storeId,
+        plantId: d.plantId,
+        distributorId: store?.distributorId,
+        subPartnerDistributorId: store?.subPartnerDistributorId,
+        status: endingInv ? endingInv.status : beginningInv ? 'in_progress' : 'awaiting_report',
+        review: computeDrReview(d, beginningInv, endingInv),
+      };
+    });
+    if (plantFilter) rows = rows.filter((r) => r.plantId === plantFilter);
+    if (payerType) {
+      rows = rows.filter((r) =>
+        payerType === 'spd' ? !!r.subPartnerDistributorId : !r.subPartnerDistributorId,
+      );
+      if (payerEntity) {
+        rows = rows.filter((r) =>
+          payerType === 'spd' ? r.subPartnerDistributorId === payerEntity : r.storeId === payerEntity,
+        );
+      }
+    }
+    if (cutoffFilter) rows = rows.filter((r) => getCutoffRangeForDate(r.date) === cutoffFilter);
+    if (dateFrom) rows = rows.filter((r) => r.date.slice(0, 10) >= dateFrom);
+    if (dateTo) rows = rows.filter((r) => r.date.slice(0, 10) <= dateTo);
+    rows.sort((a, b) => b.date.localeCompare(a.date));
+    return rows;
+  }, [isPartnerDistributor, deliveries, stores, beginningInventories, endingInventories, plantFilter, payerType, payerEntity, cutoffFilter, dateFrom, dateTo]);
+
+  const pdReviewPaged = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return pdReviewRows.slice(start, start + PAGE_SIZE);
+  }, [pdReviewRows, page]);
 
   const formatCurrency = (n: number) => `P${n.toLocaleString()}`;
 
@@ -723,6 +785,123 @@ export default function BillingPage() {
     },
   ];
 
+  // Partner Distributor: per-DR review columns (boss's revised PD billing).
+  const pdReviewColumns: TableColumn<PdReviewRow>[] = [
+    {
+      key: 'drNumber',
+      header: 'DR Number',
+      render: (row) => (
+        <span className="font-mono text-sm font-medium text-gray-900 whitespace-nowrap">{row.drNumber}</span>
+      ),
+    },
+    {
+      key: 'date',
+      header: 'Delivery Date',
+      render: (row) => <span className="text-sm text-gray-700 whitespace-nowrap">{mmddyyyy(row.date)}</span>,
+    },
+    {
+      key: 'drTotal',
+      header: 'DR Total',
+      render: (row) => <span className="text-sm font-medium tabular-nums">{row.review.drTotalQty}</span>,
+    },
+    {
+      key: 'sold',
+      header: 'Total Sold',
+      render: (row) => <span className="text-sm tabular-nums">{row.review.totalSold}</span>,
+    },
+    {
+      key: 'unsold',
+      header: 'Total Unsold',
+      render: (row) => <span className="text-sm tabular-nums">{row.review.totalUnsold}</span>,
+    },
+    {
+      key: 'lacking',
+      header: 'Lacking Total',
+      render: (row) => (
+        <span className={`text-sm tabular-nums ${row.review.lackingTotal > 0 ? 'text-red-600 font-semibold' : 'text-gray-400'}`}>
+          {row.review.lackingTotal}
+        </span>
+      ),
+    },
+    {
+      key: 'overage',
+      header: 'Overage Total',
+      render: (row) => (
+        <span className={`text-sm tabular-nums ${row.review.overageTotal > 0 ? 'text-amber-600 font-semibold' : 'text-gray-400'}`}>
+          {row.review.overageTotal}
+        </span>
+      ),
+    },
+    {
+      key: 'gross',
+      header: 'Total Gross Sales',
+      render: (row) => (
+        <span className="text-sm font-medium text-purple-600 tabular-nums whitespace-nowrap">{formatCurrency(row.review.grossSales)}</span>
+      ),
+    },
+    {
+      key: 'fprofit',
+      header: 'Franchisee Profit (15%)',
+      render: (row) => (
+        <span className="text-sm text-green-600 tabular-nums whitespace-nowrap">{formatCurrency(row.review.franchiseeProfit)}</span>
+      ),
+    },
+    {
+      key: 'remit',
+      header: 'Remit to PD (85%)',
+      render: (row) => (
+        <span className="text-sm text-indigo-600 tabular-nums whitespace-nowrap">{formatCurrency(row.review.remitToPD)}</span>
+      ),
+    },
+    {
+      key: 'pdprofit',
+      header: 'PD Profit',
+      render: (row) => (
+        <span className={`text-sm font-semibold tabular-nums whitespace-nowrap ${row.review.pdProfit < 0 ? 'text-red-600' : 'text-zapp-orange'}`}>
+          {formatCurrency(row.review.pdProfit)}
+        </span>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (row) => {
+        const cls =
+          row.status === 'approved'
+            ? 'text-green-700 bg-green-50'
+            : row.status === 'awaiting_report'
+              ? 'text-gray-500 bg-gray-100'
+              : 'text-blue-700 bg-blue-50';
+        return (
+          <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium capitalize whitespace-nowrap ${cls}`}>
+            {row.status.replace(/_/g, ' ')}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'photos',
+      header: 'Photos',
+      render: (row) => (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setPhotoTarget({
+              deliveryId: row.deliveryId,
+              drNumber: row.drNumber,
+              date: mmddyyyy(row.date),
+              shopName: row.shopName,
+            });
+          }}
+          className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-zapp-orange hover:bg-orange-50 transition-colors cursor-pointer whitespace-nowrap"
+          title="View DR slip + donut-crate photos"
+        >
+          <ImageIcon size={13} /> View
+        </button>
+      ),
+    },
+  ];
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -1006,6 +1185,27 @@ export default function BillingPage() {
             page,
             pageSize: PAGE_SIZE,
             total: billingUserRows.length,
+            onPageChange: setPage,
+          }}
+        />
+      ) : isPartnerDistributor ? (
+        <Table
+          columns={pdReviewColumns}
+          data={pdReviewPaged}
+          keyExtractor={(row) => row.deliveryId}
+          onRowClick={(row) =>
+            setPhotoTarget({
+              deliveryId: row.deliveryId,
+              drNumber: row.drNumber,
+              date: mmddyyyy(row.date),
+              shopName: row.shopName,
+            })
+          }
+          emptyMessage="No deliveries found matching your filters."
+          pagination={{
+            page,
+            pageSize: PAGE_SIZE,
+            total: pdReviewRows.length,
             onPageChange: setPage,
           }}
         />

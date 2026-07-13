@@ -141,6 +141,25 @@ near-blank file that never matched the printable statement (boss: "ibang excel
 pala nalabas dito"). Distinct from the **printable Billing Statement** export
 below (that one is the grouped per-PD-per-cutoff carbon copy with letterhead).
 
+## PD per-DR review view (BillingPage.tsx) — Phase A
+When `currentUser.role` is `partner_distributor`, the Billing page renders a
+**per-DR review table** (`pdReviewColumns` / `pdReviewRows`) instead of the
+aggregated billing records — boss's revised PD billing. Rows come from the PD's
+deliveries (RLS-scoped) joined with the store's Beginning (`confirmedItems`) and
+Ending (`unsoldItems`) inventories; per-DR metrics are computed by the pure
+`src/lib/drReviewComputations.ts` (`computeDrReview`). Columns:
+**DR Number · Delivery Date · DR Total (count) · Total Sold · Total Unsold ·
+Lacking Total · Overage Total · Total Gross Sales · Franchisee Profit (15%) ·
+Remit to PD (85%) · PD Profit · Status · Photos (View)**. Definitions: sold =
+Σ max(0, begin − end); lacking = Σ max(0, delivered − begin); overage =
+Σ max(0, begin − delivered); gross = Σ sold×SRP; **PD Profit = Σ sold×DR −
+Remit** (boss's literal formula — can be negative). Sold-derived numbers stay 0
+until the store submits its Ending count (row shows "awaiting report"). The
+Distributor column is dropped, Invoice→DR Number, Period→Delivery Date. The PD
+payer/plant/cutoff/date filters apply to these rows; the Photos "View" opens the
+shared `DrPhotosDrawer`. Phases B–E (Request Revision, dispute, additional-amount
+billing, blur detection) are pending.
+
 ## Delivery-status auto-rule
 `Store.deliveryStatus` is auto-derived: 0 overdue billings = `active`,
 1 = `warning`, 2+ = `hold`. Manual `requestStopDelivery` / `resumeDelivery`

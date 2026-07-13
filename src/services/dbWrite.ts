@@ -26,6 +26,7 @@ import type {
   SubPartnerDistributor,
   AreaSupervisor,
   User,
+  BillingRevision,
 } from '@/types';
 
 // ── Mappers (TS camelCase → DB snake_case) ────────────────────
@@ -164,6 +165,20 @@ const mapEndingInventoryToDB = (e: EndingInventory) => ({
   revisions: e.revisions ?? null,
   reviewed_by: e.reviewedBy ?? null,
   reviewed_at: e.reviewedAt ?? null,
+});
+
+const mapBillingRevisionToDB = (r: BillingRevision) => ({
+  id: r.id,
+  delivery_id: r.deliveryId,
+  store_id: r.storeId,
+  requested_by: r.requestedBy,
+  requested_at: r.requestedAt,
+  reason: r.reason,
+  // JSONB columns — pass the arrays through; inner camelCase keys (skuId,
+  // skuName, quantity) are stored verbatim and read back as-is.
+  corrected_beginning: r.correctedBeginning,
+  corrected_ending: r.correctedEnding,
+  status: r.status,
 });
 
 const mapDeliveryToDB = (d: Delivery) => ({
@@ -308,6 +323,13 @@ export async function updateEndingInventory(ei: EndingInventory): Promise<void> 
     .from('ending_inventories')
     .update(mapEndingInventoryToDB(ei) as never)
     .eq('id', ei.id);
+  if (error) throw error;
+}
+
+export async function insertBillingRevision(rev: BillingRevision): Promise<void> {
+  const { error } = await supabase
+    .from('billing_revisions')
+    .insert(mapBillingRevisionToDB(rev) as never);
   if (error) throw error;
 }
 

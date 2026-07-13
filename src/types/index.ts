@@ -365,6 +365,33 @@ export interface BillingRecord {
   subPartnerDistributorId?: string;
 }
 
+// --- Billing Revision (PD report correction — Phase B) ---
+// A Partner Distributor corrects a store's reported Beginning / Ending donut
+// counts for a specific DR (delivery) when the report looks wrong. Stored
+// SEPARATELY from the EI reviewer queue (this is a billing-level concern, not
+// the ending-inventory review workflow). The positive delta becomes a separate
+// "additional" billing (Phase C); the franchisee can view the corrected counts
+// and dispute them (Phase D). All additive — no existing consumer changes.
+export type BillingRevisionStatus = 'requested' | 'disputed' | 'resolved';
+
+export interface BillingRevisionItem {
+  skuId: string;
+  skuName: string;
+  quantity: number;
+}
+
+export interface BillingRevision {
+  id: string;
+  deliveryId: string;
+  storeId: string;
+  requestedBy: string;      // PD user id
+  requestedAt: string;
+  reason: string;
+  correctedBeginning: BillingRevisionItem[];  // PD's corrected beginning counts
+  correctedEnding: BillingRevisionItem[];      // PD's corrected ending/unsold counts
+  status: BillingRevisionStatus;
+}
+
 // 'billing' = a normal consignment/billing payment (default when absent, for
 // back-compat). 'security_deposit' = the one-time ₱2,000 onboarding deposit
 // (Partner Onboarding Phase 5) — not tied to a billing record.

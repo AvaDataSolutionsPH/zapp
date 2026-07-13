@@ -36,6 +36,7 @@ import type {
   SalesMetric,
   Notification,
   SpecialOrder,
+  BillingRevision,
 } from '@/types';
 
 // ── Transform helpers ─────────────────────────────────────────
@@ -143,6 +144,16 @@ export const fetchNotifications = (): Promise<Notification[]> =>
   fetchAll<Notification>('notifications');
 export const fetchSpecialOrders = (): Promise<SpecialOrder[]> =>
   fetchAll<SpecialOrder>('special_orders');
+// Resilient: a not-yet-run migration 019 (missing table) must NOT collapse the
+// whole parallel hydrate to mock — degrade this one slice to [] instead.
+export const fetchBillingRevisions = async (): Promise<BillingRevision[]> => {
+  try {
+    return await fetchAll<BillingRevision>('billing_revisions');
+  } catch (err) {
+    console.warn('[db] fetchBillingRevisions failed (run migration 019?) — defaulting to []:', err);
+    return [];
+  }
+};
 
 // ── Aggregate hydrate (used by store on auth) ─────────────────
 
@@ -166,6 +177,7 @@ export interface HydratedState {
   salesMetrics: SalesMetric[];
   notifications: Notification[];
   specialOrders: SpecialOrder[];
+  billingRevisions: BillingRevision[];
 }
 
 /**
@@ -193,6 +205,7 @@ export async function hydrateAll(): Promise<HydratedState> {
     salesMetrics,
     notifications,
     specialOrders,
+    billingRevisions,
   ] = await Promise.all([
     fetchPlants(),
     fetchSkus(),
@@ -213,6 +226,7 @@ export async function hydrateAll(): Promise<HydratedState> {
     fetchSalesMetrics(),
     fetchNotifications(),
     fetchSpecialOrders(),
+    fetchBillingRevisions(),
   ]);
 
   return {
@@ -235,5 +249,6 @@ export async function hydrateAll(): Promise<HydratedState> {
     salesMetrics,
     notifications,
     specialOrders,
+    billingRevisions,
   };
 }

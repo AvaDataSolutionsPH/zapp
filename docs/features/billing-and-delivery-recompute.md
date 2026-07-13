@@ -157,8 +157,34 @@ Remit** (boss's literal formula — can be negative). Sold-derived numbers stay 
 until the store submits its Ending count (row shows "awaiting report"). The
 Distributor column is dropped, Invoice→DR Number, Period→Delivery Date. The PD
 payer/plant/cutoff/date filters apply to these rows; the Photos "View" opens the
-shared `DrPhotosDrawer`. Phases B–E (Request Revision, dispute, additional-amount
-billing, blur detection) are pending.
+shared `DrPhotosDrawer`. Phases C–E (additional-amount billing, franchisee
+dispute, blur detection) are pending.
+
+## PD Request Revision (DrPhotosDrawer.tsx) — Phase B
+When the PD opens a DR from the per-DR review table (Photos "View" →
+`DrPhotosDrawer`), a **Request Revision** section appears below the photos
+(PD-only — billing_user still sees photos only). The PD edits the CORRECT
+**Beginning / Ending** donut counts per SKU (prefilled from the store's reported
+counts: beginning = `confirmedItems` else delivered DR qty; ending =
+`unsoldItems` else 0) plus a required **reason**, then submits. This records a
+**`BillingRevision`** (`src/types/index.ts`) — a NEW, billing-level entity kept
+SEPARATE from the EI reviewer queue (`ending_inventories.revisions`):
+`{ deliveryId, storeId, requestedBy, requestedAt, reason, correctedBeginning[],
+correctedEnding[], status }` with `status ∈ requested|disputed|resolved`.
+- **Store:** `billingRevisions` slice + `requestBillingRevision` action
+  (optimistic + DB write + rollback; id/`requestedAt` stamped in the store to
+  keep the component pure). Does NOT feed `computeBillingsFromState` in Phase B —
+  the corrected-count delta becomes a separate additional billing in Phase C.
+- **Persistence:** table `billing_revisions` (**migration `019_billing_revisions.sql`**,
+  run in Supabase BEFORE deploy). `mapBillingRevisionToDB` + `insertBillingRevision`
+  (`dbWrite.ts`); `fetchBillingRevisions` (RESILIENT — a missing table degrades to
+  `[]` so a not-yet-run migration doesn't collapse the whole hydrate) wired into
+  `hydrateAll` (`db.ts`). RLS mirrors `ending_inventories`: SELECT = admin /
+  billing_user read-all + store-scope; INSERT = reviewer (PD) within store-scope;
+  UPDATE = store-scope (for the Phase D franchisee dispute).
+- Once a revision exists for a DR, the drawer shows a read-only **"Revision
+  Requested"** panel (corrected counts + reason) instead of the form — this is
+  also the foundation for the Phase D franchisee dispute view.
 
 ## Delivery-status auto-rule
 `Store.deliveryStatus` is auto-derived: 0 overdue billings = `active`,

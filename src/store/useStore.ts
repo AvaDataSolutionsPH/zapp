@@ -29,6 +29,7 @@ import type {
   SpecialOrder,
   EndingInventoryReview,
   EndingInventoryCorrectionItem,
+  BillingRevision,
 } from '@/types';
 import {
   demoUsers,
@@ -67,6 +68,7 @@ import {
   updateBeginningInventory,
   insertEndingInventory,
   updateEndingInventory,
+  insertBillingRevision,
   insertPayment,
   updatePayment,
   updateStore as updateStoreDB,
@@ -237,6 +239,10 @@ interface AppStore {
     submitterId: string,
     comment?: string,
   ) => Promise<void>;
+
+  // Billing Revisions (PD report correction — Phase B)
+  billingRevisions: BillingRevision[];
+  requestBillingRevision: (rev: Omit<BillingRevision, 'id' | 'requestedAt'>) => void;
 
   // Billing
   billingRecords: BillingRecord[];
@@ -467,6 +473,7 @@ export const useStore = create<AppStore>((set, get) => {
         salesMetrics: data.salesMetrics,
         notifications: data.notifications,
         specialOrders: data.specialOrders,
+        billingRevisions: data.billingRevisions,
         billingRecords: nextBillings,
         dataSource: 'db',
       });
@@ -1226,6 +1233,31 @@ export const useStore = create<AppStore>((set, get) => {
       }));
       throw err;
     }
+  },
+
+  // ─── Billing Revisions (PD report correction — Phase B) ───────
+
+  // No mock seed — revisions are a live-only, PD-authored entity.
+  billingRevisions: [],
+
+  requestBillingRevision: (rev: Omit<BillingRevision, 'id' | 'requestedAt'>) => {
+    const newRev: BillingRevision = {
+      ...rev,
+      id: `rev-${rev.deliveryId}-${uid()}`,
+      requestedAt: new Date().toISOString(),
+    };
+    // Optimistic in-memory insert. Background-persist when DB is the source of
+    // truth; rollback on failure. Does NOT feed billing computations in Phase B
+    // (the additional-billing delta is Phase C) — this only records the PD's
+    // corrected counts + reason for that DR.
+    set((s) => ({ billingRevisions: [...s.billingRevisions, newRev] }));
+    if (get().dataSource !== 'db') return;
+    void insertBillingRevision(newRev).catch((err) => {
+      console.error('[useStore] requestBillingRevision DB write failed, rolling back:', err);
+      set((s) => ({
+        billingRevisions: s.billingRevisions.filter((r) => r.id !== newRev.id),
+      }));
+    });
   },
 
   // ─── Billing ──────────────────────────────────────────────────

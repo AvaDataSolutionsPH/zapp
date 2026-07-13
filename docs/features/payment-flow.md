@@ -62,6 +62,24 @@ Rejected. Stats mirror the two pending stages.
 - `src/components/layout/Sidebar.tsx` — Payments now visible to
   `sub_partner_distributor` + `operations_manager`.
 
+## Billing-user payer filters (PaymentsPage.tsx)
+The billing user gets a **payer-oriented filter set** instead of the generic
+search / status / date-range (a distributor's remittance is one payment per
+cutoff per plant covering all its stores — boss). Gated on `isBillingUser`, the
+filter card shows four cascading `Select`s:
+1. **Plant** — `store.plantId`.
+2. **Payer type** — Distributor (PD) / Sub-Partner (SPD) / Franchisee (Direct),
+   derived from the store's links: `distributorId && !subPartnerDistributorId`
+   → PD; `subPartnerDistributorId` → SPD; neither → direct franchisee.
+3. **Entity** (dependent on #2) — only the payers of that type that actually have
+   payments, optionally within the chosen plant (`payerEntityOptions` memo).
+   Distributor → `distributorId`; SPD → `subPartnerDistributorId`; Franchisee →
+   the store id.
+4. **Cutoff** — `getCutoffRangeForDate(payment.datePaid)` (1-7 / 8-14 / 15-21 /
+   22-EOM); a single selector replaces the From/To date range.
+All other roles keep the original search + status + date filters. Proof of
+payment is viewed via the existing "View Details" → verify modal (unchanged).
+
 ## RLS / scope (migration 012)
 - Widens `payments.status` CHECK to allow `'collected'` (drop + re-add).
 - Adds `payments.collected_by` / `collected_at`.

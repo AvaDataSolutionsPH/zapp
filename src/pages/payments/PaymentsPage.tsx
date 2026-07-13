@@ -26,6 +26,7 @@ import {
 } from '@/components/ui';
 import type { TableColumn, SelectOption, Tab } from '@/components/ui';
 import type { Payment } from '@/types';
+import { getCutoffRangeForDate } from '@/lib/billingComputations';
 import PaymentSubmitModal from './PaymentSubmitModal';
 import PaymentVerifyModal from './PaymentVerifyModal';
 import PaymentCollectModal from './PaymentCollectModal';
@@ -71,13 +72,27 @@ export default function PaymentsPage() {
     currentUser,
     demoUsers,
     getStoresForCurrentUser,
+    distributors,
+    subPartnerDistributors,
+    plants,
   } = useStore();
+
+  // The billing user gets a payer-oriented filter set (Plant → Distributor/SPD/
+  // Franchisee → cutoff) instead of the generic search/status/date range — a
+  // distributor's remittance is one payment per cutoff per plant covering all
+  // its stores (boss).
+  const isBillingUser = currentUser?.role === 'billing_user';
 
   const [activeTab, setActiveTab] = useState('all');
   const [storeSearch, setStoreSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  // Billing-user payer filters.
+  const [plantFilter, setPlantFilter] = useState('');
+  const [payerType, setPayerType] = useState<'' | 'distributor' | 'spd' | 'franchisee'>('');
+  const [payerEntity, setPayerEntity] = useState('');
+  const [cutoffFilter, setCutoffFilter] = useState('');
   const [page, setPage] = useState(1);
   const [submitModalOpen, setSubmitModalOpen] = useState(false);
   const [verifyPayment, setVerifyPayment] = useState<Payment | null>(null);
@@ -162,9 +177,41 @@ export default function PaymentsPage() {
     if (dateFrom) result = result.filter((p) => p.datePaid >= dateFrom);
     if (dateTo) result = result.filter((p) => p.datePaid <= dateTo);
 
+    // Billing-user payer filters: Plant → Distributor / SPD / Franchisee (direct)
+    // → cutoff. A store's payer type is derived from its distributor/SPD links;
+    // the cutoff is derived from the payment's paid date (all stores share the
+    // same cutoff windows, so a single selector replaces the date range).
+    if (isBillingUser) {
+      if (plantFilter) {
+        result = result.filter((p) => stores.find((s) => s.id === p.storeId)?.plantId === plantFilter);
+      }
+      if (payerType) {
+        result = result.filter((p) => {
+          const s = stores.find((st) => st.id === p.storeId);
+          if (!s) return false;
+          if (payerType === 'distributor') return !!s.distributorId && !s.subPartnerDistributorId;
+          if (payerType === 'spd') return !!s.subPartnerDistributorId;
+          return !s.distributorId && !s.subPartnerDistributorId; // franchisee (direct)
+        });
+        if (payerEntity) {
+          result = result.filter((p) => {
+            const s = stores.find((st) => st.id === p.storeId);
+            if (!s) return false;
+            if (payerType === 'distributor') return s.distributorId === payerEntity;
+            if (payerType === 'spd') return s.subPartnerDistributorId === payerEntity;
+            return s.id === payerEntity; // franchisee (direct) → store id
+          });
+        }
+      }
+      if (cutoffFilter) {
+        result = result.filter((p) => getCutoffRangeForDate(p.datePaid) === cutoffFilter);
+      }
+    }
+
     result.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
     return result;
-  }, [userPayments, activeTab, statusFilter, storeSearch, dateFrom, dateTo, stores, paymentStage]);
+  }, [userPayments, activeTab, statusFilter, storeSearch, dateFrom, dateTo, stores, paymentStage,
+      isBillingUser, plantFilter, payerType, payerEntity, cutoffFilter]);
 
   const paged = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
@@ -188,6 +235,50 @@ export default function PaymentsPage() {
     return user?.name ?? id;
   };
   const formatCurrency = (n: number) => `P${n.toLocaleString()}`;
+  const distributorName = (id?: string) => distributors.find((d) => d.id === id)?.name ?? id ?? '-';
+  const spdName = (id?: string) => subPartnerDistributors.find((s) => s.id === id)?.name ?? id ?? '-';
+
+  // ── Billing-user payer filter options ───────────────────────────────────
+  const plantOptions: SelectOption[] = [
+    { value: '', label: 'All Plants' },
+    ...plants.map((p) => ({ value: p.id, label: p.name })),
+  ];
+  const payerTypeOptions: SelectOption[] = [
+    { value: '', label: 'All Payers' },
+    { value: 'distributor', label: 'Distributor (PD)' },
+    { value: 'spd', label: 'Sub-Partner (SPD)' },
+    { value: 'franchisee', label: 'Franchisee (Direct)' },
+  ];
+  const cutoffOptions: SelectOption[] = [
+    { value: '', label: 'All Cutoffs' },
+    { value: '1-7', label: '1-7' },
+    { value: '8-14', label: '8-14' },
+    { value: '15-21', label: '15-21' },
+    { value: '22-EOM', label: '22-EOM' },
+  ];
+  // Dependent entity list — only the payers of that type that actually have
+  // payments (optionally within the chosen plant), so "available distri" is real.
+  const payerEntityOptions: SelectOption[] = useMemo(() => {
+    const storeIdsWithPayments = new Set(userPayments.map((p) => p.storeId));
+    const relevant = stores.filter(
+      (s) => storeIdsWithPayments.has(s.id) && (!plantFilter || s.plantId === plantFilter),
+    );
+    if (payerType === 'distributor') {
+      const ids = [...new Set(relevant.filter((s) => s.distributorId && !s.subPartnerDistributorId).map((s) => s.distributorId!))];
+      return [{ value: '', label: 'All Distributors' }, ...ids.map((id) => ({ value: id, label: distributorName(id) }))];
+    }
+    if (payerType === 'spd') {
+      const ids = [...new Set(relevant.filter((s) => s.subPartnerDistributorId).map((s) => s.subPartnerDistributorId!))];
+      return [{ value: '', label: 'All Sub-Partners' }, ...ids.map((id) => ({ value: id, label: spdName(id) }))];
+    }
+    if (payerType === 'franchisee') {
+      const direct = relevant.filter((s) => !s.distributorId && !s.subPartnerDistributorId);
+      return [{ value: '', label: 'All Direct Franchisees' }, ...direct.map((s) => ({ value: s.id, label: s.name }))];
+    }
+    return [{ value: '', label: 'Select payer type first' }];
+    // distributorName/spdName are stable lookups over the closure slices.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userPayments, stores, plantFilter, payerType]);
 
   // Route a row click / "view" to the modal appropriate for the viewer's role
   // and the payment's current stage.
@@ -392,32 +483,64 @@ export default function PaymentsPage() {
         {/* Filters */}
         <Card className="mb-4">
           <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <SearchInput
-                value={storeSearch}
-                onChange={(val) => { setStoreSearch(val); setPage(1); }}
-                placeholder="Search by store..."
-              />
-              {activeTab === 'all' && (
+            {isBillingUser ? (
+              // Payer-oriented filters: Plant → Distributor/SPD/Franchisee →
+              // dependent entity → cutoff (one payment per cutoff per plant).
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <Select
-                  options={statusOptions}
-                  value={statusFilter}
-                  onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+                  options={plantOptions}
+                  value={plantFilter}
+                  onChange={(e) => { setPlantFilter(e.target.value); setPayerEntity(''); setPage(1); }}
                 />
-              )}
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
-                className="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-zapp-orange/30 focus:border-zapp-orange"
-              />
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
-                className="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-zapp-orange/30 focus:border-zapp-orange"
-              />
-            </div>
+                <Select
+                  options={payerTypeOptions}
+                  value={payerType}
+                  onChange={(e) => {
+                    setPayerType(e.target.value as typeof payerType);
+                    setPayerEntity('');
+                    setPage(1);
+                  }}
+                />
+                <Select
+                  options={payerEntityOptions}
+                  value={payerEntity}
+                  onChange={(e) => { setPayerEntity(e.target.value); setPage(1); }}
+                  disabled={!payerType}
+                />
+                <Select
+                  options={cutoffOptions}
+                  value={cutoffFilter}
+                  onChange={(e) => { setCutoffFilter(e.target.value); setPage(1); }}
+                />
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <SearchInput
+                  value={storeSearch}
+                  onChange={(val) => { setStoreSearch(val); setPage(1); }}
+                  placeholder="Search by store..."
+                />
+                {activeTab === 'all' && (
+                  <Select
+                    options={statusOptions}
+                    value={statusFilter}
+                    onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+                  />
+                )}
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
+                  className="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-zapp-orange/30 focus:border-zapp-orange"
+                />
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
+                  className="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-zapp-orange/30 focus:border-zapp-orange"
+                />
+              </div>
+            )}
           </CardContent>
         </Card>
 

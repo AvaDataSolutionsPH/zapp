@@ -32,6 +32,7 @@ import { getBillingBreakdown, getCutoffRangeForDate } from '@/lib/billingComputa
 import { computeDrReview, type DrReview } from '@/lib/drReviewComputations';
 import BillingDetailDrawer from './BillingDetailDrawer';
 import DrPhotosDrawer, { type DrPhotoTarget } from './DrPhotosDrawer';
+import FranchiseeRevisionsSection from './FranchiseeRevisionsSection';
 
 const PAGE_SIZE = 10;
 
@@ -1210,9 +1211,11 @@ export default function BillingPage() {
           }}
         />
       ) : (
-        <Table
-          columns={isFranchisee ? franchiseeColumns : columns}
-          data={paged}
+        <>
+          {isFranchisee && <FranchiseeRevisionsSection />}
+          <Table
+            columns={isFranchisee ? franchiseeColumns : columns}
+            data={paged}
           keyExtractor={(row) => row.id}
           onRowClick={(row) => setSelectedBilling(row)}
           emptyMessage="No billing records found matching your filters."
@@ -1223,6 +1226,7 @@ export default function BillingPage() {
             onPageChange: setPage,
           }}
         />
+        </>
       )}
 
       {/* Billing Detail Drawer */}

@@ -179,6 +179,9 @@ const mapBillingRevisionToDB = (r: BillingRevision) => ({
   corrected_beginning: r.correctedBeginning,
   corrected_ending: r.correctedEnding,
   status: r.status,
+  additional_amount: r.additionalAmount ?? 0,
+  dispute_note: r.disputeNote ?? null,
+  disputed_at: r.disputedAt ?? null,
 });
 
 const mapDeliveryToDB = (d: Delivery) => ({
@@ -330,6 +333,14 @@ export async function insertBillingRevision(rev: BillingRevision): Promise<void>
   const { error } = await supabase
     .from('billing_revisions')
     .insert(mapBillingRevisionToDB(rev) as never);
+  if (error) throw error;
+}
+
+export async function updateBillingRevision(rev: BillingRevision): Promise<void> {
+  const { error } = await supabase
+    .from('billing_revisions')
+    .update(mapBillingRevisionToDB(rev) as never)
+    .eq('id', rev.id);
   if (error) throw error;
 }
 

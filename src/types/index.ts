@@ -390,6 +390,13 @@ export interface BillingRevision {
   correctedBeginning: BillingRevisionItem[];  // PD's corrected beginning counts
   correctedEnding: BillingRevisionItem[];      // PD's corrected ending/unsold counts
   status: BillingRevisionStatus;
+  // Phase C — positive DR-Sold-Value delta the store additionally owes after the
+  // correction (0 when the revision doesn't raise sold). Audit snapshot at file
+  // time; the UI also derives it live from the delivery + inventories.
+  additionalAmount?: number;
+  // Phase D — franchisee dispute of the revision (status → 'disputed').
+  disputeNote?: string;
+  disputedAt?: string;
 }
 
 // 'billing' = a normal consignment/billing payment (default when absent, for

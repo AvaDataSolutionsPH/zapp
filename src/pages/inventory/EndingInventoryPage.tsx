@@ -22,6 +22,7 @@ import {
 } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import { uploadFile, buildObjectPath, deleteFile, parseStorageRef } from '@/services/storage';
+import { anyBlurry } from '@/lib/imageBlur';
 import type { SelectOption, UploadedFile } from '@/components/ui';
 import type { EndingInventory, InventoryItem } from '@/types';
 import { InventoryReviewDetailDrawer } from './InventoryReviewDetailDrawer';
@@ -75,6 +76,22 @@ export default function EndingInventoryPage() {
   const [unsoldRows, setUnsoldRows] = useState<UnsoldRow[]>([]);
   const [crateFiles, setCrateFiles] = useState<UploadedFile[]>([]);
   const [notes, setNotes] = useState('');
+
+  // Phase E — warn (non-blocking) if a crate photo looks out of focus so the
+  // store re-takes a clear shot for accurate counting.
+  const handleCrateChange = (files: UploadedFile[]) => {
+    setCrateFiles(files);
+    const raw = files.map((f) => f.file);
+    if (raw.length === 0) return;
+    void anyBlurry(raw).then((blurry) => {
+      if (blurry) {
+        addToast(
+          'warning',
+          'Mukhang malabo ang isang crate photo — kumuha ng mas malinaw para tama ang bilang.',
+        );
+      }
+    });
+  };
   const [showSave, setShowSave] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -489,7 +506,7 @@ export default function EndingInventoryPage() {
                   multiple
                   maxSizeMB={10}
                   camera
-                  onChange={setCrateFiles}
+                  onChange={handleCrateChange}
                 />
                 {crateFiles.length > 0 && (
                   <div className="mt-4 grid grid-cols-4 gap-2">

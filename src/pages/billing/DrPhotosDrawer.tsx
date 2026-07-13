@@ -19,7 +19,11 @@ import { Drawer, Button } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import { useStore } from '@/store/useStore';
 import { useStorageUrl } from '@/lib/useStorageUrl';
+import { computeRevisionBilling } from '@/lib/revisionBilling';
 import type { BillingRevision, BillingRevisionItem } from '@/types';
+
+const peso = (n: number) =>
+  `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 // View-only thumbnail for a stored photo ref (private-bucket refs are re-signed
 // on render via useStorageUrl). Its own component so the hook runs once per
@@ -217,6 +221,13 @@ export default function DrPhotosDrawer({ target, onClose }: DrPhotosDrawerProps)
     if (!currentUser || !delivery) return;
     const toItems = (field: 'begin' | 'end'): BillingRevisionItem[] =>
       rows.map((r) => ({ skuId: r.skuId, skuName: r.skuName, quantity: field === 'begin' ? r.begin : r.end }));
+    const correctedBeginning = toItems('begin');
+    const correctedEnding = toItems('end');
+    // Phase C — the positive DR-Sold-Value delta the store additionally owes.
+    const { additionalAmount } = computeRevisionBilling(delivery, beginningInv, endingInv, {
+      correctedBeginning,
+      correctedEnding,
+    });
     // id + requestedAt are stamped by the store action (keeps this component pure).
     try {
       requestBillingRevision({
@@ -224,9 +235,10 @@ export default function DrPhotosDrawer({ target, onClose }: DrPhotosDrawerProps)
         storeId: delivery.storeId,
         requestedBy: currentUser.id,
         reason,
-        correctedBeginning: toItems('begin'),
-        correctedEnding: toItems('end'),
+        correctedBeginning,
+        correctedEnding,
         status: 'requested',
+        additionalAmount,
       });
       addToast('success', `Na-file ang revision para sa ${target.drNumber}.`);
     } catch {
@@ -318,7 +330,18 @@ export default function DrPhotosDrawer({ target, onClose }: DrPhotosDrawerProps)
 
             {existingRevision ? (
               // Already filed → read-only panel (also the Phase D franchisee view).
-              <RevisionSummary revision={existingRevision} />
+              // Derive the additional amount live so pre-migration rows (no stored
+              // snapshot) still show a correct figure.
+              <RevisionSummary
+                revision={existingRevision}
+                additionalAmount={
+                  existingRevision.additionalAmount ??
+                  (delivery
+                    ? computeRevisionBilling(delivery, beginningInv, endingInv, existingRevision)
+                        .additionalAmount
+                    : 0)
+                }
+              />
             ) : canRevise ? (
               <>
                 <p className="mb-3 text-xs text-gray-500">
@@ -341,15 +364,23 @@ export default function DrPhotosDrawer({ target, onClose }: DrPhotosDrawerProps)
   );
 }
 
-// Read-only view of a filed revision — the corrected counts + reason. Shown to
-// the PD after filing and (Phase D) to the franchisee whose report was revised.
-function RevisionSummary({ revision }: { revision: BillingRevision }) {
+// Read-only view of a filed revision — the corrected counts + reason + the
+// additional amount due (Phase C). Shown to the PD after filing and (Phase D)
+// to the franchisee whose report was revised.
+function RevisionSummary({
+  revision,
+  additionalAmount,
+}: {
+  revision: BillingRevision;
+  additionalAmount: number;
+}) {
   const endBy = new Map(revision.correctedEnding.map((i) => [i.skuId, i.quantity]));
+  const isDisputed = revision.status === 'disputed';
   return (
     <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-3">
       <div className="flex items-center justify-between">
         <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-          Revision Requested
+          {isDisputed ? 'Disputed by Store' : 'Revision Requested'}
         </span>
         <span className="text-xs text-amber-700">
           {new Date(revision.requestedAt).toLocaleDateString()}
@@ -375,10 +406,20 @@ function RevisionSummary({ revision }: { revision: BillingRevision }) {
           </tbody>
         </table>
       </div>
+      <div className="flex items-center justify-between rounded-lg bg-white border border-amber-200 px-3 py-2">
+        <span className="text-xs font-medium text-amber-700">Additional Amount Due</span>
+        <span className="text-sm font-semibold text-gray-900">{peso(additionalAmount)}</span>
+      </div>
       <div>
         <p className="text-xs font-medium text-amber-700">Reason</p>
         <p className="text-sm text-gray-800">{revision.reason}</p>
       </div>
+      {isDisputed && revision.disputeNote && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+          <p className="text-xs font-medium text-red-700">Store's Dispute</p>
+          <p className="text-sm text-gray-800">{revision.disputeNote}</p>
+        </div>
+      )}
     </div>
   );
 }

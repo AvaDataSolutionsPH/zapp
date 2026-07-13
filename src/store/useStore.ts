@@ -69,6 +69,7 @@ import {
   insertEndingInventory,
   updateEndingInventory,
   insertBillingRevision,
+  updateBillingRevision,
   insertPayment,
   updatePayment,
   updateStore as updateStoreDB,
@@ -243,6 +244,8 @@ interface AppStore {
   // Billing Revisions (PD report correction — Phase B)
   billingRevisions: BillingRevision[];
   requestBillingRevision: (rev: Omit<BillingRevision, 'id' | 'requestedAt'>) => void;
+  // Phase D — franchisee disputes a revision (status → 'disputed').
+  disputeBillingRevision: (id: string, note: string) => void;
 
   // Billing
   billingRecords: BillingRecord[];
@@ -1256,6 +1259,28 @@ export const useStore = create<AppStore>((set, get) => {
       console.error('[useStore] requestBillingRevision DB write failed, rolling back:', err);
       set((s) => ({
         billingRevisions: s.billingRevisions.filter((r) => r.id !== newRev.id),
+      }));
+    });
+  },
+
+  disputeBillingRevision: (id: string, note: string) => {
+    const prev = get().billingRevisions.find((r) => r.id === id);
+    if (!prev) return;
+    const next: BillingRevision = {
+      ...prev,
+      status: 'disputed',
+      disputeNote: note,
+      disputedAt: new Date().toISOString(),
+    };
+    // Optimistic update; background-persist; rollback on failure.
+    set((s) => ({
+      billingRevisions: s.billingRevisions.map((r) => (r.id === id ? next : r)),
+    }));
+    if (get().dataSource !== 'db') return;
+    void updateBillingRevision(next).catch((err) => {
+      console.error('[useStore] disputeBillingRevision DB write failed, rolling back:', err);
+      set((s) => ({
+        billingRevisions: s.billingRevisions.map((r) => (r.id === id ? prev : r)),
       }));
     });
   },

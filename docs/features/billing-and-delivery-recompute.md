@@ -186,6 +186,36 @@ correctedEnding[], status }` with `status ∈ requested|disputed|resolved`.
   Requested"** panel (corrected counts + reason) instead of the form — this is
   also the foundation for the Phase D franchisee dispute view.
 
+## Additional Amount Due + franchisee dispute (Phases C–D)
+- **Phase C — Additional Amount Due.** The store is billed on a DR/consignment
+  basis (`totalPayable = drSold = Σ sold×drPrice`). A revision that raises SOLD
+  raises what the store owes. `src/lib/revisionBilling.ts` (`computeRevisionBilling`,
+  pure) derives `additionalAmount = max(0, revisedDrSold − originalDrSold)` (sold =
+  begin−end, matching the PD's edits; only the POSITIVE delta counts). It's
+  computed at file time and stored on the revision (`additional_amount`, migration
+  020) for audit, AND re-derived live in the UI so pre-020 rows still show a figure.
+  The original billing row is NEVER mutated (audit trail). Shown in the
+  DrPhotosDrawer "Revision Requested" panel.
+- **Phase D — Franchisee view + Dispute.** `src/pages/billing/FranchiseeRevisionsSection.tsx`
+  (rendered on the franchisee Billing view) lists revisions for the franchisee's
+  own store(s): corrected counts, Additional Amount Due, PD's reason, and a
+  **Dispute Billing** button → inline explanation → `disputeBillingRevision(id, note)`
+  (store action, optimistic + `updateBillingRevision` DB write + rollback) flips
+  status `requested → 'disputed'` and records `dispute_note`/`disputed_at`
+  (migration 020). The dispute is visible back to the PD in the DrPhotosDrawer
+  panel ("Disputed by Store" + the note). RLS `brev_update` (migration 019,
+  store-scoped non-view-only) already permits the franchisee update.
+
+## Blur detection on crate photos (Phase E)
+`src/lib/imageBlur.ts` (`estimateBlur`/`anyBlurry`, pure, no AI/API) downscales a
+photo, grayscales, runs a Laplacian, and takes the variance (sharp → high
+variance; blurry → low). Below `BLUR_VARIANCE_THRESHOLD` (60, conservative) →
+blurry. Wired into the crate-photo `onChange` on `BeginningInventoryPage` and
+`EndingInventoryPage` (`handleCrateChange`): a **non-blocking warning toast**
+prompts the store to re-take an out-of-focus shot. Best-effort — any detector
+error resolves to "not blurry" so capture is never hard-blocked. (Warning, not a
+hard reject, to avoid production false-positive lockouts; can be tightened later.)
+
 ## Delivery-status auto-rule
 `Store.deliveryStatus` is auto-derived: 0 overdue billings = `active`,
 1 = `warning`, 2+ = `hold`. Manual `requestStopDelivery` / `resumeDelivery`

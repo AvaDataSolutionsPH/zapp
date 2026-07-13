@@ -27,6 +27,7 @@ import {
 } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import { uploadFile, buildObjectPath, deleteFile, parseStorageRef } from '@/services/storage';
+import { anyBlurry } from '@/lib/imageBlur';
 import type { TableColumn, SelectOption, UploadedFile } from '@/components/ui';
 import type { AIResult, InventoryItem } from '@/types';
 
@@ -86,6 +87,21 @@ export default function BeginningInventoryPage() {
   const [drFiles, setDrFiles] = useState<UploadedFile[]>([]);
   const [crateFiles, setCrateFiles] = useState<UploadedFile[]>([]);
   const [aiProcessing, setAiProcessing] = useState(false);
+
+  // Phase E — warn (non-blocking) if a crate photo looks out of focus.
+  const handleCrateChange = (files: UploadedFile[]) => {
+    setCrateFiles(files);
+    const raw = files.map((f) => f.file);
+    if (raw.length === 0) return;
+    void anyBlurry(raw).then((blurry) => {
+      if (blurry) {
+        addToast(
+          'warning',
+          'Mukhang malabo ang isang crate photo — kumuha ng mas malinaw para tama ang bilang.',
+        );
+      }
+    });
+  };
   const [ocrResults, setOcrResults] = useState<AIResult[]>([]);
   const [confirmedRows, setConfirmedRows] = useState<ConfirmedRow[]>([]);
   const [notes, setNotes] = useState('');
@@ -488,7 +504,7 @@ export default function BeginningInventoryPage() {
               multiple
               maxSizeMB={10}
               camera
-              onChange={setCrateFiles}
+              onChange={handleCrateChange}
             />
             {crateFiles.length > 0 && (
               <div className="mt-4">

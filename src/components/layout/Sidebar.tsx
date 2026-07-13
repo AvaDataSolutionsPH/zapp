@@ -192,12 +192,16 @@ const navSections: NavSection[] = [
         label: 'Special Orders',
         path: '/special-orders',
         icon: Package,
+        // Not part of the billing user's work (boss). Special orders surface for
+        // the area supervisor / PD / SPD (+ owner/ops/plant/franchisees who
+        // create & fulfil them), NOT billing_user.
         allowedRoles: [
           'owner',
           'operations_manager',
           'plant_manager',
-          'billing_user',
+          'area_manager',
           'partner_distributor',
+          'sub_partner_distributor',
           'franchisee_distributor',
           'franchisee_direct',
         ],

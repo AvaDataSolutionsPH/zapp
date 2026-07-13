@@ -47,6 +47,10 @@ export default function ApplicationsPage() {
       }
       return [];
     }
+    // A PD only sees the website applicants under its own channel/distributor.
+    if (currentUser?.role === 'partner_distributor') {
+      return allApplications.filter((a) => a.assignedDistributorId === currentUser.distributorId);
+    }
     return allApplications;
   }, [allApplications, currentUser, areaSupervisors]);
 
@@ -134,6 +138,13 @@ export default function ApplicationsPage() {
   ];
 
   const columns: TableColumn<Application>[] = [
+    {
+      key: 'applicationNumber',
+      header: 'Application #',
+      render: (row) => (
+        <span className="font-mono text-xs text-gray-700">{row.applicationNumber ?? '—'}</span>
+      ),
+    },
     {
       key: 'fullName',
       header: 'Applicant Name',

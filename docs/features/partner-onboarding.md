@@ -69,6 +69,19 @@ actions: **Verify & Activate** / **Request Info** / **Reject**.
 Legacy `/apply` applications (no `applicationNumber`) keep plain Approve/Decline
 and get a store only — no user profile.
 
+**PD can approve its own franchisees.** The `partner_distributor` gets a
+**"New Applications"** sidebar entry (Sidebar.tsx) → the shared `ApplicationsPage`,
+scoped to applications whose `assignedDistributorId` is the PD's own (plus an
+**Application #** column). `canAct` on `ApplicationDetailPage` is status-based (not
+role-gated), so a PD can Verify & Activate. RLS already lets a PD UPDATE its
+applications (`apps_update`, 003) and INSERT stores (`stores_insert` checks
+`app_is_reviewer()`, which includes `partner_distributor`); **migration 018**
+(`018_pd_approve_franchisee.sql`) widens `users_pd_insert` so the PD may also
+create the franchisee `users` profile (role `franchisee_distributor`/`direct`,
+`distributor_id = app_distributor()`). ⚠️ Run 018 BEFORE the PD approve flow —
+the franchisee-user INSERT does not roll back the already-persisted store, so a
+pre-018 approval leaves a store without a login.
+
 ## Phase 5 — Security Deposit (live)
 A newly-activated onboarding partner has a **`pending`** store until the ₱2,000
 security deposit is paid. `FranchiseeDashboard` shows a **Security Deposit

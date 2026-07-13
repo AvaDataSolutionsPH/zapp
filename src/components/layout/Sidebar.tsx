@@ -80,6 +80,14 @@ const navSections: NavSection[] = [
         allowedRoles: ['owner', 'operations_manager', 'area_manager'],
       },
       {
+        // PD sees the website applicants under its own channel (scoped in
+        // ApplicationsPage) and can approve the franchisees under it.
+        label: 'New Applications',
+        path: '/applications',
+        icon: FileText,
+        allowedRoles: ['partner_distributor'],
+      },
+      {
         label: 'Stores',
         path: '/stores-management',
         icon: Store,

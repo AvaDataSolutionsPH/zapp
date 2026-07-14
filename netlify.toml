@@ -1,0 +1,19 @@
+# Netlify build config for zappdonuts.com.
+#
+# Version-controlled on purpose: without this file the build depends entirely on
+# the Netlify UI settings + whatever Node version Netlify defaults to that week,
+# which is how a working build can break with no code change. Vite 8 + React 19
+# need Node 20+; we pin 22 to match local dev.
+#
+# Secrets are NOT here — VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY live in
+# Netlify UI → Site configuration → Environment variables.
+#
+# SPA routing is handled by `public/_redirects` (copied into dist/ at build), so
+# deep links like /login and /applications hit index.html instead of a 404.
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"

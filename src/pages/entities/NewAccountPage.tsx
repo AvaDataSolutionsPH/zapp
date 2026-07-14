@@ -5,14 +5,16 @@
 // Admin-driven account creation for a Partner Distributor (PD), Sub-Partner
 // Distributor (SPD), or Area Supervisor (AS). Creates the entity record + a
 // login in one step and reveals a TEMPORARY PASSWORD for the admin to relay
-// (no email — see docs). owner/ops may create any role; a PD may create SPD/AS
-// within its own scope.
+// (no email — see docs). owner/ops may create any role. A PD onboards its own
+// Franchisees and Sub-Partners (AS is HQ's job) — picking "Franchisee" routes
+// to the full /franchisees/new wizard (store + shop code + map + ID) since a
+// franchisee needs a Store, which this simple login form does not create.
 
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   UserPlus, User, Mail, Phone, Handshake, Users, ClipboardList,
-  Copy, CheckCircle2, ArrowLeft, KeyRound, AlertCircle,
+  Copy, CheckCircle2, ArrowLeft, KeyRound, AlertCircle, Store, ArrowRight,
 } from 'lucide-react';
 import { Button, Card, CardContent, CardHeader, CardFooter, Input, Select } from '@/components/ui';
 import type { SelectOption } from '@/components/ui';
@@ -33,6 +35,12 @@ const ROLE_LABEL: Record<NewAccountRole, string> = {
   area_manager: 'Area Supervisor',
 };
 
+// The dropdown offers 'franchisee' as a shortcut that ROUTES to the full
+// franchisee onboarding wizard (store + shop code + map pin + valid ID) — it is
+// NOT a createPartnerAccount role (only PD/SPD/AS are). Franchisees need a Store,
+// so we reuse the tested /franchisees/new flow instead of duplicating it here.
+type DropdownRole = NewAccountRole | 'franchisee';
+
 export default function NewAccountPage() {
   const navigate = useNavigate();
   const { addToast } = useToast();
@@ -46,12 +54,13 @@ export default function NewAccountPage() {
     if (currentUser && !canUse) navigate('/dashboard', { replace: true });
   }, [currentUser, canUse, navigate]);
 
-  // PD cannot create another PD — only SPD / AS.
+  // A PD onboards Franchisees and Sub-Partners (Area Supervisors are created by
+  // HQ, not the PD). Franchisee routes to the full onboarding wizard.
   const roleOptions: SelectOption[] = useMemo(() => {
-    const opts: { value: NewAccountRole; label: string }[] = isPD
+    const opts: { value: DropdownRole; label: string }[] = isPD
       ? [
+          { value: 'franchisee', label: 'Franchisee' },
           { value: 'sub_partner_distributor', label: 'Sub-Partner Distributor' },
-          { value: 'area_manager', label: 'Area Supervisor' },
         ]
       : [
           { value: 'partner_distributor', label: 'Partner Distributor' },
@@ -61,7 +70,7 @@ export default function NewAccountPage() {
     return opts;
   }, [isPD]);
 
-  const [role, setRole] = useState<NewAccountRole>(
+  const [role, setRole] = useState<DropdownRole>(
     isPD ? 'sub_partner_distributor' : 'partner_distributor',
   );
   const [name, setName] = useState('');
@@ -101,6 +110,8 @@ export default function NewAccountPage() {
   };
 
   const handleCreate = async () => {
+    // Franchisee has its own onboarding wizard (store + shop code + map + ID).
+    if (role === 'franchisee') { navigate('/franchisees/new'); return; }
     if (!validate()) return;
     setSubmitting(true);
     try {
@@ -140,7 +151,11 @@ export default function NewAccountPage() {
     setErrors({});
   };
 
-  const RoleIcon = role === 'partner_distributor' ? Handshake : role === 'sub_partner_distributor' ? Users : ClipboardList;
+  const RoleIcon =
+    role === 'franchisee' ? Store
+    : role === 'partner_distributor' ? Handshake
+    : role === 'sub_partner_distributor' ? Users
+    : ClipboardList;
 
   return (
     <div className="p-6">
@@ -159,7 +174,7 @@ export default function NewAccountPage() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900">New Account</h1>
             <p className="text-sm text-gray-500">
-              Create a login for a {isPD ? 'Sub-Partner or Area Supervisor' : 'Partner Distributor, Sub-Partner, or Area Supervisor'}.
+              Create a login for a {isPD ? 'Franchisee or Sub-Partner' : 'Partner Distributor, Sub-Partner, or Area Supervisor'}.
             </p>
           </div>
         </div>
@@ -213,35 +228,57 @@ export default function NewAccountPage() {
                   label="Account Type"
                   options={roleOptions}
                   value={role}
-                  onChange={(e) => { setRole(e.target.value as NewAccountRole); setErrors({}); }}
+                  onChange={(e) => { setRole(e.target.value as DropdownRole); setErrors({}); }}
                 />
-                <Input label="Full Name" placeholder="Juan Dela Cruz" value={name}
-                  onChange={(e) => setName(e.target.value)} error={errors.name} iconLeft={<User size={16} />} />
-                <Input label="Email" type="email" placeholder="juan@example.com" value={email}
-                  onChange={(e) => setEmail(e.target.value)} error={errors.email} iconLeft={<Mail size={16} />}
-                  helperText="Ito ang gagamitin niyang login." />
-                <Input label="Phone" placeholder="09171234567" value={phone}
-                  onChange={(e) => setPhone(e.target.value)} error={errors.phone} iconLeft={<Phone size={16} />} />
 
-                {showParent && (
-                  <Select label="Parent Distributor" options={parentOptions} value={parentDistributorId}
-                    onChange={(e) => setParentDistributorId(e.target.value)} error={errors.parentDistributorId} />
-                )}
-                {showPlant && (
-                  <Select label="Plant" options={plantOptions} value={plantId}
-                    onChange={(e) => setPlantId(e.target.value)} error={errors.plantId} />
-                )}
-                {isPD && (
-                  <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
-                    Awtomatikong nasa ilalim ng iyong network (scope) ang bagong account na ito.
-                  </p>
+                {role === 'franchisee' ? (
+                  <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm text-gray-700">
+                    <div className="flex items-center gap-2 font-semibold text-zapp-orange">
+                      <Store size={16} /> Franchisee Onboarding
+                    </div>
+                    <p className="mt-2 text-gray-600">
+                      Ang franchisee ay may sariling kumpletong form — store details, shop
+                      code, map pin, at valid ID. Ituloy sa onboarding wizard para tama at
+                      buo ang datos ng tindahan.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <Input label="Full Name" placeholder="Juan Dela Cruz" value={name}
+                      onChange={(e) => setName(e.target.value)} error={errors.name} iconLeft={<User size={16} />} />
+                    <Input label="Email" type="email" placeholder="juan@example.com" value={email}
+                      onChange={(e) => setEmail(e.target.value)} error={errors.email} iconLeft={<Mail size={16} />}
+                      helperText="Ito ang gagamitin niyang login." />
+                    <Input label="Phone" placeholder="09171234567" value={phone}
+                      onChange={(e) => setPhone(e.target.value)} error={errors.phone} iconLeft={<Phone size={16} />} />
+
+                    {showParent && (
+                      <Select label="Parent Distributor" options={parentOptions} value={parentDistributorId}
+                        onChange={(e) => setParentDistributorId(e.target.value)} error={errors.parentDistributorId} />
+                    )}
+                    {showPlant && (
+                      <Select label="Plant" options={plantOptions} value={plantId}
+                        onChange={(e) => setPlantId(e.target.value)} error={errors.plantId} />
+                    )}
+                    {isPD && (
+                      <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
+                        Awtomatikong nasa ilalim ng iyong network (scope) ang bagong account na ito.
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
             </CardContent>
             <CardFooter className="flex justify-end">
-              <Button variant="primary" onClick={handleCreate} loading={submitting} iconLeft={<UserPlus size={16} />}>
-                Create Account
-              </Button>
+              {role === 'franchisee' ? (
+                <Button variant="primary" onClick={handleCreate} iconRight={<ArrowRight size={16} />}>
+                  Continue to Franchisee Onboarding
+                </Button>
+              ) : (
+                <Button variant="primary" onClick={handleCreate} loading={submitting} iconLeft={<UserPlus size={16} />}>
+                  Create Account
+                </Button>
+              )}
             </CardFooter>
           </Card>
         )}

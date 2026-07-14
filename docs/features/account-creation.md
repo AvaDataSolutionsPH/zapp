@@ -1,12 +1,24 @@
 # Feature: Account Creation (login for PD / SPD / Area Supervisor)
 
 **Status:** live
-**Owner roles:** owner, operations_manager (create any); partner_distributor
-(create SPD / Area Supervisor within its own scope).
+**Owner roles:** owner, operations_manager (create any: PD / SPD / AS);
+partner_distributor (**Franchisee** or **Sub-Partner** within its own scope).
 
 ## Entry points
 - Sidebar: **New Account** (owner / ops / PD) → route `/accounts/new`.
 - Page: `src/pages/entities/NewAccountPage.tsx`.
+
+## PD dropdown = Franchisee + Sub-Partner (not Area Supervisor)
+A PD onboards its own **Franchisees** and **Sub-Partners**; Area Supervisors are
+created by HQ, so the PD's Account-Type dropdown offers only those two (owner/ops
+still get PD / SPD / AS, unchanged). **Franchisee** is a dropdown-only shortcut
+(`type DropdownRole = NewAccountRole | 'franchisee'`) — it is NOT a
+`createPartnerAccount` role. Because a franchisee needs a **Store** (shop code,
+map pin, valid ID) that this simple login form does not create, picking
+"Franchisee" shows an info panel + **Continue to Franchisee Onboarding** button
+that routes to `/franchisees/new` (the full [[franchisee-onboarding]] wizard,
+which pre-resolves the PD's own channel). Sub-Partner keeps the inline
+create-login form below.
 
 ## What it does
 Creates a **login + entity record (+ referral code) in one step** for a Partner

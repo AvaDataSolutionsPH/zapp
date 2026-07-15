@@ -91,9 +91,11 @@ export default function ApplicationDetailPage() {
     );
   }
 
-  // Both /apply and /onboarding collect this, so it lives in Applicant
+  // Both /apply and /onboarding collect these, so they live in Applicant
   // Information (shown for every application) rather than the onboarding card.
   const fbUrl = ensureHttpUrl(application.facebookLink);
+  const operating =
+    [application.operatingDays, application.operatingHours].filter(Boolean).join(' · ') || '—';
 
   const plant = plants.find((p) => p.id === application.assignedPlantId);
   const distributor = application.assignedDistributorId
@@ -210,10 +212,6 @@ export default function ApplicationDetailPage() {
               <div>
                 <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">Application No.</dt>
                 <dd className="mt-1 text-sm font-mono font-semibold text-gray-900">{application.applicationNumber}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">Operating Hours</dt>
-                <dd className="mt-1 text-sm text-gray-700">{application.operatingHours ?? '—'}</dd>
               </div>
               <div>
                 <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">Name on ID (scanned)</dt>
@@ -333,11 +331,19 @@ export default function ApplicationDetailPage() {
                 <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">Store Name</dt>
                 <dd className="mt-1 text-sm font-medium text-gray-900">{application.storeName}</dd>
               </div>
+              <div>
+                <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">Operating</dt>
+                <dd className="mt-1 text-sm text-gray-700">{operating}</dd>
+              </div>
               <div className="sm:col-span-2">
                 <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">Address</dt>
                 <dd className="mt-1 text-sm text-gray-700 flex items-center gap-1">
                   <MapPin size={14} className="text-gray-400" /> {application.address}
                 </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">Province</dt>
+                <dd className="mt-1 text-sm text-gray-700">{application.province ?? '—'}</dd>
               </div>
               <div>
                 <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">Latitude</dt>

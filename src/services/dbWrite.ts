@@ -240,6 +240,21 @@ const mapApplicationToDB = (a: Application) => ({
   // Phase 3 — ID OCR autofill (editable).
   id_scanned_name: a.idScannedName ?? null,
   id_number: a.idNumber ?? null,
+  // New Application Monitoring (migration 021) — form-filled.
+  province: a.province ?? null,
+  location: a.location ?? null,
+  operating_days: a.operatingDays ?? null,
+  // ...PD/SD-filled during evaluation.
+  google_maps_picture_url: a.googleMapsPictureUrl ?? null,
+  google_maps_link: a.googleMapsLink ?? null,
+  market_source: a.marketSource ?? null,
+  remarks_pd_sd: a.remarksPdSd ?? null,
+  // ...AS/OS-filled during evaluation.
+  comparable: a.comparable ?? null,
+  ads: a.ads ?? null,
+  rtc: a.rtc ?? null,
+  remarks_as: a.remarksAs ?? null,
+  remarks_os: a.remarksOs ?? null,
   // Phase 2 — submission provenance metadata + PDF copy.
   submitted_ip: a.submittedIp ?? null,
   user_agent: a.userAgent ?? null,

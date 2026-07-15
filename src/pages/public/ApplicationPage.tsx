@@ -22,6 +22,8 @@ import {
   Image as ImageIcon,
   Camera,
   Facebook,
+  Clock,
+  CalendarDays,
 } from 'lucide-react';
 import {
   Button,
@@ -82,6 +84,8 @@ interface FormData {
   facebookLink: string;
   // Step 3
   storeName: string;
+  operatingHours: string;
+  operatingDays: string;
   address: string;
   province: string;      // display name (used for address / map / review)
   provinceCode: string;  // PSGC code (drives the city fetch)
@@ -111,6 +115,8 @@ export default function ApplicationPage() {
     email: '',
     facebookLink: '',
     storeName: '',
+    operatingHours: '',
+    operatingDays: '',
     address: '',
     province: '',
     provinceCode: '',
@@ -394,6 +400,11 @@ export default function ApplicationPage() {
         facebookLink: form.facebookLink.trim() || undefined,
         storeName: form.storeName,
         address: `${form.address}, Brgy. ${form.barangay}, ${form.city}, ${form.province}`,
+        // Also stored on its own (not just flattened into `address` above) —
+        // the monitoring Area filter + auto Area-Supervisor assignment key off it.
+        province: form.province || undefined,
+        operatingHours: form.operatingHours.trim() || undefined,
+        operatingDays: form.operatingDays.trim() || undefined,
         lat: parseFloat(form.lat) || 0,
         lng: parseFloat(form.lng) || 0,
         storePhotoUrl: storePhotoUpload.storageRef,
@@ -603,6 +614,23 @@ export default function ApplicationPage() {
               error={errors.storeName}
               iconLeft={<StoreIcon size={16} />}
             />
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Input
+                label="Operating Hours (optional)"
+                placeholder="8:00 AM – 8:00 PM"
+                value={form.operatingHours}
+                onChange={(e) => updateForm('operatingHours', e.target.value)}
+                iconLeft={<Clock size={16} />}
+              />
+              <Input
+                label="Operating Days (optional)"
+                placeholder="Lunes – Sabado"
+                value={form.operatingDays}
+                onChange={(e) => updateForm('operatingDays', e.target.value)}
+                iconLeft={<CalendarDays size={16} />}
+              />
+            </div>
 
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700">Complete Address</label>
@@ -854,6 +882,16 @@ export default function ApplicationPage() {
                   <span className="text-gray-500">Store Name:</span>{' '}
                   <span className="font-medium">{form.storeName}</span>
                 </div>
+                {(form.operatingHours.trim() || form.operatingDays.trim()) && (
+                  <div>
+                    <span className="text-gray-500">Operating:</span>{' '}
+                    <span className="font-medium">
+                      {[form.operatingDays.trim(), form.operatingHours.trim()]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </span>
+                  </div>
+                )}
                 <div>
                   <span className="text-gray-500">Province:</span>{' '}
                   <span className="font-medium">{form.province}</span>

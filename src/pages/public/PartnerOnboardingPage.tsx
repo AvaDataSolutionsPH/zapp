@@ -70,6 +70,7 @@ interface FormState {
   residentialAddress: string;
   facebookLink: string;
   operatingHours: string;
+  operatingDays: string;
   province: string;
   lat: string;
   lng: string;
@@ -85,7 +86,7 @@ const EMPTY_FORM: FormState = {
   referralCode: '', firstName: '', middleName: '', lastName: '', suffix: '',
   mobile: '', email: '', password: '', confirmPassword: '',
   storeName: '', businessAddress: '', residentialAddress: '', facebookLink: '',
-  operatingHours: '', province: '', lat: '', lng: '',
+  operatingHours: '', operatingDays: '', province: '', lat: '', lng: '',
   govId: [], proofOfBilling: [], selfie: [], storePhoto: [],
   idScannedName: '', idNumber: '',
 };
@@ -303,6 +304,9 @@ export default function PartnerOnboardingPage() {
         residentialAddress: form.residentialAddress.trim(),
         facebookLink: form.facebookLink.trim() || undefined,
         operatingHours: form.operatingHours.trim(),
+        operatingDays: form.operatingDays.trim() || undefined,
+        // Stored on its own for the monitoring Area filter + auto AS assignment.
+        province: form.province.trim() || undefined,
         lat: parseFloat(form.lat) || 0,
         lng: parseFloat(form.lng) || 0,
         storePhotoUrl,
@@ -457,6 +461,7 @@ export default function PartnerOnboardingPage() {
                 <Input label="Residential Address" value={form.residentialAddress} onChange={(e) => set('residentialAddress', e.target.value)} error={errors.residentialAddress} />
                 <Input label="Personal Facebook Link (optional)" value={form.facebookLink} onChange={(e) => set('facebookLink', e.target.value)} placeholder="https://facebook.com/..." />
                 <Input label="Operating Hours" value={form.operatingHours} onChange={(e) => set('operatingHours', e.target.value)} error={errors.operatingHours} placeholder="e.g. 8:00 AM – 8:00 PM" />
+                <Input label="Operating Days (optional)" value={form.operatingDays} onChange={(e) => set('operatingDays', e.target.value)} placeholder="e.g. Lunes – Sabado" />
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">Store Location (pin)</label>
                   <p className="mb-2 text-xs text-amber-600">I-pin ang EKSAKTONG lokasyon ng iyong TINDAHAN — hindi ang inyong bahay.</p>

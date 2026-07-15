@@ -25,6 +25,19 @@ export type StoreStatus = 'active' | 'inactive' | 'pending' | 'blocked';
 // screen; not terminal.
 export type ApplicationStatus = 'pending' | 'approved' | 'declined' | 'needs_more_info';
 
+// --- New Application Monitoring (module vocabulary) ---
+// The module labels `declined` as "Disapproved"; the stored value stays
+// `declined` for back-compat with every existing row and consumer.
+
+/** Where the applicant came from. Set by PD/SD/AS/OS during evaluation. */
+export type MarketSource = 'facebook' | 'referral' | 'walk_in' | 'website' | 'others';
+
+/** Comparable / ADS — simple staff-answered yes-no checks. */
+export type YesNo = 'yes' | 'no';
+
+/** RTC runs its own approval track, separate from the application Status. */
+export type RtcStatus = 'pending' | 'approved' | 'disapproved';
+
 export type ReferralType = 'distributor' | 'zapp_internal' | 'sub_partner_distributor';
 
 // Franchisee delivery cadence — deliveries land only on odd- or even-numbered
@@ -209,6 +222,26 @@ export interface Application {
   facebookLink?: string;
   operatingHours?: string;
   selfieUrl?: string;
+  // --- New Application Monitoring (migration 021) ---
+  // Auto-filled from the application form. `province` is collected by the
+  // /apply PSGC cascade but was previously only flattened into `address`; it is
+  // stored on its own because the Area filter + automatic Area-Supervisor
+  // assignment key off it. `location` is the coarse region grouping derived
+  // from it (Bicol Region, Metro Manila, ...) — derivation lands in Phase 5.
+  province?: string;
+  location?: string;
+  operatingDays?: string;
+  // Filled by PD/SD during evaluation.
+  googleMapsPictureUrl?: string;
+  googleMapsLink?: string;
+  marketSource?: MarketSource;
+  remarksPdSd?: string;
+  // Filled by AS/OS during evaluation.
+  comparable?: YesNo;
+  ads?: YesNo;
+  rtc?: RtcStatus;
+  remarksAs?: string;
+  remarksOs?: string;
   // Per-document electronic acceptance timestamps (Step 6, four confirmations).
   acceptedConsignmentAt?: string;
   acceptedPrivacyAt?: string;

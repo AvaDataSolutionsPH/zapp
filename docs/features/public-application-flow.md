@@ -15,8 +15,9 @@ Applications queue.
    Review card shows **only the Code** (Type/Distributor/Plant hidden per boss).
 1. **Applicant info** — full name, PH mobile regex, email, **Facebook Link
    (optional)**.
-2. **Store info** — store name, address, **Province → City/Municipality →
-   Barangay** (cascading, from the PSGC API — see below), **+ map pin (required)**.
+2. **Store info** — store name, **Operating Hours + Operating Days (both
+   optional)**, address, **Province → City/Municipality → Barangay** (cascading,
+   from the PSGC API — see below), **+ map pin (required)**.
 3. **Store photo** — front-view store photo ONLY. **Gov ID + Proof of Billing
    were removed** (boss: collected later, once the location is approved). A
    green **photo-instructions panel** sits under the upload.
@@ -58,6 +59,33 @@ application, `/apply` ones included.
 > instead of opening Facebook. Every render of a user-supplied link MUST go
 > through `ensureHttpUrl`. Verified E2E: typed without `https://` → href came out
 > `https://facebook.com/fbtestapplicant`.
+
+## Monitoring fields (Phase 2, migration 021)
+`021_application_monitoring_fields.sql` adds 12 nullable columns to
+`applications` for the New Application Monitoring module — 3 filled by the intake
+forms (`province`, `location`, `operating_days`), 9 by staff during evaluation
+(`google_maps_picture_url`, `google_maps_link`, `market_source`, `remarks_pd_sd`,
+`comparable`, `ads`, `rtc`, `remarks_as`, `remarks_os`). Vocabulary types
+(`MarketSource` / `YesNo` / `RtcStatus`) live in `src/types/index.ts` — the DB has
+**no CHECK constraints** on those columns on purpose, so adding an option doesn't
+need a migration.
+
+> ⚠️ **`province` used to be thrown away.** The PSGC cascade always collected it,
+> but `handleSubmit` only ever flattened it into the composed `address` string.
+> It is now persisted on its own because the Area (Province) filter and the
+> automatic Area-Supervisor assignment both key off it (indexed). `/onboarding`
+> persists it too.
+
+`mapApplicationToDB` (`dbWrite.ts`) maps all 12. The reader needs nothing —
+`snakeToCamel` in `db.ts` is generic (`remarks_pd_sd` → `remarksPdSd`).
+`scripts/seed-from-mock.ts` was intentionally left alone: mock applications have
+no monitoring data, so seeded rows keep these columns NULL (same as
+`facebook_link`/`operating_hours` already do).
+
+**Rollout order matters:** `mapApplicationToDB` sends these columns on every
+insert, so migration 021 must run BEFORE the client deploys — otherwise Supabase
+rejects the insert ("column does not exist") and **every /apply submission
+fails**.
 
 ## Location cascade (PSGC API)
 Province/City/Barangay come from `src/services/phLocations.ts` (the free,

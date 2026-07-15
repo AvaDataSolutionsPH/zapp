@@ -14,6 +14,7 @@ import {
   XCircle,
   ScrollText,
   Clock,
+  Facebook,
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import {
@@ -27,6 +28,7 @@ import {
   EmptyState,
 } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
+import { ensureHttpUrl } from '@/lib/externalUrl';
 import { useStorageUrl } from '@/lib/useStorageUrl';
 
 // Resolves a private storage ref to a signed URL (one hook call per render) so
@@ -88,6 +90,10 @@ export default function ApplicationDetailPage() {
       </div>
     );
   }
+
+  // Both /apply and /onboarding collect this, so it lives in Applicant
+  // Information (shown for every application) rather than the onboarding card.
+  const fbUrl = ensureHttpUrl(application.facebookLink);
 
   const plant = plants.find((p) => p.id === application.assignedPlantId);
   const distributor = application.assignedDistributorId
@@ -221,16 +227,6 @@ export default function ApplicationDetailPage() {
                 <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">Residential Address</dt>
                 <dd className="mt-1 text-sm text-gray-700">{application.residentialAddress ?? '—'}</dd>
               </div>
-              <div className="sm:col-span-2">
-                <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">Facebook Link</dt>
-                <dd className="mt-1 text-sm text-gray-700 break-all">
-                  {application.facebookLink ? (
-                    <a href={application.facebookLink} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
-                      {application.facebookLink}
-                    </a>
-                  ) : '—'}
-                </dd>
-              </div>
             </dl>
             <div className="mt-4 border-t border-gray-100 pt-4">
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
@@ -318,6 +314,19 @@ export default function ApplicationDetailPage() {
                 <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">Email</dt>
                 <dd className="mt-1 text-sm text-gray-700 flex items-center gap-1">
                   <Mail size={14} className="text-gray-400" /> {application.email}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">Facebook</dt>
+                <dd className="mt-1 text-sm text-gray-700 flex items-center gap-1 break-all">
+                  <Facebook size={14} className="shrink-0 text-gray-400" />
+                  {fbUrl ? (
+                    <a href={fbUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                      {application.facebookLink}
+                    </a>
+                  ) : (
+                    <span className="text-gray-400">—</span>
+                  )}
                 </dd>
               </div>
               <div>

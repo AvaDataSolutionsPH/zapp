@@ -21,6 +21,7 @@ import {
   Zap,
   Image as ImageIcon,
   Camera,
+  Facebook,
 } from 'lucide-react';
 import {
   Button,
@@ -76,6 +77,9 @@ interface FormData {
   fullName: string;
   mobile: string;
   email: string;
+  // Optional — lets the team reach the applicant on Facebook if there's a
+  // concern. Matches the /onboarding wizard, where it is also optional.
+  facebookLink: string;
   // Step 3
   storeName: string;
   address: string;
@@ -105,6 +109,7 @@ export default function ApplicationPage() {
     fullName: '',
     mobile: '',
     email: '',
+    facebookLink: '',
     storeName: '',
     address: '',
     province: '',
@@ -386,6 +391,7 @@ export default function ApplicationPage() {
         fullName: form.fullName,
         mobile: form.mobile,
         email: form.email,
+        facebookLink: form.facebookLink.trim() || undefined,
         storeName: form.storeName,
         address: `${form.address}, Brgy. ${form.barangay}, ${form.city}, ${form.province}`,
         lat: parseFloat(form.lat) || 0,
@@ -565,6 +571,15 @@ export default function ApplicationPage() {
               onChange={(e) => updateForm('email', e.target.value)}
               error={errors.email}
               iconLeft={<Mail size={16} />}
+            />
+
+            <Input
+              label="Facebook Link (optional)"
+              placeholder="https://facebook.com/juandelacruz"
+              value={form.facebookLink}
+              onChange={(e) => updateForm('facebookLink', e.target.value)}
+              helperText="Para madali ka naming makausap sa Facebook kung may tanong sa application mo."
+              iconLeft={<Facebook size={16} />}
             />
           </div>
         );
@@ -819,6 +834,12 @@ export default function ApplicationPage() {
                   <span className="text-gray-500">Email:</span>{' '}
                   <span className="font-medium">{form.email}</span>
                 </div>
+                {form.facebookLink.trim() && (
+                  <div className="sm:col-span-2">
+                    <span className="text-gray-500">Facebook:</span>{' '}
+                    <span className="font-medium break-all">{form.facebookLink}</span>
+                  </div>
+                )}
               </div>
             </div>
 

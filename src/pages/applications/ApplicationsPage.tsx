@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   XCircle,
   Eye,
+  Facebook,
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import {
@@ -20,6 +21,7 @@ import {
   Skeleton,
 } from '@/components/ui';
 import type { TableColumn, SelectOption } from '@/components/ui';
+import { ensureHttpUrl } from '@/lib/externalUrl';
 import type { Application } from '@/types';
 
 const PAGE_SIZE = 10;
@@ -160,6 +162,26 @@ export default function ApplicationsPage() {
       key: 'email',
       header: 'Email',
       render: (row) => <span className="text-gray-500">{row.email}</span>,
+    },
+    {
+      key: 'facebookLink',
+      header: 'Facebook',
+      // stopPropagation so opening FB doesn't also trigger the row's navigate.
+      render: (row) =>
+        ensureHttpUrl(row.facebookLink) ? (
+          <a
+            href={ensureHttpUrl(row.facebookLink)!}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center gap-1 text-blue-600 hover:underline"
+            title={row.facebookLink}
+          >
+            <Facebook size={14} /> Open
+          </a>
+        ) : (
+          <span className="text-gray-400">—</span>
+        ),
     },
     {
       key: 'referralCode',

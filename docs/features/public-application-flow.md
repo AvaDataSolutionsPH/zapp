@@ -13,7 +13,8 @@ Applications queue.
 ## Wizard steps (`renderStep` + `validateStep` switch, 0-indexed)
 0. **Referral code** — must resolve via `referralService` (`referralInfo`).
    Review card shows **only the Code** (Type/Distributor/Plant hidden per boss).
-1. **Applicant info** — full name, PH mobile regex, email.
+1. **Applicant info** — full name, PH mobile regex, email, **Facebook Link
+   (optional)**.
 2. **Store info** — store name, address, **Province → City/Municipality →
    Barangay** (cascading, from the PSGC API — see below), **+ map pin (required)**.
 3. **Store photo** — front-view store photo ONLY. **Gov ID + Proof of Billing
@@ -31,6 +32,32 @@ and `proofOfBillingUrl: ''`.
 > (`src/pages/entities/FranchiseesPage.tsx` → pick an approved franchisee → enter
 > shop code → `updateStore`). Persisted to `Store.shopCode` / `stores.shop_code`
 > (migration `009_store_shop_code.sql`). `Application` has NO shop code.
+
+## Facebook Link (Phase 1 of New Application Monitoring)
+Boss ask: *"Para madali namin mahanap sa facebook para makausap if may concern."*
+**Optional** on both intake forms (matching the pre-existing `/onboarding`
+behaviour — a franchise application is never blocked over a missing FB link):
+- `/apply` → Step 1 (Applicant info), `form.facebookLink`, submitted as
+  `facebookLink: form.facebookLink.trim() || undefined`.
+- `/onboarding` (`PartnerOnboardingPage.tsx`) already collected it.
+
+**No migration** — `applications.facebook_link` has existed since migration 013
+(added for `/onboarding`), `mapApplicationToDB` already maps it, and the reader
+auto-camelCases, so `/apply` only had to start sending the value.
+
+**Where reviewers see it:** the **Facebook** column on `ApplicationsPage` (the
+"New Applications" / monitoring list — a clickable *Open* link,
+`e.stopPropagation()`-guarded so it doesn't also fire the row's navigate) and the
+**Applicant Information** card on `ApplicationDetailPage`. It was moved OUT of the
+onboarding-only card (which is gated on `applicationNumber`) so it shows for every
+application, `/apply` ones included.
+
+> ⚠️ **`src/lib/externalUrl.ts` → `ensureHttpUrl`.** Applicants paste a bare
+> `facebook.com/juan` with no scheme. A protocol-less `href` resolves as a
+> **relative path** (`/applications/facebook.com/juan`) and 404s inside the SPA
+> instead of opening Facebook. Every render of a user-supplied link MUST go
+> through `ensureHttpUrl`. Verified E2E: typed without `https://` → href came out
+> `https://facebook.com/fbtestapplicant`.
 
 ## Location cascade (PSGC API)
 Province/City/Barangay come from `src/services/phLocations.ts` (the free,

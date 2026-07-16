@@ -15,24 +15,64 @@
 // Sign out must always be reachable: without it a locked account is trapped in
 // the browser with no way back to the login screen.
 
-import { ShieldCheck, Clock, LogOut, FileText, IdCard, Camera, Lock } from 'lucide-react';
+import { useState } from 'react';
+import { Clock, LogOut, Lock, ShieldCheck } from 'lucide-react';
+import { Button, FileUpload } from '@/components/ui';
+import type { UploadedFile } from '@/components/ui';
+import { useToast } from '@/components/ui/Toast';
 import { useStore } from '@/store/useStore';
-
-const REQUIREMENTS = [
-  { icon: IdCard, label: 'Government-issued ID' },
-  { icon: FileText, label: 'Proof of Billing' },
-  { icon: Camera, label: 'Selfie Verification' },
-  { icon: ShieldCheck, label: 'Data Privacy Policy' },
-];
+import { uploadFile, buildObjectPath } from '@/services/storage';
 
 export default function AccountVerificationPage() {
   const currentUser = useStore((s) => s.currentUser);
   const logout = useStore((s) => s.logout);
+  const submitAccountVerification = useStore((s) => s.submitAccountVerification);
+  const { addToast } = useToast();
+
+  const [govId, setGovId] = useState<UploadedFile[]>([]);
+  const [proof, setProof] = useState<UploadedFile[]>([]);
+  const [selfie, setSelfie] = useState<UploadedFile[]>([]);
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const isPending = currentUser?.accountStatus === 'pending_verification';
+  const hasAllDocs = !!govId[0] && !!proof[0] && !!selfie[0];
+  // Spec: "The Submit button shall remain disabled until the Data Privacy
+  // checkbox has been accepted." Documents are required too — submitting
+  // without them would put the account in Pending Verification with nothing
+  // for staff to review.
+  const canSubmit = hasAllDocs && privacyAccepted && !submitting;
+
+  const handleSubmit = async () => {
+    if (!canSubmit || !currentUser) return;
+    setSubmitting(true);
+    try {
+      // Private bucket: these are identity documents. sign:false because the
+      // franchisee only uploads them — staff read them via signed URLs later.
+      const scope = currentUser.id;
+      const [gov, pb, sf] = await Promise.all([
+        uploadFile('zapp-private', buildObjectPath('gov-id', scope, govId[0].file), govId[0].file, { sign: false }),
+        uploadFile('zapp-private', buildObjectPath('proof-of-billing', scope, proof[0].file), proof[0].file, { sign: false }),
+        uploadFile('zapp-private', buildObjectPath('selfie', scope, selfie[0].file), selfie[0].file, { sign: false }),
+      ]);
+      await submitAccountVerification({
+        govIdUrl: gov.storageRef,
+        proofOfBillingUrl: pb.storageRef,
+        selfieUrl: sf.storageRef,
+      });
+      addToast('success', 'Your documents have been submitted.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Could not submit. Please try again.';
+      addToast('error', msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+    // items-start + overflow-y so the upload form can grow past the viewport on
+    // a phone — a centred fixed-height card would clip the Submit button.
+    <div className="min-h-screen overflow-y-auto flex items-start justify-center bg-gray-50 p-4 py-10">
       <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl text-center">
         <div
           className={`mx-auto flex h-16 w-16 items-center justify-center rounded-full ${
@@ -47,12 +87,12 @@ export default function AccountVerificationPage() {
         </div>
 
         <h1 className="mt-5 text-xl font-bold text-gray-900">
-          {isPending ? 'Sinusuri ang iyong dokumento' : 'I-verify muna ang iyong account'}
+          {isPending ? 'We are checking your documents' : 'Verify your account'}
         </h1>
         <p className="mt-2 text-sm text-gray-500">
           {isPending
-            ? 'Naisumite na ang iyong mga dokumento. Sinusuri na ito ng aming team — aabisuhan ka kapag aktibo na ang account mo.'
-            : 'Bago ka makapasok sa ERP, kailangan munang kumpletuhin ang account verification.'}
+            ? 'Your documents have been submitted. Our team is reviewing them. We will let you know once your account is active.'
+            : 'Please complete this before you can use the system.'}
         </p>
 
         {currentUser && (
@@ -76,22 +116,59 @@ export default function AccountVerificationPage() {
         )}
 
         {!isPending && (
-          <div className="mt-6 rounded-xl border border-gray-200 p-4 text-left">
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-              Kailangan mong isumite
-            </p>
-            <ul className="mt-3 space-y-2">
-              {REQUIREMENTS.map(({ icon: Icon, label }) => (
-                <li key={label} className="flex items-center gap-2 text-sm text-gray-700">
-                  <Icon size={15} className="shrink-0 text-gray-400" /> {label}
-                </li>
-              ))}
-            </ul>
-            {/* Phase C replaces this with the real upload form. */}
-            <p className="mt-4 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">
-              Malapit nang mabuksan ang upload form dito. Sa ngayon, maki-usap sa iyong
-              distributor o area supervisor para maisumite ang mga dokumento.
-            </p>
+          <div className="mt-6 space-y-4 text-left">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                Government-issued ID <span className="text-red-500">*</span>
+              </label>
+              <FileUpload accept="image/*" maxSizeMB={10} camera onChange={setGovId} />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                Proof of Billing <span className="text-red-500">*</span>
+              </label>
+              <FileUpload accept="image/*" maxSizeMB={10} camera onChange={setProof} />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                Selfie Verification <span className="text-red-500">*</span>
+              </label>
+              <FileUpload accept="image/*" maxSizeMB={10} camera onChange={setSelfie} />
+              <p className="mt-1 text-xs text-gray-500">
+                Take a selfie while holding your Government ID.
+              </p>
+            </div>
+
+            <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3">
+              <input
+                type="checkbox"
+                checked={privacyAccepted}
+                onChange={(e) => setPrivacyAccepted(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-zapp-orange"
+              />
+              <span className="text-xs text-gray-700">
+                I agree to the ZAPP Donuts <strong>Data Privacy Policy</strong> and allow my
+                documents to be used for verification.
+              </span>
+            </label>
+
+            <Button
+              variant="primary"
+              className="w-full"
+              onClick={handleSubmit}
+              loading={submitting}
+              disabled={!canSubmit}
+              iconLeft={<ShieldCheck size={16} />}
+            >
+              Submit for Verification
+            </Button>
+            {!canSubmit && !submitting && (
+              <p className="text-center text-xs text-gray-500">
+                {!hasAllDocs
+                  ? 'Please upload all three documents.'
+                  : 'Please accept the Data Privacy Policy.'}
+              </p>
+            )}
           </div>
         )}
 

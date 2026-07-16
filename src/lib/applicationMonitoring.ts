@@ -201,6 +201,10 @@ export const ROLE_LABELS: Partial<Record<UserRole, string>> = {
   area_manager: 'AS',
   partner_distributor: 'PD',
   sub_partner_distributor: 'SD',
+  // The franchisee writes to the log too — submitting verification documents on
+  // their own application. Without these their entries showed a bare "—".
+  franchisee_distributor: 'Franchisee',
+  franchisee_direct: 'Franchisee',
 };
 
 /** Option-style values → their display text (so the log reads "Walk-in", not "walk_in"). */

@@ -86,6 +86,7 @@ import {
   insertAreaSupervisor,
   updateAreaSupervisor,
   insertUser,
+  updateUser,
 } from '@/services/dbWrite';
 import { signUpIsolated, generateTempPassword } from '@/lib/authSignup';
 import { resolveLoginEmail, shopCodeToEmail } from '@/lib/shopCodeAuth';
@@ -223,6 +224,17 @@ interface AppStore {
    * boss can re-point coverage without a deploy.
    */
   updateAreaSupervisorProvinces: (id: string, provinces: string[]) => Promise<void>;
+  /**
+   * First-login account verification. The franchisee submits their documents +
+   * Data Privacy acceptance; the account moves to `pending_verification` and
+   * stays locked until staff verify the documents (Phase D).
+   * Writes are permitted by migration 025's narrow policies + column clamps.
+   */
+  submitAccountVerification: (input: {
+    govIdUrl: string;
+    proofOfBillingUrl: string;
+    selfieUrl: string;
+  }) => Promise<void>;
 
   // Distributors
   distributors: Distributor[];
@@ -970,6 +982,73 @@ export const useStore = create<AppStore>((set, get) => {
     } catch (err) {
       console.error('[useStore] updateAreaSupervisorProvinces: UPDATE failed, rolling back:', err);
       set({ areaSupervisors: prev });
+      throw err;
+    }
+  },
+
+  // First-login verification. Two writes: the documents onto the application,
+  // and the account status onto the user. Both are self-service, so migration
+  // 025's triggers clamp them to exactly these columns — a franchisee cannot
+  // touch their role, their application's status, or its Shop Code.
+  submitAccountVerification: async ({ govIdUrl, proofOfBillingUrl, selfieUrl }) => {
+    const { currentUser, applications } = get();
+    if (!currentUser) throw new Error('Not signed in.');
+
+    const app = applications.find((a) => a.accountUserId === currentUser.id);
+    const now = new Date().toISOString();
+
+    const prevApplications = applications;
+    const prevUsers = get().demoUsers;
+    const prevCurrent = currentUser;
+
+    // Append-only: the trigger rejects an audit_log that dropped an entry.
+    const updatedApp: Application | null = app
+      ? {
+          ...app,
+          govIdUrl,
+          proofOfBillingUrl,
+          selfieUrl,
+          acceptedPrivacyAt: now,
+          auditLog: [
+            ...app.auditLog,
+            {
+              id: `audit-${uid()}`,
+              action: 'documents_submitted',
+              performedBy: currentUser.id,
+              performedByName: currentUser.name,
+              role: currentUser.role,
+              performedAt: now,
+              details: 'Franchisee submitted verification documents + accepted Data Privacy.',
+              fieldModified: 'Account Status',
+              previousValue: 'Not Activated',
+              newValue: 'Pending Verification',
+            },
+          ],
+        }
+      : null;
+
+    const updatedUser: User = { ...currentUser, accountStatus: 'pending_verification' };
+
+    // Optimistic — the gate re-renders straight to the "pending" state.
+    set({
+      currentUser: updatedUser,
+      demoUsers: prevUsers.map((u) => (u.id === updatedUser.id ? updatedUser : u)),
+      applications: updatedApp
+        ? prevApplications.map((a) => (a.id === updatedApp.id ? updatedApp : a))
+        : prevApplications,
+    });
+
+    if (get().dataSource !== 'db') return;
+
+    try {
+      // Documents first: if this fails the account must STAY unlocked so the
+      // franchisee can retry, rather than sit in pending_verification with
+      // nothing for staff to review.
+      if (updatedApp) await updateApplication(updatedApp);
+      await updateUser(updatedUser);
+    } catch (err) {
+      console.error('[useStore] submitAccountVerification failed, rolling back:', err);
+      set({ currentUser: prevCurrent, demoUsers: prevUsers, applications: prevApplications });
       throw err;
     }
   },

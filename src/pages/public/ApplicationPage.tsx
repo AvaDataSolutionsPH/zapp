@@ -413,6 +413,11 @@ export default function ApplicationPage() {
         referralCode: form.referralCode,
         referralType: referralInfo.referral.type,
         assignedDistributorId: referralInfo.distributor?.id,
+        // An SPD referral code carries BOTH its parent distributor and its own
+        // id. Without this the SPD never sees its own applicant: the monitoring
+        // scope and RLS 022 both key off assigned_sub_partner_distributor_id.
+        // (/onboarding always set this; /apply silently dropped it.)
+        assignedSubPartnerDistributorId: referralInfo.referral.subPartnerDistributorId,
         assignedAreaSupervisorId: referralInfo.areaSupervisor?.id,
         assignedPlantId: referralInfo.referral.plantId,
       });

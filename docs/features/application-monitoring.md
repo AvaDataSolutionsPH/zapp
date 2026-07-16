@@ -32,7 +32,7 @@ the fields it owns during evaluation.
 | 3 | 25-field detail, field-level RBAC, batch Save (migration 022) | ✅ this commit |
 | 4 | Transaction History (audit trail) | ✅ this commit |
 | 5 | Auto-assignment (AS by province, Location, Type) | ⬜ blocked on the province→AS master list |
-| 6 | Filters (primary + secondary + role behaviour) | ⬜ |
+| 6 | Filters (primary + secondary + role behaviour) | ✅ this commit |
 
 ## Field-level RBAC (`src/lib/applicationMonitoring.ts`)
 `editableFieldsFor(role)` / `canEditField(role, field)` implement the module's
@@ -111,6 +111,49 @@ Entries are stamped in the store action (ids via `uid()`, timestamps via
 `new Date()`), never during render — `react-hooks/purity` forbids that.
 `reviewApplication` now also records `performedByName` / `role` and logs Status
 as a field change (previous → new).
+
+## Filters (Phase 6)
+**Primary** (always visible): Status · Area (Province) · Area Supervisor · Type ·
+Application Date (From/To) · Search. **Secondary** (behind an *Advanced filters*
+toggle): Market Source · RTC · Comparable · ADS · Shop Code · Google Maps Link ·
+Store Google Maps Picture · Plant. Plus a **Reset Filters** button and a
+`{filtered} of {total}` counter. Every setter also resets to page 1 — filtering
+while on page 3 would otherwise land on an empty page.
+
+- **Area (Province)** is auto-populated from the provinces actually present in
+  the user's own scope, so it never offers a value with zero results. Only
+  applications filed since migration 021 have a province.
+- **Search** covers Applicant Name, Store Name, Contact Number, Email, Referral
+  Code and Shop Code (it used to be name/email/store only).
+- **Status** gained `needs_more_info`, which was missing from the options —
+  applications parked in that state were unreachable from the filter. `declined`
+  is labelled **Disapproved** per the module; the stored value is unchanged.
+- **Distributor** is hidden for PD/SPD (`isChannelScoped`) — their whole scope is
+  already one distributor.
+
+### Role scoping
+| Role | Sees |
+|---|---|
+| Admin / OS | all |
+| PD | own `assignedDistributorId` **+ every SPD that reports to it** |
+| SPD | own referral only (`assignedSubPartnerDistributorId`) |
+| AS | applications assigned to them (`assignedAreaSupervisorId`) |
+
+> The spec wants AS scoped by **assigned provinces**. That needs the province→AS
+> master list, so it lands in Phase 5; until then AS stays scoped by direct
+> assignment.
+
+### Two bugs fixed here
+1. **`/apply` dropped the SPD assignment.** It set `assignedDistributorId` but
+   never `assignedSubPartnerDistributorId` (only `/onboarding` did). Since both
+   the SPD scope and RLS 022 key off that column, an applicant using an SPD
+   referral code on the public form would have been **invisible to that SPD
+   forever**.
+2. **Type mislabelled SPD applications "Direct".** The table rendered
+   `referralType === 'distributor' ? 'Distributor' : 'Direct'`, but approval
+   treats `sub_partner_distributor` as `isDistributorChannel` and creates a
+   `franchisee_distributor` — the list and the outcome disagreed. Both now go
+   through `applicationType()`.
 
 ## Migrations
 - **021** — the 12 monitoring columns + `province` index. See

@@ -24,7 +24,7 @@
 // `reviewApplication`), so it stays an explicit action — Approve / Decline
 // buttons — instead of a value the batch Save writes. See canSetStatus below.
 
-import type { Application, UserRole } from '@/types';
+import type { Application, ReferralType, UserRole } from '@/types';
 
 /** Fields the batch Save can write. `latLng` covers the lat+lng pair. */
 export type MonitoringField =
@@ -118,6 +118,23 @@ export const canEditAnyField = (role: UserRole | undefined): boolean =>
  */
 export const canSetStatus = (role: UserRole | undefined): boolean =>
   role === 'owner' || role === 'operations_manager' || role === 'partner_distributor';
+
+/**
+ * The module's "Type", auto-determined from the referral code.
+ *
+ * ⚠️ An SPD-referred application is **Distributor**, not Direct — a Sub-Partner
+ * sits UNDER a partner distributor, so nothing about it is direct-to-ZAPP. This
+ * matches what approval actually does: `reviewApplication` treats
+ * `distributor` + `sub_partner_distributor` as `isDistributorChannel` and
+ * creates a `franchisee_distributor` login. The Applications table used to
+ * render `referralType === 'distributor' ? 'Distributor' : 'Direct'`, which
+ * labelled SPD applications "Direct" while the system enrolled them as
+ * distributor-channel — the list and the outcome disagreed.
+ */
+export const applicationType = (referralType: ReferralType): 'Distributor' | 'Direct' =>
+  referralType === 'distributor' || referralType === 'sub_partner_distributor'
+    ? 'Distributor'
+    : 'Direct';
 
 // ─── Transaction History (Phase 4) ────────────────────────────────────────
 

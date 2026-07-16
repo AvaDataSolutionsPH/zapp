@@ -7,9 +7,13 @@ import {
   XCircle,
   Eye,
   Facebook,
+  ChevronDown,
+  ChevronUp,
+  RotateCcw,
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import {
+  Button,
   Card,
   CardContent,
   SearchInput,
@@ -21,6 +25,7 @@ import {
   Skeleton,
 } from '@/components/ui';
 import type { TableColumn, SelectOption } from '@/components/ui';
+import { applicationType } from '@/lib/applicationMonitoring';
 import { ensureHttpUrl } from '@/lib/externalUrl';
 import type { Application } from '@/types';
 
@@ -33,6 +38,7 @@ export default function ApplicationsPage() {
     plants,
     distributors,
     areaSupervisors,
+    subPartnerDistributors,
     currentUser,
   } = useStore();
 
@@ -49,9 +55,18 @@ export default function ApplicationsPage() {
       }
       return [];
     }
-    // A PD only sees the website applicants under its own channel/distributor.
+    // A PD sees "Own Referral Code + assigned Sub PDs" — its own channel plus
+    // every application filed under an SPD that reports to it.
     if (currentUser?.role === 'partner_distributor') {
-      return allApplications.filter((a) => a.assignedDistributorId === currentUser.distributorId);
+      const mySpdIds = subPartnerDistributors
+        .filter((s) => s.parentDistributorId === currentUser.distributorId)
+        .map((s) => s.id);
+      return allApplications.filter(
+        (a) =>
+          a.assignedDistributorId === currentUser.distributorId ||
+          (!!a.assignedSubPartnerDistributorId &&
+            mySpdIds.includes(a.assignedSubPartnerDistributorId)),
+      );
     }
     // An SPD sees "Own Referral Code only". RLS (022) already scopes the rows it
     // can fetch, but filter here too: it keeps the mock/no-DB path honest and
@@ -62,17 +77,43 @@ export default function ApplicationsPage() {
       );
     }
     return allApplications;
-  }, [allApplications, currentUser, areaSupervisors]);
+  }, [allApplications, currentUser, areaSupervisors, subPartnerDistributors]);
 
+  // Primary filters (always visible)
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [plantFilter, setPlantFilter] = useState('');
-  const [distributorFilter, setDistributorFilter] = useState('');
+  const [provinceFilter, setProvinceFilter] = useState('');
   const [areaFilter, setAreaFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  // Secondary filters (behind "Advanced")
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [plantFilter, setPlantFilter] = useState('');
+  const [distributorFilter, setDistributorFilter] = useState('');
+  const [marketSourceFilter, setMarketSourceFilter] = useState('');
+  const [rtcFilter, setRtcFilter] = useState('');
+  const [comparableFilter, setComparableFilter] = useState('');
+  const [adsFilter, setAdsFilter] = useState('');
+  const [shopCodeFilter, setShopCodeFilter] = useState('');
+  const [mapsLinkFilter, setMapsLinkFilter] = useState('');
+  const [mapsPictureFilter, setMapsPictureFilter] = useState('');
   const [page, setPage] = useState(1);
   const [loading] = useState(false);
+
+  // A PD/SPD is already confined to one distributor's channel, so a
+  // "Distributor" filter would only ever have one meaningful value.
+  const isChannelScoped =
+    currentUser?.role === 'partner_distributor' ||
+    currentUser?.role === 'sub_partner_distributor';
+
+  const resetFilters = () => {
+    setSearch(''); setStatusFilter('all'); setProvinceFilter(''); setAreaFilter('');
+    setTypeFilter(''); setDateFrom(''); setDateTo(''); setPlantFilter('');
+    setDistributorFilter(''); setMarketSourceFilter(''); setRtcFilter('');
+    setComparableFilter(''); setAdsFilter(''); setShopCodeFilter('');
+    setMapsLinkFilter(''); setMapsPictureFilter(''); setPage(1);
+  };
 
   // Status counts
   const counts = useMemo(() => {
@@ -86,17 +127,18 @@ export default function ApplicationsPage() {
   const filtered = useMemo(() => {
     let result = [...applications];
 
+    // ── Primary ──────────────────────────────────────────────
     if (statusFilter !== 'all') {
       result = result.filter((a) => a.status === statusFilter);
     }
-    if (plantFilter) {
-      result = result.filter((a) => a.assignedPlantId === plantFilter);
-    }
-    if (distributorFilter) {
-      result = result.filter((a) => a.assignedDistributorId === distributorFilter);
+    if (provinceFilter) {
+      result = result.filter((a) => a.province === provinceFilter);
     }
     if (areaFilter) {
       result = result.filter((a) => a.assignedAreaSupervisorId === areaFilter);
+    }
+    if (typeFilter) {
+      result = result.filter((a) => applicationType(a.referralType) === typeFilter);
     }
     if (dateFrom) {
       result = result.filter((a) => a.submittedAt >= dateFrom);
@@ -104,20 +146,62 @@ export default function ApplicationsPage() {
     if (dateTo) {
       result = result.filter((a) => a.submittedAt <= dateTo + 'T23:59:59');
     }
+
+    // ── Secondary ────────────────────────────────────────────
+    if (plantFilter) {
+      result = result.filter((a) => a.assignedPlantId === plantFilter);
+    }
+    if (distributorFilter) {
+      result = result.filter((a) => a.assignedDistributorId === distributorFilter);
+    }
+    if (marketSourceFilter) {
+      result = result.filter((a) => a.marketSource === marketSourceFilter);
+    }
+    if (rtcFilter) {
+      result = result.filter((a) => a.rtc === rtcFilter);
+    }
+    if (comparableFilter) {
+      result = result.filter((a) => a.comparable === comparableFilter);
+    }
+    if (adsFilter) {
+      result = result.filter((a) => a.ads === adsFilter);
+    }
+    // "with / without" presence filters
+    if (shopCodeFilter) {
+      result = result.filter((a) => (shopCodeFilter === 'with' ? !!a.shopCode : !a.shopCode));
+    }
+    if (mapsLinkFilter) {
+      result = result.filter((a) => (mapsLinkFilter === 'with' ? !!a.googleMapsLink : !a.googleMapsLink));
+    }
+    if (mapsPictureFilter) {
+      result = result.filter((a) =>
+        mapsPictureFilter === 'with' ? !!a.googleMapsPictureUrl : !a.googleMapsPictureUrl,
+      );
+    }
+
     if (search) {
       const q = search.toLowerCase();
+      // Spec: Applicant Name, Store Name, Contact Number, Email, Referral Code,
+      // Shop Code.
       result = result.filter(
         (a) =>
           a.fullName.toLowerCase().includes(q) ||
+          a.storeName.toLowerCase().includes(q) ||
+          a.mobile.toLowerCase().includes(q) ||
           a.email.toLowerCase().includes(q) ||
-          a.storeName.toLowerCase().includes(q),
+          a.referralCode.toLowerCase().includes(q) ||
+          (a.shopCode?.toLowerCase().includes(q) ?? false),
       );
     }
 
     // Sort by newest first
     result.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
     return result;
-  }, [applications, statusFilter, plantFilter, distributorFilter, areaFilter, dateFrom, dateTo, search]);
+  }, [
+    applications, statusFilter, provinceFilter, areaFilter, typeFilter, dateFrom, dateTo,
+    plantFilter, distributorFilter, marketSourceFilter, rtcFilter, comparableFilter,
+    adsFilter, shopCodeFilter, mapsLinkFilter, mapsPictureFilter, search,
+  ]);
 
   const paged = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
@@ -140,11 +224,53 @@ export default function ApplicationsPage() {
     { value: '', label: 'All Area Supervisors' },
     ...areaSupervisors.map((a) => ({ value: a.id, label: a.name })),
   ];
+  // Auto-populated per spec — the provinces actually present in the user's own
+  // scope, so the dropdown never offers a province with zero results.
+  const provinceOptions: SelectOption[] = useMemo(() => {
+    const found = [...new Set(applications.map((a) => a.province).filter(Boolean))].sort();
+    return [
+      { value: '', label: 'All Areas' },
+      ...found.map((p) => ({ value: p as string, label: p as string })),
+    ];
+  }, [applications]);
   const statusOptions: SelectOption[] = [
     { value: 'all', label: 'All Statuses' },
     { value: 'pending', label: 'Pending' },
     { value: 'approved', label: 'Approved' },
-    { value: 'declined', label: 'Declined' },
+    // Stored as 'declined'; the module calls it Disapproved.
+    { value: 'declined', label: 'Disapproved' },
+    // Was missing entirely — applications parked in needs_more_info were
+    // unreachable from this filter.
+    { value: 'needs_more_info', label: 'Needs More Info' },
+  ];
+  const typeOptions: SelectOption[] = [
+    { value: '', label: 'All Types' },
+    { value: 'Distributor', label: 'Distributor' },
+    { value: 'Direct', label: 'Direct' },
+  ];
+  const marketSourceOptions: SelectOption[] = [
+    { value: '', label: 'All Market Sources' },
+    { value: 'facebook', label: 'Facebook' },
+    { value: 'referral', label: 'Referral' },
+    { value: 'walk_in', label: 'Walk-in' },
+    { value: 'website', label: 'Website' },
+    { value: 'others', label: 'Others' },
+  ];
+  const rtcOptions: SelectOption[] = [
+    { value: '', label: 'All RTC' },
+    { value: 'pending', label: 'Pending' },
+    { value: 'approved', label: 'Approved' },
+    { value: 'disapproved', label: 'Disapproved' },
+  ];
+  const yesNoOptions = (label: string): SelectOption[] => [
+    { value: '', label },
+    { value: 'yes', label: 'Yes' },
+    { value: 'no', label: 'No' },
+  ];
+  const presenceOptions = (all: string, withL: string, withoutL: string): SelectOption[] => [
+    { value: '', label: all },
+    { value: 'with', label: withL },
+    { value: 'without', label: withoutL },
   ];
 
   const columns: TableColumn<Application>[] = [
@@ -201,11 +327,14 @@ export default function ApplicationsPage() {
     {
       key: 'referralType',
       header: 'Type',
-      render: (row) => (
-        <Badge variant={row.referralType === 'distributor' ? 'info' : 'orange'} size="sm">
-          {row.referralType === 'distributor' ? 'Distributor' : 'Direct'}
-        </Badge>
-      ),
+      render: (row) => {
+        const type = applicationType(row.referralType);
+        return (
+          <Badge variant={type === 'Distributor' ? 'info' : 'orange'} size="sm">
+            {type}
+          </Badge>
+        );
+      },
     },
     {
       key: 'plantId',
@@ -293,76 +422,144 @@ export default function ApplicationsPage() {
         />
       </div>
 
-      {/* Filter Bar */}
+      {/* Filter Bar — primary always visible, secondary behind "Advanced".
+          Every setter resets to page 1: filtering while on page 3 would
+          otherwise land on an empty page. */}
       <Card>
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-3">
             <Select
               options={statusOptions}
               value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value);
-                setPage(1);
-              }}
+              onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
               placeholder="Status"
             />
             <Select
-              options={plantOptions}
-              value={plantFilter}
-              onChange={(e) => {
-                setPlantFilter(e.target.value);
-                setPage(1);
-              }}
-              placeholder="Plant"
-            />
-            <Select
-              options={distOptions}
-              value={distributorFilter}
-              onChange={(e) => {
-                setDistributorFilter(e.target.value);
-                setPage(1);
-              }}
-              placeholder="Distributor"
+              options={provinceOptions}
+              value={provinceFilter}
+              onChange={(e) => { setProvinceFilter(e.target.value); setPage(1); }}
+              placeholder="Area (Province)"
             />
             <Select
               options={amOptions}
               value={areaFilter}
-              onChange={(e) => {
-                setAreaFilter(e.target.value);
-                setPage(1);
-              }}
+              onChange={(e) => { setAreaFilter(e.target.value); setPage(1); }}
               placeholder="Area Supervisor"
+            />
+            <Select
+              options={typeOptions}
+              value={typeFilter}
+              onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
+              placeholder="Type"
             />
             <div className="flex gap-2">
               <input
                 type="date"
                 value={dateFrom}
-                onChange={(e) => {
-                  setDateFrom(e.target.value);
-                  setPage(1);
-                }}
+                onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
                 className="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-zapp-orange/30 focus:border-zapp-orange"
                 placeholder="From"
               />
               <input
                 type="date"
                 value={dateTo}
-                onChange={(e) => {
-                  setDateTo(e.target.value);
-                  setPage(1);
-                }}
+                onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
                 className="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-zapp-orange/30 focus:border-zapp-orange"
                 placeholder="To"
               />
             </div>
             <SearchInput
               value={search}
-              onChange={(v) => {
-                setSearch(v);
-                setPage(1);
-              }}
-              placeholder="Search name/email..."
+              onChange={(v) => { setSearch(v); setPage(1); }}
+              placeholder="Name, store, contact, email, code..."
             />
+          </div>
+
+          {showAdvanced && (
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 border-t border-gray-100 pt-3">
+              <Select
+                options={marketSourceOptions}
+                value={marketSourceFilter}
+                onChange={(e) => { setMarketSourceFilter(e.target.value); setPage(1); }}
+                placeholder="Market Source"
+              />
+              <Select
+                options={rtcOptions}
+                value={rtcFilter}
+                onChange={(e) => { setRtcFilter(e.target.value); setPage(1); }}
+                placeholder="RTC"
+              />
+              <Select
+                options={yesNoOptions('All Comparable')}
+                value={comparableFilter}
+                onChange={(e) => { setComparableFilter(e.target.value); setPage(1); }}
+                placeholder="Comparable"
+              />
+              <Select
+                options={yesNoOptions('All ADS')}
+                value={adsFilter}
+                onChange={(e) => { setAdsFilter(e.target.value); setPage(1); }}
+                placeholder="ADS"
+              />
+              <Select
+                options={presenceOptions('All Shop Codes', 'With Shop Code', 'Without Shop Code')}
+                value={shopCodeFilter}
+                onChange={(e) => { setShopCodeFilter(e.target.value); setPage(1); }}
+                placeholder="Shop Code"
+              />
+              <Select
+                options={presenceOptions('All Maps Links', 'With Maps Link', 'Without Maps Link')}
+                value={mapsLinkFilter}
+                onChange={(e) => { setMapsLinkFilter(e.target.value); setPage(1); }}
+                placeholder="Google Maps Link"
+              />
+              <Select
+                options={presenceOptions('All Maps Pictures', 'Uploaded', 'Not Uploaded')}
+                value={mapsPictureFilter}
+                onChange={(e) => { setMapsPictureFilter(e.target.value); setPage(1); }}
+                placeholder="Maps Picture"
+              />
+              <Select
+                options={plantOptions}
+                value={plantFilter}
+                onChange={(e) => { setPlantFilter(e.target.value); setPage(1); }}
+                placeholder="Plant"
+              />
+              {/* Distributor is meaningless to a PD/SPD — their whole scope is
+                  already one distributor. */}
+              {!isChannelScoped && (
+                <Select
+                  options={distOptions}
+                  value={distributorFilter}
+                  onChange={(e) => { setDistributorFilter(e.target.value); setPage(1); }}
+                  placeholder="Distributor"
+                />
+              )}
+            </div>
+          )}
+
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowAdvanced((v) => !v)}
+              iconRight={showAdvanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            >
+              {showAdvanced ? 'Hide advanced' : 'Advanced filters'}
+            </Button>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-gray-500">
+                {filtered.length} of {applications.length}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={resetFilters}
+                iconLeft={<RotateCcw size={14} />}
+              >
+                Reset Filters
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

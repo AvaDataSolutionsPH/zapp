@@ -26,7 +26,7 @@ import { useStore } from '@/store/useStore';
 import { useStorageUrl } from '@/lib/useStorageUrl';
 import { ensureHttpUrl } from '@/lib/externalUrl';
 import { uploadFile, buildObjectPath } from '@/services/storage';
-import { canEditField, canEditAnyField } from '@/lib/applicationMonitoring';
+import { canEditField, canEditAnyField, VALUE_LABELS } from '@/lib/applicationMonitoring';
 import type { Application, MarketSource, YesNo, RtcStatus } from '@/types';
 
 const MARKET_SOURCE_OPTIONS: SelectOption[] = [
@@ -51,11 +51,9 @@ const RTC_OPTIONS: SelectOption[] = [
   { value: 'disapproved', label: 'Disapproved' },
 ];
 
-const LABELS: Record<string, string> = {
-  facebook: 'Facebook', referral: 'Referral', walk_in: 'Walk-in',
-  website: 'Website', others: 'Others', yes: 'Yes', no: 'No',
-  pending: 'Pending', approved: 'Approved', disapproved: 'Disapproved',
-};
+// Value → display text is shared with the Transaction History diff so the log
+// and the form can never disagree on what a stored value is called.
+const LABELS = VALUE_LABELS;
 
 /** Read-only presentation of a field this role does not own. */
 function ReadOnly({ label, value }: { label: string; value?: string }) {

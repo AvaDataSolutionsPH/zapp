@@ -30,7 +30,7 @@ the fields it owns during evaluation.
 | 1 | Facebook link on intake + monitoring | ✅ `f350fe3` |
 | 2 | Schema + form-filled fields (migration 021) | ✅ `d8646dd` |
 | 3 | 25-field detail, field-level RBAC, batch Save (migration 022) | ✅ this commit |
-| 4 | Transaction History (audit trail) | ⬜ |
+| 4 | Transaction History (audit trail) | ✅ this commit |
 | 5 | Auto-assignment (AS by province, Location, Type) | ⬜ blocked on the province→AS master list |
 | 6 | Filters (primary + secondary + role behaviour) | ⬜ |
 
@@ -80,6 +80,38 @@ gates the button and shows a Discard action.
 - Store action `updateApplicationMonitoring(id, patch)` — optimistic + background
   UPDATE + rollback. No side effects, unlike `reviewApplication`.
 
+## Transaction History (Phase 4)
+Read-only table on the detail page, newest first, with the seven columns the
+spec requires: Date & Time · User · Dept. · Action · Field Modified · Previous ·
+New. It replaced the old "Audit Timeline", which only showed action/details and
+printed the raw `performedBy` **id** where the spec asks for a User Name.
+
+**No migration** — `audit_log` is JSONB and `mapApplicationToDB` passes it through
+verbatim (`audit_log: a.auditLog`), so new nested keys need no schema change.
+
+`AuditEntry` gained `performedByName?`, `role?`, `fieldModified?`,
+`previousValue?`, `newValue?` — all optional, so entries written before Phase 4
+stay valid; the table falls back to `performedBy` / `details` for them.
+
+`diffMonitoringFields(before, patch, resolve?)` (pure, in
+`lib/applicationMonitoring.ts`) returns one change per field that ACTUALLY
+changed — a Save that alters nothing logs nothing. `FIELD_LABELS` is keyed by the
+REAL Application field (so `lat`/`lng`, not the `latLng` UI grouping); a key
+absent from it is not a monitoring field and is skipped, which is what keeps
+unrelated Application keys out of the log.
+
+Two display concerns the log must get right, both proven E2E:
+- **`VALUE_LABELS`** is shared with `MonitoringFieldsCard`, so the log and the
+  form can never disagree: it records `Facebook → Walk-in`, not `facebook → walk_in`.
+- **`resolve`** injects domain lookups the pure layer can't do — the store passes
+  a plant-id → plant-name resolver, so it records `Daraga Plant → Manila Plant`,
+  not `plant-01 → plant-02`.
+
+Entries are stamped in the store action (ids via `uid()`, timestamps via
+`new Date()`), never during render — `react-hooks/purity` forbids that.
+`reviewApplication` now also records `performedByName` / `role` and logs Status
+as a field change (previous → new).
+
 ## Migrations
 - **021** — the 12 monitoring columns + `province` index. See
   [[public-application-flow]].
@@ -115,6 +147,12 @@ Fixing RLS alone left the Sub-PD unable to reach the page at all:
   renders with the PD/SD fields editable and AS/OS ones read-only; **no
   Approve/Verify & Activate/Reject** button (confirms `canSetStatus` excludes SD);
   Save → **RLS 022 accepted the UPDATE**, persisted across a full reload.
+- **Transaction History**: PD changed Market Source + Plant in one Save →
+  **two rows** (one per field), each `Marco Villanueva | PD | updated`, reading
+  `Market Source: Facebook → Walk-in` and `Plant: Daraga Plant → Manila Plant`
+  (labels + plant names resolved, not raw enum/ids); the pre-Phase-4 `submitted`
+  entry still renders via its fallbacks (`system`, `—`, "Application submitted").
+  Persisted across a full reload.
 
 ## Related
 [[public-application-flow]] (intake + migration 021) · [[account-creation]] ·

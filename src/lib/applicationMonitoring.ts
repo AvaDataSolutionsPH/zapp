@@ -24,7 +24,7 @@
 // `reviewApplication`), so it stays an explicit action — Approve / Decline
 // buttons — instead of a value the batch Save writes. See canSetStatus below.
 
-import type { UserRole } from '@/types';
+import type { Application, UserRole } from '@/types';
 
 /** Fields the batch Save can write. `latLng` covers the lat+lng pair. */
 export type MonitoringField =
@@ -118,3 +118,92 @@ export const canEditAnyField = (role: UserRole | undefined): boolean =>
  */
 export const canSetStatus = (role: UserRole | undefined): boolean =>
   role === 'owner' || role === 'operations_manager' || role === 'partner_distributor';
+
+// ─── Transaction History (Phase 4) ────────────────────────────────────────
+
+/** How each department is named in the audit trail. */
+export const ROLE_LABELS: Partial<Record<UserRole, string>> = {
+  owner: 'Admin',
+  operations_manager: 'OS',
+  area_manager: 'AS',
+  partner_distributor: 'PD',
+  sub_partner_distributor: 'SD',
+};
+
+/** Option-style values → their display text (so the log reads "Walk-in", not "walk_in"). */
+export const VALUE_LABELS: Record<string, string> = {
+  facebook: 'Facebook',
+  referral: 'Referral',
+  walk_in: 'Walk-in',
+  website: 'Website',
+  others: 'Others',
+  yes: 'Yes',
+  no: 'No',
+  pending: 'Pending',
+  approved: 'Approved',
+  disapproved: 'Disapproved',
+};
+
+/**
+ * Human labels, keyed by the REAL Application field — note `latLng` is only a UI
+ * grouping, the patch carries `lat` and `lng` separately, so both appear here.
+ * A key missing from this map is not a monitoring field and is skipped by the
+ * diff (that is what keeps unrelated Application keys out of the log).
+ */
+const FIELD_LABELS: Record<string, string> = {
+  googleMapsPictureUrl: 'Store Google Maps Picture',
+  googleMapsLink: 'Google Maps Link',
+  lat: 'Latitude',
+  lng: 'Longitude',
+  marketSource: 'Market Source',
+  comparable: 'Comparable',
+  ads: 'ADS',
+  rtc: 'RTC',
+  shopCode: 'Shop Code',
+  assignedPlantId: 'Plant',
+  remarksPdSd: 'Remarks (PD/SD)',
+  remarksAs: 'Remarks (Area Supervisor)',
+  remarksOs: 'Remarks (Operations Supervisor)',
+};
+
+export interface MonitoringChange {
+  field: string;
+  label: string;
+  previous: string;
+  next: string;
+}
+
+const EMPTY = '—';
+
+const format = (value: unknown): string => {
+  if (value === undefined || value === null || value === '') return EMPTY;
+  const raw = String(value);
+  return VALUE_LABELS[raw] ?? raw;
+};
+
+/**
+ * Compare an application against a monitoring patch and return one entry per
+ * field that ACTUALLY changed — the Transaction History records field-level
+ * before/after, so a Save that touches nothing must log nothing.
+ *
+ * `resolve` lets the caller supply a display value the pure layer can't know
+ * (e.g. plant id → plant name). Returning undefined falls back to the raw value.
+ */
+export const diffMonitoringFields = (
+  before: Application,
+  patch: Partial<Application>,
+  resolve?: (field: string, value: unknown) => string | undefined,
+): MonitoringChange[] => {
+  const changes: MonitoringChange[] = [];
+  for (const key of Object.keys(patch)) {
+    const label = FIELD_LABELS[key];
+    if (!label) continue;
+    const beforeRaw = (before as unknown as Record<string, unknown>)[key];
+    const afterRaw = (patch as unknown as Record<string, unknown>)[key];
+    const previous = resolve?.(key, beforeRaw) ?? format(beforeRaw);
+    const next = resolve?.(key, afterRaw) ?? format(afterRaw);
+    if (previous === next) continue;
+    changes.push({ field: key, label, previous, next });
+  }
+  return changes;
+};

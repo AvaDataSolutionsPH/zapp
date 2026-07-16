@@ -182,9 +182,22 @@ export interface Store {
 export interface AuditEntry {
   id: string;
   action: string;
+  /** User id (or 'system' for the submission entry). */
   performedBy: string;
   performedAt: string;
   details: string;
+  // --- Transaction History (New Application Monitoring, Phase 4) ---
+  // All optional: entries written before this existed stay valid, and the
+  // detail view falls back to `details` / `performedBy` when they're absent.
+  // No migration — audit_log is JSONB and passes through verbatim.
+  /** Resolved at write time — `performedBy` alone is an opaque id. */
+  performedByName?: string;
+  /** Department that made the change (PD / SD / AS / OS / Admin). */
+  role?: UserRole;
+  /** Human label of the changed field, e.g. "Google Maps Link". */
+  fieldModified?: string;
+  previousValue?: string;
+  newValue?: string;
 }
 
 export interface Application {

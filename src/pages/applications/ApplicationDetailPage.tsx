@@ -29,7 +29,7 @@ import {
 } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import { ensureHttpUrl } from '@/lib/externalUrl';
-import { canSetStatus } from '@/lib/applicationMonitoring';
+import { canSetStatus, ROLE_LABELS } from '@/lib/applicationMonitoring';
 import { useStorageUrl } from '@/lib/useStorageUrl';
 import MonitoringFieldsCard from './MonitoringFieldsCard';
 
@@ -490,46 +490,65 @@ export default function ApplicationDetailPage() {
         </Card>
       )}
 
-      {/* Audit Timeline */}
+      {/* Transaction History (Audit Trail) — read-only by design: the module
+          requires that no record may be modified or deleted, so there is no
+          edit affordance here and nothing writes to auditLog except the store
+          actions themselves. Newest first. */}
       <Card>
         <CardHeader>
-          <h2 className="text-lg font-semibold text-gray-900">Audit Timeline</h2>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <ScrollText size={18} /> Transaction History
+            </h2>
+            <span className="text-xs text-gray-500">Read-only</span>
+          </div>
         </CardHeader>
         <CardContent>
           {application.auditLog.length === 0 ? (
-            <p className="text-sm text-gray-500">No audit entries yet.</p>
+            <p className="text-sm text-gray-500">No transactions yet.</p>
           ) : (
-            <div className="relative pl-6 space-y-6">
-              <div className="absolute left-2 top-2 bottom-2 w-0.5 bg-gray-200" />
-              {application.auditLog.map((entry) => {
-                const isApproved = entry.action === 'approved';
-                const isDeclined = entry.action === 'declined';
-                return (
-                  <div key={entry.id} className="relative">
-                    <div
-                      className={`absolute -left-4 top-0.5 w-4 h-4 rounded-full border-2 border-white ${
-                        isApproved
-                          ? 'bg-green-500'
-                          : isDeclined
-                            ? 'bg-red-500'
-                            : 'bg-blue-500'
-                      }`}
-                    />
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-gray-900 capitalize">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[42rem] text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 text-left">
+                    <th className="pb-2 pr-4 text-xs font-medium uppercase tracking-wider text-gray-500">Date &amp; Time</th>
+                    <th className="pb-2 pr-4 text-xs font-medium uppercase tracking-wider text-gray-500">User</th>
+                    <th className="pb-2 pr-4 text-xs font-medium uppercase tracking-wider text-gray-500">Dept.</th>
+                    <th className="pb-2 pr-4 text-xs font-medium uppercase tracking-wider text-gray-500">Action</th>
+                    <th className="pb-2 pr-4 text-xs font-medium uppercase tracking-wider text-gray-500">Field</th>
+                    <th className="pb-2 pr-4 text-xs font-medium uppercase tracking-wider text-gray-500">Previous</th>
+                    <th className="pb-2 text-xs font-medium uppercase tracking-wider text-gray-500">New</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...application.auditLog].reverse().map((entry) => (
+                    <tr key={entry.id} className="border-b border-gray-100 last:border-0 align-top">
+                      <td className="py-2 pr-4 whitespace-nowrap text-xs text-gray-500">
+                        {new Date(entry.performedAt).toLocaleString()}
+                      </td>
+                      {/* Older entries predate performedByName — fall back to the id. */}
+                      <td className="py-2 pr-4 text-gray-900">{entry.performedByName ?? entry.performedBy}</td>
+                      <td className="py-2 pr-4 text-gray-500">
+                        {(entry.role && ROLE_LABELS[entry.role]) ?? '—'}
+                      </td>
+                      <td className="py-2 pr-4">
+                        <Badge
+                          variant={
+                            entry.action === 'approved' ? 'success'
+                            : entry.action === 'declined' ? 'danger'
+                            : 'info'
+                          }
+                        >
                           {entry.action}
-                        </span>
-                        <span className="text-xs text-gray-400">
-                          {new Date(entry.performedAt).toLocaleString()}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-600 mt-0.5">{entry.details}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">By: {entry.performedBy}</p>
-                    </div>
-                  </div>
-                );
-              })}
+                        </Badge>
+                      </td>
+                      <td className="py-2 pr-4 text-gray-700">{entry.fieldModified ?? '—'}</td>
+                      <td className="py-2 pr-4 text-gray-500 break-all">{entry.previousValue ?? '—'}</td>
+                      <td className="py-2 text-gray-900 break-all">{entry.newValue ?? entry.details}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </CardContent>

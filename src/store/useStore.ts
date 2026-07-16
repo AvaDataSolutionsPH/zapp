@@ -52,6 +52,7 @@ import {
   notifications as mockNotifications,
   specialOrders as mockSpecialOrders,
 } from '@/data/mockData';
+import { diffMonitoringFields } from '@/lib/applicationMonitoring';
 import { computeBillingsFromState } from '@/lib/billingComputations';
 import { computeStoreDeliveryStatus } from '@/lib/deliveryEnforcement';
 import { supabase } from '@/lib/supabase';
@@ -636,12 +637,20 @@ export const useStore = create<AppStore>((set, get) => {
     const prevDemoUsers = state.demoUsers;
 
     const now = new Date().toISOString();
+    // Name + role are resolved here so the Transaction History can show WHO and
+    // from which department, rather than the opaque reviewer id.
+    const reviewer = get().demoUsers.find((u) => u.id === reviewerId);
     const auditEntry: AuditEntry = {
       id: `al-${uid()}`,
       action,
       performedBy: reviewerId,
+      performedByName: reviewer?.name,
+      role: reviewer?.role,
       performedAt: now,
       details: notes ?? `Application ${action}`,
+      fieldModified: 'Status',
+      previousValue: targetApp.status,
+      newValue: action,
     };
 
     const updatedApp: Application = {
@@ -796,13 +805,42 @@ export const useStore = create<AppStore>((set, get) => {
   // New Application Monitoring — batch save of the evaluation fields. Plain
   // optimistic + background write + rollback: unlike reviewApplication there
   // are no side effects (no store/login creation), so a single UPDATE is all
-  // that is needed. An audit entry per changed field lands in Phase 4.
+  // that is needed.
+  //
+  // Every changed field also appends a Transaction History entry (Phase 4).
+  // Ids/timestamps are stamped HERE rather than in the component so the render
+  // stays pure (react-hooks/purity forbids Date.now() during render).
   updateApplicationMonitoring: async (id, patch) => {
+    const { currentUser, plants } = get();
     const prevApplications = get().applications;
     const target = prevApplications.find((a) => a.id === id);
     if (!target) throw new Error('Application not found.');
 
-    const updated: Application = { ...target, ...patch };
+    // The pure diff can't know domain lookups — hand it the plant name.
+    const changes = diffMonitoringFields(target, patch, (field, value) =>
+      field === 'assignedPlantId'
+        ? (plants.find((p) => p.id === value)?.name ?? undefined)
+        : undefined,
+    );
+    const now = new Date().toISOString();
+    const entries: AuditEntry[] = changes.map((c) => ({
+      id: `audit-${uid()}`,
+      action: 'updated',
+      performedBy: currentUser?.id ?? 'system',
+      performedByName: currentUser?.name,
+      role: currentUser?.role,
+      performedAt: now,
+      details: `${c.label}: ${c.previous} → ${c.next}`,
+      fieldModified: c.label,
+      previousValue: c.previous,
+      newValue: c.next,
+    }));
+
+    const updated: Application = {
+      ...target,
+      ...patch,
+      auditLog: [...target.auditLog, ...entries],
+    };
     set({ applications: prevApplications.map((a) => (a.id === id ? updated : a)) });
 
     if (get().dataSource !== 'db') return;

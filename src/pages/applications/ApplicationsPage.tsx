@@ -94,6 +94,7 @@ export default function ApplicationsPage() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [plantFilter, setPlantFilter] = useState('');
   const [distributorFilter, setDistributorFilter] = useState('');
+  const [spdFilter, setSpdFilter] = useState('');
   const [marketSourceFilter, setMarketSourceFilter] = useState('');
   const [rtcFilter, setRtcFilter] = useState('');
   const [comparableFilter, setComparableFilter] = useState('');
@@ -113,7 +114,7 @@ export default function ApplicationsPage() {
   const resetFilters = () => {
     setSearch(''); setStatusFilter('all'); setProvinceFilter(''); setAreaFilter('');
     setTypeFilter(''); setDateFrom(''); setDateTo(''); setPlantFilter('');
-    setDistributorFilter(''); setMarketSourceFilter(''); setRtcFilter('');
+    setDistributorFilter(''); setSpdFilter(''); setMarketSourceFilter(''); setRtcFilter('');
     setComparableFilter(''); setAdsFilter(''); setShopCodeFilter('');
     setMapsLinkFilter(''); setMapsPictureFilter(''); setPage(1);
   };
@@ -156,6 +157,14 @@ export default function ApplicationsPage() {
     }
     if (distributorFilter) {
       result = result.filter((a) => a.assignedDistributorId === distributorFilter);
+    }
+    // 'none' = filed directly under the PD's own code, not via any Sub-PD.
+    if (spdFilter) {
+      result = result.filter((a) =>
+        spdFilter === 'none'
+          ? !a.assignedSubPartnerDistributorId
+          : a.assignedSubPartnerDistributorId === spdFilter,
+      );
     }
     if (marketSourceFilter) {
       result = result.filter((a) => a.marketSource === marketSourceFilter);
@@ -204,7 +213,7 @@ export default function ApplicationsPage() {
     // areaSupervisors: the Area Supervisor filter resolves through the province
     // master list, so edits to coverage must re-run this.
     applications, areaSupervisors, statusFilter, provinceFilter, areaFilter, typeFilter,
-    dateFrom, dateTo, plantFilter, distributorFilter, marketSourceFilter, rtcFilter,
+    dateFrom, dateTo, plantFilter, distributorFilter, spdFilter, marketSourceFilter, rtcFilter,
     comparableFilter, adsFilter, shopCodeFilter, mapsLinkFilter, mapsPictureFilter, search,
   ]);
 
@@ -216,6 +225,8 @@ export default function ApplicationsPage() {
   // Lookup helpers
   const plantName = (id: string) => plants.find((p) => p.id === id)?.name ?? '-';
   const amName = (id?: string) => (id ? areaSupervisors.find((a) => a.id === id)?.name ?? '-' : '-');
+  const spdName = (id?: string) =>
+    id ? subPartnerDistributors.find((s) => s.id === id)?.name ?? '-' : '-';
 
   const plantOptions: SelectOption[] = [
     { value: '', label: 'All Plants' },
@@ -253,6 +264,19 @@ export default function ApplicationsPage() {
     { value: 'Distributor', label: 'Distributor' },
     { value: 'Direct', label: 'Direct' },
   ];
+  // A PD only ever sees its OWN Sub-PDs, so offering the whole company's list
+  // would just be dead options. owner/ops get everyone.
+  const spdOptions: SelectOption[] = useMemo(() => {
+    const scoped =
+      currentUser?.role === 'partner_distributor'
+        ? subPartnerDistributors.filter((s) => s.parentDistributorId === currentUser.distributorId)
+        : subPartnerDistributors;
+    return [
+      { value: '', label: 'All Sub-PDs' },
+      { value: 'none', label: 'Direct (no Sub-PD)' },
+      ...scoped.map((s) => ({ value: s.id, label: s.name })),
+    ];
+  }, [subPartnerDistributors, currentUser]);
   const marketSourceOptions: SelectOption[] = [
     { value: '', label: 'All Market Sources' },
     { value: 'facebook', label: 'Facebook' },
@@ -340,6 +364,14 @@ export default function ApplicationsPage() {
           </Badge>
         );
       },
+    },
+    {
+      // A PD's scope is "own referral code + assigned Sub PDs", so without this
+      // it could see a Sub-PD's applicants but not tell WHICH Sub-PD they came
+      // from. Blank for applications filed directly under the PD's own code.
+      key: 'subPartnerDistributorId',
+      header: 'Sub-PD',
+      render: (row) => spdName(row.assignedSubPartnerDistributorId),
     },
     {
       key: 'plantId',
@@ -531,6 +563,15 @@ export default function ApplicationsPage() {
                 onChange={(e) => { setPlantFilter(e.target.value); setPage(1); }}
                 placeholder="Plant"
               />
+              {/* An SPD's whole scope is itself, so the filter is pointless there. */}
+              {currentUser?.role !== 'sub_partner_distributor' && (
+                <Select
+                  options={spdOptions}
+                  value={spdFilter}
+                  onChange={(e) => { setSpdFilter(e.target.value); setPage(1); }}
+                  placeholder="Sub-PD"
+                />
+              )}
               {/* Distributor is meaningless to a PD/SPD — their whole scope is
                   already one distributor. */}
               {!isChannelScoped && (

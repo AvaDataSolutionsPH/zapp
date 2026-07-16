@@ -52,7 +52,8 @@ import {
   notifications as mockNotifications,
   specialOrders as mockSpecialOrders,
 } from '@/data/mockData';
-import { diffMonitoringFields } from '@/lib/applicationMonitoring';
+import { diffMonitoringFields, effectiveAreaSupervisorId } from '@/lib/applicationMonitoring';
+import { resolveLocation } from '@/lib/phRegions';
 import { computeBillingsFromState } from '@/lib/billingComputations';
 import { computeStoreDeliveryStatus } from '@/lib/deliveryEnforcement';
 import { supabase } from '@/lib/supabase';
@@ -83,6 +84,7 @@ import {
   insertDistributor,
   insertSubPartnerDistributor,
   insertAreaSupervisor,
+  updateAreaSupervisor,
   insertUser,
 } from '@/services/dbWrite';
 import { signUpIsolated, generateTempPassword } from '@/lib/authSignup';
@@ -194,6 +196,12 @@ interface AppStore {
    * settable here — approving has side effects, so it stays reviewApplication.
    */
   updateApplicationMonitoring: (id: string, patch: Partial<Application>) => Promise<void>;
+  /**
+   * Admin settings — set the provinces an Area Supervisor covers. This is the
+   * master list the automatic AS assignment reads; it is data, not code, so the
+   * boss can re-point coverage without a deploy.
+   */
+  updateAreaSupervisorProvinces: (id: string, provinces: string[]) => Promise<void>;
 
   // Distributors
   distributors: Distributor[];
@@ -587,6 +595,14 @@ export const useStore = create<AppStore>((set, get) => {
       id: `app-${uid()}`,
       status: 'pending',
       submittedAt: now,
+      // Location is derived from the province by a PURE static map, so it works
+      // on the anonymous /apply path (which never hydrates). The Area Supervisor
+      // is deliberately NOT resolved here: that needs the admin master list, and
+      // `ref_select` is TO authenticated — an anon applicant cannot read it. It
+      // is derived at READ time instead (see effectiveAreaSupervisorId), which
+      // also means editing the master list instantly re-points existing
+      // applications rather than freezing a stale assignment.
+      location: resolveLocation(app.province),
       auditLog: [
         {
           id: `al-${uid()}`,
@@ -669,12 +685,14 @@ export const useStore = create<AppStore>((set, get) => {
     let updatedStores = state.stores;
     if (action === 'approved') {
       // The DB requires a non-null area_supervisor_id with an FK to
-      // area_supervisors.id. If the application didn't capture an area
-      // supervisor (e.g. distributor referral with no AS auto-assign),
-      // fall back to the first AS in the same plant — keeps the new
-      // store routable. A future enhancement adds an explicit "assign
-      // area supervisor" step before approval.
-      let resolvedAreaSupId = updatedApp.assignedAreaSupervisorId ?? '';
+      // area_supervisors.id. Resolution order:
+      //   1. the province master list (admin settings, Phase 5) — this is the
+      //      live answer and matches what the monitoring list shows;
+      //   2. whatever AS the referral code carried;
+      //   3. the first AS in the same plant — keeps the store routable when the
+      //      master list has no coverage for the province yet.
+      let resolvedAreaSupId =
+        effectiveAreaSupervisorId(updatedApp, state.areaSupervisors) ?? '';
       if (!resolvedAreaSupId) {
         const fallbackAS =
           state.areaSupervisors.find((as) => as.plantId === updatedApp.assignedPlantId) ??
@@ -850,6 +868,28 @@ export const useStore = create<AppStore>((set, get) => {
     } catch (err) {
       console.error('[useStore] updateApplicationMonitoring: UPDATE failed, rolling back:', err);
       set({ applications: prevApplications });
+      throw err;
+    }
+  },
+
+  // Admin settings for the province→AS master list. Optimistic + background
+  // write + rollback. RLS: area_supervisors is a reference table, so 003's
+  // ref_write (app_is_admin) already gates this — no new policy.
+  updateAreaSupervisorProvinces: async (id, provinces) => {
+    const prev = get().areaSupervisors;
+    const target = prev.find((a) => a.id === id);
+    if (!target) throw new Error('Area Supervisor not found.');
+
+    const updated: AreaSupervisor = { ...target, assignedProvinces: provinces };
+    set({ areaSupervisors: prev.map((a) => (a.id === id ? updated : a)) });
+
+    if (get().dataSource !== 'db') return;
+
+    try {
+      await updateAreaSupervisor(updated);
+    } catch (err) {
+      console.error('[useStore] updateAreaSupervisorProvinces: UPDATE failed, rolling back:', err);
+      set({ areaSupervisors: prev });
       throw err;
     }
   },

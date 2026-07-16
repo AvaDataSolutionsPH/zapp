@@ -24,7 +24,7 @@
 // `reviewApplication`), so it stays an explicit action — Approve / Decline
 // buttons — instead of a value the batch Save writes. See canSetStatus below.
 
-import type { Application, ReferralType, UserRole } from '@/types';
+import type { Application, AreaSupervisor, ReferralType, UserRole } from '@/types';
 
 /** Fields the batch Save can write. `latLng` covers the lat+lng pair. */
 export type MonitoringField =
@@ -135,6 +135,62 @@ export const applicationType = (referralType: ReferralType): 'Distributor' | 'Di
   referralType === 'distributor' || referralType === 'sub_partner_distributor'
     ? 'Distributor'
     : 'Direct';
+
+// ─── Automatic Area-Supervisor assignment (Phase 5) ───────────────────────
+
+/**
+ * The AS covering a province, from the admin-managed master list
+ * (`AreaSupervisor.assignedProvinces`, migration 023).
+ *
+ * Returns undefined when nothing covers the province — callers must then fall
+ * back to whatever the referral code carried, which is the pre-Phase-5
+ * behaviour. That fallback is what makes an EMPTY master list safe: until the
+ * admin fills it in, assignment works exactly as it did before.
+ *
+ * Matching is case/whitespace-insensitive because provinces arrive as free text
+ * from the PSGC cascade. If two supervisors claim the same province the first
+ * wins — the admin UI is the place to resolve that, not a silent tiebreak here.
+ */
+export const resolveAreaSupervisorForProvince = (
+  province: string | undefined,
+  areaSupervisors: Pick<AreaSupervisor, 'id' | 'assignedProvinces'>[],
+): string | undefined => {
+  const key = province?.trim().toLowerCase();
+  if (!key) return undefined;
+  return areaSupervisors.find((as_) =>
+    (as_.assignedProvinces ?? []).some((p) => p.trim().toLowerCase() === key),
+  )?.id;
+};
+
+/**
+ * The AS actually responsible for an application.
+ *
+ * The province master list WINS over whatever the referral code carried: the
+ * list is live admin data, so editing it re-points every application at once
+ * ("kahit mapalitan madali lang ichange"). Freezing an id at submit would need
+ * a backfill on every change — and the anon /apply path cannot read the list
+ * anyway. Falls back to the referral's AS when no province coverage matches, so
+ * an empty master list behaves exactly as before Phase 5.
+ */
+export const effectiveAreaSupervisorId = (
+  app: Pick<Application, 'province' | 'assignedAreaSupervisorId'>,
+  areaSupervisors: Pick<AreaSupervisor, 'id' | 'assignedProvinces'>[],
+): string | undefined =>
+  resolveAreaSupervisorForProvince(app.province, areaSupervisors) ??
+  app.assignedAreaSupervisorId;
+
+/** Provinces already claimed by ANOTHER supervisor — the UI warns on these. */
+export const provincesClaimedByOthers = (
+  selfId: string,
+  areaSupervisors: Pick<AreaSupervisor, 'id' | 'assignedProvinces'>[],
+): Set<string> => {
+  const taken = new Set<string>();
+  for (const as_ of areaSupervisors) {
+    if (as_.id === selfId) continue;
+    for (const p of as_.assignedProvinces ?? []) taken.add(p.trim().toLowerCase());
+  }
+  return taken;
+};
 
 // ─── Transaction History (Phase 4) ────────────────────────────────────────
 

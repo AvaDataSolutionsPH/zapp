@@ -29,7 +29,8 @@ import {
 } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import { ensureHttpUrl } from '@/lib/externalUrl';
-import { canSetStatus, ROLE_LABELS } from '@/lib/applicationMonitoring';
+import { resolveLocation } from '@/lib/phRegions';
+import { canSetStatus, effectiveAreaSupervisorId, ROLE_LABELS } from '@/lib/applicationMonitoring';
 import { useStorageUrl } from '@/lib/useStorageUrl';
 import MonitoringFieldsCard from './MonitoringFieldsCard';
 
@@ -103,8 +104,11 @@ export default function ApplicationDetailPage() {
   const distributor = application.assignedDistributorId
     ? distributors.find((d) => d.id === application.assignedDistributorId)
     : null;
-  const areaSupervisor = application.assignedAreaSupervisorId
-    ? areaSupervisors.find((a) => a.id === application.assignedAreaSupervisorId)
+  // Same resolution as the list: the admin province master list wins over the
+  // id the referral code happened to carry.
+  const effectiveAsId = effectiveAreaSupervisorId(application, areaSupervisors);
+  const areaSupervisor = effectiveAsId
+    ? areaSupervisors.find((a) => a.id === effectiveAsId)
     : null;
 
   // Self-service Partner Onboarding applications (marked by an applicationNumber)
@@ -355,6 +359,14 @@ export default function ApplicationDetailPage() {
                 <dd className="mt-1 text-sm text-gray-700">{application.province ?? '—'}</dd>
               </div>
               <div>
+                {/* Derived from the province. Falls back to a live derivation so
+                    rows filed before migration 021 still show something. */}
+                <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">Location</dt>
+                <dd className="mt-1 text-sm text-gray-700">
+                  {application.location ?? resolveLocation(application.province) ?? '—'}
+                </dd>
+              </div>
+              <div>
                 <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">Latitude</dt>
                 <dd className="mt-1 text-sm text-gray-700 font-mono">{application.lat}</dd>
               </div>
@@ -508,7 +520,7 @@ export default function ApplicationDetailPage() {
             <p className="text-sm text-gray-500">No transactions yet.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[42rem] text-sm">
+              <table className="w-full min-w-2xl text-sm">
                 <thead>
                   <tr className="border-b border-gray-200 text-left">
                     <th className="pb-2 pr-4 text-xs font-medium uppercase tracking-wider text-gray-500">Date &amp; Time</th>

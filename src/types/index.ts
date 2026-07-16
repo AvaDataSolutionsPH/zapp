@@ -143,9 +143,17 @@ export interface AreaSupervisor {
   name: string;
   email: string;
   phone: string;
+  /** Free-text CITY names — display only. Not the province master list. */
   assignedAreas: string[];
   plantId: string;
   assignedStoreIds: string[];
+  /**
+   * Provinces this AS covers (New Application Monitoring, migration 023).
+   * Admin-managed on the Area Supervisors page; drives the automatic AS
+   * assignment on submit and scopes what an AS sees. Optional/empty = no
+   * coverage yet, in which case assignment falls back to the referral code.
+   */
+  assignedProvinces?: string[];
 }
 
 export interface Store {

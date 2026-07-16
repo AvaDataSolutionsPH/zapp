@@ -31,7 +31,7 @@ the fields it owns during evaluation.
 | 2 | Schema + form-filled fields (migration 021) | ✅ `d8646dd` |
 | 3 | 25-field detail, field-level RBAC, batch Save (migration 022) | ✅ this commit |
 | 4 | Transaction History (audit trail) | ✅ this commit |
-| 5 | Auto-assignment (AS by province, Location, Type) | ⬜ blocked on the province→AS master list |
+| 5 | Auto-assignment (AS by province, Location, Type) | ✅ this commit (migration 023) |
 | 6 | Filters (primary + secondary + role behaviour) | ✅ this commit |
 
 ## Field-level RBAC (`src/lib/applicationMonitoring.ts`)
@@ -112,6 +112,55 @@ Entries are stamped in the store action (ids via `uid()`, timestamps via
 `reviewApplication` now also records `performedByName` / `role` and logs Status
 as a field change (previous → new).
 
+## Auto-assignment (Phase 5)
+Three "Additional System Requirements" from the spec, all resolved LIVE (read
+time) rather than frozen at submit:
+
+- **Type** — `applicationType(referralType)` (see above), Distributor for
+  distributor/SPD referrals, else Direct.
+- **Location** — `resolveLocation(province)` in `lib/phRegions.ts`, a pure static
+  map (Albay→Bicol Region, Cavite→Cavite, Occidental/Oriental Mindoro→Mindoro,
+  Metro Manila (NCR)→Metro Manila, …). Computed on the anonymous `/apply` path and
+  stored, and re-derived on render for pre-021 rows. Verified: Sorsogon → Bicol
+  Region.
+- **Area Supervisor** — from an **admin-managed province master list**, not a
+  hardcoded map. Boss's instruction verbatim: *"Gawa nalang tayo ng admin
+  settings na maglalagay sa per areas sa isang area supv. Para kahit mapalitan
+  madali lang ichange."*
+
+### The master list (admin settings)
+`AreaSupervisor.assignedProvinces` (migration 023), edited on the Area
+Supervisors page: a **Provinces (Coverage)** column + an **Assign Areas** button →
+`AssignProvincesModal` (checkbox grid of `OPERATING_PROVINCES`, warns on overlap).
+Store action `updateAreaSupervisorProvinces` (optimistic + rollback); RLS is
+003's `ref_write` (admin) — no new policy.
+
+> ⚠️ **Not `assigned_areas`.** That existing column holds free-text CITY names
+> for display and is read in 7 places; redefining it as provinces would corrupt
+> all of them. `assignedProvinces` is a separate, additive column.
+
+### Read-time resolution — the load-bearing decision
+`effectiveAreaSupervisorId(app, areaSupervisors)` = the province master list AS,
+**falling back** to the referral code's AS when no province matches. The list is
+used everywhere the AS is shown or filtered (monitoring list column + filter,
+detail card, approval's store creation). It is deliberately NOT frozen onto the
+application at submit, for two reasons:
+1. **Editing the list must re-point every application at once** — that is exactly
+   what "kahit mapalitan madali lang ichange" asks for. Freezing would need a
+   backfill on every edit.
+2. The anonymous `/apply` path **cannot read** the master list (`ref_select` is
+   `TO authenticated`), so it could not resolve the AS at submit even if we wanted
+   to.
+
+The fallback is what makes an **empty** master list safe: until an admin fills it
+in, assignment behaves exactly as before Phase 5.
+
+### AS scope
+`ApplicationsPage` now scopes an Area Supervisor by `effectiveAreaSupervisorId`,
+so assigning a province in admin settings instantly re-scopes that AS's queue.
+(This is the province-based visibility the spec's "assigned provinces" wording
+called for.)
+
 ## Filters (Phase 6)
 **Primary** (always visible): Status · Area (Province) · Area Supervisor · Type ·
 Application Date (From/To) · Search. **Secondary** (behind an *Advanced filters*
@@ -139,9 +188,8 @@ while on page 3 would otherwise land on an empty page.
 | SPD | own referral only (`assignedSubPartnerDistributorId`) |
 | AS | applications assigned to them (`assignedAreaSupervisorId`) |
 
-> The spec wants AS scoped by **assigned provinces**. That needs the province→AS
-> master list, so it lands in Phase 5; until then AS stays scoped by direct
-> assignment.
+> AS scoping is by **assigned provinces** via `effectiveAreaSupervisorId` (Phase
+> 5): assigning a province in admin settings instantly re-scopes that AS's queue.
 
 ### Two bugs fixed here
 1. **`/apply` dropped the SPD assignment.** It set `assignedDistributorId` but

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import {
+  Button,
   Card,
   CardHeader,
   CardContent,
@@ -18,6 +19,8 @@ import {
   Stat,
 } from '@/components/ui';
 import type { TableColumn, SelectOption } from '@/components/ui';
+import type { AreaSupervisor } from '@/types';
+import AssignProvincesModal from './AssignProvincesModal';
 
 const PAGE_SIZE = 10;
 
@@ -28,6 +31,7 @@ export default function AreaManagersPage() {
   const [plantFilter, setPlantFilter] = useState('');
   const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [assigning, setAssigning] = useState<AreaSupervisor | null>(null);
 
   const enriched = useMemo(() =>
     areaSupervisors.map((am) => {
@@ -95,6 +99,42 @@ export default function AreaManagersPage() {
             <Badge key={area} variant="neutral" size="sm">{area}</Badge>
           ))}
         </div>
+      ),
+    },
+    {
+      // The province master list — what actually drives auto-assignment. Kept
+      // separate from "Areas" above, which is free-text city names for display.
+      key: 'assignedProvinces',
+      header: 'Provinces (Coverage)',
+      render: (row) => {
+        const provinces = row.assignedProvinces ?? [];
+        if (provinces.length === 0) {
+          return <span className="text-xs text-gray-400">Not set</span>;
+        }
+        return (
+          <div className="flex flex-wrap gap-1">
+            {provinces.map((p) => (
+              <Badge key={p} variant="info" size="sm">{p}</Badge>
+            ))}
+          </div>
+        );
+      },
+    },
+    {
+      key: 'assign',
+      header: '',
+      render: (row) => (
+        <Button
+          variant="outline"
+          size="sm"
+          iconLeft={<MapPin size={14} />}
+          onClick={(e) => {
+            e.stopPropagation();
+            setAssigning(areaSupervisors.find((a) => a.id === row.id) ?? null);
+          }}
+        >
+          Assign Areas
+        </Button>
       ),
     },
     {
@@ -209,6 +249,14 @@ export default function AreaManagersPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Admin settings — province coverage. `key` remounts the modal per
+          supervisor so its draft state re-seeds from the right one. */}
+      <AssignProvincesModal
+        key={assigning?.id ?? 'none'}
+        supervisor={assigning}
+        onClose={() => setAssigning(null)}
+      />
     </div>
   );
 }

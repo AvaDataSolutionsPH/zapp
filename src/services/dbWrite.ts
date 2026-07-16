@@ -442,6 +442,9 @@ const mapAreaSupervisorToDB = (a: AreaSupervisor) => ({
   assigned_areas: a.assignedAreas,
   plant_id: a.plantId,
   assigned_store_ids: a.assignedStoreIds,
+  // Province master list (023) — the column is NOT NULL DEFAULT '{}', so coerce
+  // undefined to an empty array rather than null.
+  assigned_provinces: a.assignedProvinces ?? [],
 });
 
 const mapUserToDB = (u: User) => ({
@@ -473,6 +476,14 @@ export async function insertAreaSupervisor(a: AreaSupervisor): Promise<void> {
   const { error } = await supabase
     .from('area_supervisors')
     .insert(mapAreaSupervisorToDB(a) as never);
+  if (error) throw error;
+}
+
+export async function updateAreaSupervisor(a: AreaSupervisor): Promise<void> {
+  const { error } = await supabase
+    .from('area_supervisors')
+    .update(mapAreaSupervisorToDB(a) as never)
+    .eq('id', a.id);
   if (error) throw error;
 }
 

@@ -25,7 +25,7 @@ import {
   Skeleton,
 } from '@/components/ui';
 import type { TableColumn, SelectOption } from '@/components/ui';
-import { applicationType } from '@/lib/applicationMonitoring';
+import { applicationType, effectiveAreaSupervisorId } from '@/lib/applicationMonitoring';
 import { ensureHttpUrl } from '@/lib/externalUrl';
 import type { Application } from '@/types';
 
@@ -42,7 +42,10 @@ export default function ApplicationsPage() {
     currentUser,
   } = useStore();
 
-  // Area supervisors only see applications assigned to their area
+  // An AS sees the applications it is responsible for. Resolution goes through
+  // effectiveAreaSupervisorId, so the admin province master list (Phase 5) wins
+  // and re-pointing coverage instantly re-scopes the queue; applications whose
+  // province has no coverage still match via the referral code's AS.
   const applications = useMemo(() => {
     if (currentUser?.role === 'area_manager') {
       const myAreaSupervisor = areaSupervisors.find(
@@ -50,7 +53,7 @@ export default function ApplicationsPage() {
       );
       if (myAreaSupervisor) {
         return allApplications.filter(
-          (a) => a.assignedAreaSupervisorId === myAreaSupervisor.id,
+          (a) => effectiveAreaSupervisorId(a, areaSupervisors) === myAreaSupervisor.id,
         );
       }
       return [];
@@ -135,7 +138,7 @@ export default function ApplicationsPage() {
       result = result.filter((a) => a.province === provinceFilter);
     }
     if (areaFilter) {
-      result = result.filter((a) => a.assignedAreaSupervisorId === areaFilter);
+      result = result.filter((a) => effectiveAreaSupervisorId(a, areaSupervisors) === areaFilter);
     }
     if (typeFilter) {
       result = result.filter((a) => applicationType(a.referralType) === typeFilter);
@@ -198,9 +201,11 @@ export default function ApplicationsPage() {
     result.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
     return result;
   }, [
-    applications, statusFilter, provinceFilter, areaFilter, typeFilter, dateFrom, dateTo,
-    plantFilter, distributorFilter, marketSourceFilter, rtcFilter, comparableFilter,
-    adsFilter, shopCodeFilter, mapsLinkFilter, mapsPictureFilter, search,
+    // areaSupervisors: the Area Supervisor filter resolves through the province
+    // master list, so edits to coverage must re-run this.
+    applications, areaSupervisors, statusFilter, provinceFilter, areaFilter, typeFilter,
+    dateFrom, dateTo, plantFilter, distributorFilter, marketSourceFilter, rtcFilter,
+    comparableFilter, adsFilter, shopCodeFilter, mapsLinkFilter, mapsPictureFilter, search,
   ]);
 
   const paged = useMemo(() => {
@@ -344,7 +349,8 @@ export default function ApplicationsPage() {
     {
       key: 'areaSupervisorId',
       header: 'Area Supervisor',
-      render: (row) => amName(row.assignedAreaSupervisorId),
+      // Resolved live from the province master list, not the stored id.
+      render: (row) => amName(effectiveAreaSupervisorId(row, areaSupervisors)),
     },
     {
       key: 'status',

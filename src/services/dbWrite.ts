@@ -240,6 +240,8 @@ const mapApplicationToDB = (a: Application) => ({
   // Phase 3 — ID OCR autofill (editable).
   id_scanned_name: a.idScannedName ?? null,
   id_number: a.idNumber ?? null,
+  // Login this application generated on approval (024).
+  account_user_id: a.accountUserId ?? null,
   // New Application Monitoring (migration 021) — form-filled.
   province: a.province ?? null,
   location: a.location ?? null,
@@ -458,6 +460,9 @@ const mapUserToDB = (u: User) => ({
   sub_partner_distributor_id: u.subPartnerDistributorId ?? null,
   area_ids: u.areaIds ?? null,
   assigned_store_ids: u.assignedStoreIds ?? null,
+  // Activation gate (024). null = not applicable (staff / pre-024 franchisees).
+  account_status: u.accountStatus ?? null,
+  password_changed_at: u.passwordChangedAt ?? null,
 });
 
 export async function insertDistributor(d: Distributor): Promise<void> {
@@ -489,6 +494,14 @@ export async function updateAreaSupervisor(a: AreaSupervisor): Promise<void> {
 
 export async function insertUser(u: User): Promise<void> {
   const { error } = await supabase.from('users').insert(mapUserToDB(u) as never);
+  if (error) throw error;
+}
+
+export async function updateUser(u: User): Promise<void> {
+  const { error } = await supabase
+    .from('users')
+    .update(mapUserToDB(u) as never)
+    .eq('id', u.id);
   if (error) throw error;
 }
 

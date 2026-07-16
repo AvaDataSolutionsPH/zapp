@@ -88,6 +88,7 @@ import {
   insertUser,
 } from '@/services/dbWrite';
 import { signUpIsolated, generateTempPassword } from '@/lib/authSignup';
+import { resolveLoginEmail, shopCodeToEmail } from '@/lib/shopCodeAuth';
 
 // Compute the initial billing list from the seeded mock entities. This replaces
 // the previously hard-coded mockBillingRecords — billings are now derived from
@@ -121,6 +122,19 @@ export type NewAccountRole =
   | 'partner_distributor'
   | 'sub_partner_distributor'
   | 'area_manager';
+
+/**
+ * One-time credentials for a login generated on approval. Returned to the
+ * caller to reveal ONCE and never stored — the password only exists in this
+ * object and in Supabase's bcrypt hash.
+ */
+export interface GeneratedLogin {
+  /** What the franchisee types to log in — the Shop Code. */
+  username: string;
+  /** The synthetic address Supabase actually authenticates. */
+  email: string;
+  tempPassword: string;
+}
 
 export interface NewAccountInput {
   role: NewAccountRole;
@@ -183,12 +197,19 @@ interface AppStore {
   submitApplication: (
     app: Omit<Application, 'id' | 'status' | 'submittedAt' | 'auditLog'>,
   ) => Promise<void>;
+  /**
+   * Approving a /apply application also GENERATES the franchisee's login
+   * (username = Shop Code) and returns its one-time credentials for the
+   * reviewer to relay. Returns null when nothing was generated (decline,
+   * needs-info, or an /onboarding applicant who already has a login).
+   * Throws if approving without a Shop Code — it is the username.
+   */
   reviewApplication: (
     id: string,
     action: 'approved' | 'declined' | 'needs_more_info',
     reviewerId: string,
     notes?: string,
-  ) => Promise<void>;
+  ) => Promise<GeneratedLogin | null>;
   /**
    * New Application Monitoring — batch-save the evaluation fields a department
    * owns. Field-level permissions live in src/lib/applicationMonitoring.ts;
@@ -381,8 +402,12 @@ export const useStore = create<AppStore>((set, get) => {
   dataSource: 'mock',
 
   login: async (email: string, password: string): Promise<boolean> => {
+    // A franchisee's username is their Shop Code, but Supabase only knows how
+    // to authenticate an email — so anything without an "@" is treated as a
+    // Shop Code and mapped to its generated address. Staff (and /onboarding
+    // partners, who chose their own email) are unaffected.
     const { data, error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
+      email: resolveLoginEmail(email),
       password,
     });
     if (error || !data.session) {
@@ -645,12 +670,35 @@ export const useStore = create<AppStore>((set, get) => {
   ) => {
     const state = get();
     const targetApp = state.applications.find((a) => a.id === id);
-    if (!targetApp) return;
+    if (!targetApp) return null;
+
+    // ── Franchisee login generation (024) ───────────────────────────────
+    // A /apply application has no login at all, so approval generates one with
+    // the Shop Code as the username. An /onboarding applicant already created
+    // their own login (own email, own password) at Step 1 of the wizard and
+    // keeps it — generating a second account for them would orphan the first.
+    const isOnboarding = !!targetApp.applicationNumber;
+    const shopLoginEmail = isOnboarding ? null : shopCodeToEmail(targetApp.shopCode);
+    const willGenerateLogin = action === 'approved' && !!shopLoginEmail;
+
+    // The Shop Code IS the username, so it must exist before we can approve.
+    // Guarded here as well as in the UI: the store is the only place that can
+    // guarantee it, and approving without one would create a store whose
+    // franchisee can never log in.
+    if (action === 'approved' && !isOnboarding && !shopLoginEmail) {
+      throw new Error(
+        'Kailangan ng Shop Code bago i-approve — ito ang magiging username ng franchisee.',
+      );
+    }
 
     // Snapshot for rollback if any DB write fails.
     const prevApplications = state.applications;
     const prevStores = state.stores;
     const prevDemoUsers = state.demoUsers;
+
+    // Minted up-front so the application can link to the login it creates.
+    const generatedUserId = `user-${uid()}`;
+    const tempPassword = willGenerateLogin ? generateTempPassword() : null;
 
     const now = new Date().toISOString();
     // Name + role are resolved here so the Transaction History can show WHO and
@@ -675,6 +723,7 @@ export const useStore = create<AppStore>((set, get) => {
       reviewedBy: reviewerId,
       reviewedAt: now,
       notes: notes ?? targetApp.notes,
+      accountUserId: willGenerateLogin ? generatedUserId : targetApp.accountUserId,
       auditLog: [...targetApp.auditLog, auditEntry],
     };
     const updatedApps = state.applications.map((a) => (a.id === id ? updatedApp : a));
@@ -735,36 +784,65 @@ export const useStore = create<AppStore>((set, get) => {
       updatedStores = [...state.stores, newStore];
     }
 
-    // Self-service onboarding applicants (Partner Onboarding, marked by an
-    // applicationNumber) already have an auth login created at Step 1. On
-    // "Verify & Activate" we also create their franchisee `users` profile so
-    // their next login resolves to full access instead of the awaiting screen.
-    // Legacy /apply applications (no login, no applicationNumber) get a store
-    // only — unchanged.
+    // Approval creates the franchisee's `users` profile. Two shapes:
+    //  • /onboarding (has an applicationNumber) — the auth login already exists
+    //    from Step 1 of the wizard, under the applicant's OWN email. Profile
+    //    only, and NO accountStatus: they already uploaded ID / proof / selfie
+    //    in the wizard, so locking them behind first-login verification would
+    //    make them redo it. (Pending a decision from the boss.)
+    //  • /apply — no login at all. We mint one whose username is the Shop Code
+    //    and lock it at `not_activated` until documents are verified.
     let newUser: User | null = null;
     let updatedDemoUsers = state.demoUsers;
-    if (action === 'approved' && newStore && updatedApp.applicationNumber) {
+    if (action === 'approved' && newStore) {
       const isDistributorChannel =
         updatedApp.referralType === 'distributor' ||
         updatedApp.referralType === 'sub_partner_distributor';
-      newUser = {
-        id: `user-${uid()}`,
+      const profile = {
         name: updatedApp.fullName,
-        email: updatedApp.email,
-        role: isDistributorChannel ? 'franchisee_distributor' : 'franchisee_direct',
+        role: (isDistributorChannel ? 'franchisee_distributor' : 'franchisee_direct') as UserRole,
         avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(updatedApp.fullName)}&background=F59E0B&color=fff`,
         plantId: updatedApp.assignedPlantId,
         distributorId: updatedApp.assignedDistributorId,
         subPartnerDistributorId: updatedApp.assignedSubPartnerDistributorId,
         assignedStoreIds: [newStore.id],
       };
-      updatedDemoUsers = [...state.demoUsers, newUser];
+      if (isOnboarding) {
+        newUser = { ...profile, id: `user-${uid()}`, email: updatedApp.email };
+      } else if (willGenerateLogin) {
+        newUser = {
+          ...profile,
+          id: generatedUserId,
+          email: shopLoginEmail!,
+          accountStatus: 'not_activated',
+        };
+      }
+      if (newUser) updatedDemoUsers = [...state.demoUsers, newUser];
     }
 
     // Optimistic UI update.
     set({ applications: updatedApps, stores: updatedStores, demoUsers: updatedDemoUsers });
 
-    if (get().dataSource !== 'db') return;
+    // Shown exactly ONCE, by the caller. Never persisted — Supabase hashes the
+    // password and it can never be read back, which is the whole point.
+    const generated =
+      willGenerateLogin && tempPassword
+        ? { username: targetApp.shopCode!, email: shopLoginEmail!, tempPassword }
+        : null;
+
+    if (get().dataSource !== 'db') return generated;
+
+    // Create the auth login FIRST (isolated client, so the reviewer's own
+    // session is untouched). If it fails, no DB rows have been written yet.
+    if (generated) {
+      try {
+        await signUpIsolated(generated.email, generated.tempPassword);
+      } catch (err) {
+        console.error('[useStore] reviewApplication: franchisee signUp failed, rolling back:', err);
+        set({ applications: prevApplications, stores: prevStores, demoUsers: prevDemoUsers });
+        throw err;
+      }
+    }
 
     // Background writes. UPDATE the application first, then INSERT the
     // store on approval. If the store insert fails AFTER the app update
@@ -803,9 +881,9 @@ export const useStore = create<AppStore>((set, get) => {
       }
     }
 
-    // Onboarding activation: create the franchisee login profile last (the
-    // store must exist first — the profile references its id). Best-effort
-    // compensating rollback if it fails; true atomicity would need an RPC.
+    // Create the franchisee profile last (the store must exist first — the
+    // profile references its id). Best-effort compensating rollback if it
+    // fails; true atomicity would need an RPC.
     if (newUser) {
       try {
         await insertUser(newUser);
@@ -818,6 +896,8 @@ export const useStore = create<AppStore>((set, get) => {
         throw userErr;
       }
     }
+
+    return generated;
   },
 
   // New Application Monitoring — batch save of the evaluation fields. Plain

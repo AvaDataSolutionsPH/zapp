@@ -15,8 +15,12 @@ import {
   ScrollText,
   Clock,
   Facebook,
+  KeyRound,
+  Copy,
+  AlertCircle,
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
+import type { GeneratedLogin } from '@/store/useStore';
 import {
   Card,
   CardHeader,
@@ -76,6 +80,10 @@ export default function ApplicationDetailPage() {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [previewTitle, setPreviewTitle] = useState('');
   const [notes, setNotes] = useState(application?.notes ?? '');
+  // Non-null only in the moment right after approval generated a login. Never
+  // re-derivable — closing this dialog loses the password for good.
+  const [credentials, setCredentials] = useState<GeneratedLogin | null>(null);
+  const [copied, setCopied] = useState(false);
   const [showApprove, setShowApprove] = useState(false);
   const [showDecline, setShowDecline] = useState(false);
   const [showRequestInfo, setShowRequestInfo] = useState(false);
@@ -125,20 +133,30 @@ export default function ApplicationDetailPage() {
     (application.status === 'pending' || application.status === 'needs_more_info') &&
     canSetStatus(currentUser?.role);
 
+  // The Shop Code becomes the franchisee's username, so approving without one
+  // would create a store nobody can log into. Gates APPROVE only — declining or
+  // requesting info never needs a code. /onboarding applicants already have
+  // their own login, so they are exempt.
+  const needsShopCode = !isOnboarding && !application.shopCode?.trim();
+
   const handleAction = async (action: 'approved' | 'declined' | 'needs_more_info') => {
     setActionLoading(true);
     try {
-      await reviewApplication(
+      const generated = await reviewApplication(
         application.id,
         action,
         currentUser?.id ?? 'system',
         notes || undefined,
       );
+      // Revealed ONCE — the password is bcrypt-hashed by Supabase and can never
+      // be read back. If the reviewer closes this without copying it, the only
+      // recovery is a password reset.
+      if (generated) setCredentials(generated);
       const msg =
         action === 'approved'
           ? isOnboarding
             ? `${application.fullName} verified — partner login + store created.`
-            : `Application from ${application.fullName} approved — store created.`
+            : `Application from ${application.fullName} approved — store + login created.`
           : action === 'needs_more_info'
             ? `Requested more information from ${application.fullName}.`
             : `Application from ${application.fullName} ${isOnboarding ? 'rejected' : 'declined'}.`;
@@ -205,12 +223,31 @@ export default function ApplicationDetailPage() {
               variant="primary"
               iconLeft={<CheckCircle2 size={16} />}
               onClick={() => setShowApprove(true)}
+              disabled={needsShopCode}
+              title={
+                needsShopCode
+                  ? 'Kailangan muna ng Shop Code — ito ang magiging username ng franchisee.'
+                  : undefined
+              }
             >
               {isOnboarding ? 'Verify & Activate' : 'Approve'}
             </Button>
           </div>
         )}
       </div>
+
+      {/* Why Approve is disabled — a bare greyed-out button would just look
+          broken. Shop Code is set on Evaluation Details (AS/OS/Admin). */}
+      {canAct && needsShopCode && (
+        <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <AlertCircle size={16} className="mt-0.5 shrink-0" />
+          <span>
+            <strong>Kailangan ng Shop Code bago mag-approve.</strong> Ito ang magiging
+            username ng franchisee sa kanyang login. Ilagay ito sa{' '}
+            <strong>Evaluation Details</strong> sa ibaba (Area Supervisor / Ops / Admin).
+          </span>
+        </div>
+      )}
 
       {/* Onboarding-specific details (self-service Partner Onboarding only) */}
       {isOnboarding && (
@@ -565,6 +602,67 @@ export default function ApplicationDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* One-time credential reveal. Deliberately NOT closable by backdrop —
+          the password exists nowhere else, so a stray click must not lose it. */}
+      <Modal
+        open={!!credentials}
+        onClose={() => setCredentials(null)}
+        title="Franchisee login created"
+        size="md"
+      >
+        {credentials && (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-amber-700">
+                <KeyRound size={14} /> Ibigay ito sa franchisee
+              </div>
+              <div className="mt-3 space-y-1.5 font-mono text-sm">
+                <div>
+                  <span className="text-gray-500">Username:</span>{' '}
+                  <span className="font-semibold">{credentials.username}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Temporary Password:</span>{' '}
+                  <span className="font-semibold">{credentials.tempPassword}</span>
+                </div>
+              </div>
+              <p className="mt-3 flex items-start gap-1.5 text-xs text-amber-800">
+                <AlertCircle size={13} className="mt-0.5 shrink-0" />
+                <strong>Ngayon lang ito makikita.</strong>&nbsp;Naka-encrypt ang password sa
+                database at hindi na mababasa muli. Kung mawala, kailangan ng bagong
+                password (reset) — hindi ito maibabalik.
+              </p>
+            </div>
+            <p className="text-sm text-gray-600">
+              Sa unang login niya, hihingin ang Government ID, Proof of Billing, Selfie at
+              Data Privacy bago siya makapasok sa ERP.
+            </p>
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="outline"
+                iconLeft={copied ? <CheckCircle2 size={15} /> : <Copy size={15} />}
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(
+                      `ZAPP Donuts login\nUsername: ${credentials.username}\nTemporary Password: ${credentials.tempPassword}`,
+                    );
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  } catch {
+                    addToast('error', 'Hindi ma-copy — kopyahin nang manual.');
+                  }
+                }}
+              >
+                {copied ? 'Copied!' : 'Copy Credentials'}
+              </Button>
+              <Button variant="primary" onClick={() => setCredentials(null)}>
+                Nakopya ko na
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Image Preview Modal */}
       <Modal

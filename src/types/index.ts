@@ -91,6 +91,13 @@ export type DistributorStatus = 'active' | 'inactive' | 'suspended';
 
 // --- Core Entities ---
 
+/**
+ * Franchisee first-time activation (migration 024).
+ * `not_activated` → `pending_verification` (docs submitted) → `active` (verified).
+ * Only an `active` account may reach the ERP.
+ */
+export type AccountStatus = 'not_activated' | 'pending_verification' | 'active';
+
 export interface User {
   id: string;
   name: string;
@@ -102,6 +109,18 @@ export interface User {
   subPartnerDistributorId?: string;
   areaIds?: string[];
   assignedStoreIds?: string[];
+  /**
+   * Activation gate. **undefined = not applicable** — every staff account and
+   * every franchisee created before migration 024 has no status and is never
+   * locked, so no backfill is needed.
+   */
+  accountStatus?: AccountStatus;
+  /**
+   * undefined = still on the system-generated temporary password. Drives the
+   * "Password Updated" display; the password itself is never stored (Supabase
+   * hashes it, and it is revealed exactly once at creation).
+   */
+  passwordChangedAt?: string;
 }
 
 export interface Plant {
@@ -282,6 +301,13 @@ export interface Application {
   gpsLat?: number;
   gpsLng?: number;
   pdfUrl?: string;
+  /**
+   * The login this application generated on approval (migration 024). Needed
+   * because the generated username email (<shopcode>@shop.zappdonuts.ph) never
+   * matches the applicant's own email, so the Login Credentials card cannot
+   * find the user any other way.
+   */
+  accountUserId?: string;
   status: ApplicationStatus;
   submittedAt: string;
   reviewedBy?: string;

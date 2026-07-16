@@ -104,23 +104,32 @@ export default function LoginPage() {
               </div>
             )}
 
-            {/* Email */}
+            {/* Email or Shop Code */}
             <div>
               <label
                 htmlFor="email"
                 className="block text-sm font-medium text-gray-700 mb-1.5"
               >
-                Email
+                Email or Shop Code
               </label>
               <input
                 id="email"
-                type="email"
+                // NOT type="email" — a franchisee logs in with their Shop Code,
+                // which has no "@", and the browser's built-in email validation
+                // would reject it before our code ever ran. resolveLoginEmail()
+                // decides which one was typed.
+                type="text"
+                autoCapitalize="none"
+                autoCorrect="off"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@zappdonuts.ph"
+                placeholder="you@zappdonuts.ph or your Shop Code"
                 className="w-full px-3.5 py-2.5 rounded-lg border border-gray-300 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-zapp-orange/40 focus:border-zapp-orange transition-colors"
                 required
               />
+              <p className="mt-1 text-xs text-gray-500">
+                Mga franchisee: gamitin ang inyong Shop Code.
+              </p>
             </div>
 
             {/* Password */}

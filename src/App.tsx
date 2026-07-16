@@ -15,6 +15,8 @@ import StoreDirectoryPage from '@/pages/public/StoreDirectoryPage'
 import ApplicationPage from '@/pages/public/ApplicationPage'
 import PartnerOnboardingPage from '@/pages/public/PartnerOnboardingPage'
 import AwaitingVerificationPage from '@/pages/public/AwaitingVerificationPage'
+import AccountVerificationPage from '@/pages/auth/AccountVerificationPage'
+import { isAccountLocked } from '@/lib/accountGate'
 import ReferralEntryPage from '@/pages/public/ReferralEntryPage'
 
 // Auth
@@ -74,6 +76,7 @@ import SettingsPage from '@/pages/admin/SettingsPage'
 function App() {
   const isAuthenticated = useStore((s) => s.isAuthenticated)
   const authLoading = useStore((s) => s.authLoading)
+  const currentUser = useStore((s) => s.currentUser)
   const pendingApplication = useStore((s) => s.pendingApplication)
   const restoreSession = useStore((s) => s.restoreSession)
 
@@ -102,6 +105,15 @@ function App() {
   // instead of the app.
   if (pendingApplication) {
     return <AwaitingVerificationPage />
+  }
+
+  // A franchisee whose account has not been verified has NO access to any
+  // module. This deliberately replaces the whole router rather than guarding
+  // each route: a per-route check leaves every unguarded path (and anything
+  // added later) reachable by typing the URL. Nothing renders but the
+  // verification screen until the account is `active`.
+  if (isAccountLocked(currentUser)) {
+    return <AccountVerificationPage />
   }
 
   return (

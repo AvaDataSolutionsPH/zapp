@@ -242,6 +242,8 @@ const mapApplicationToDB = (a: Application) => ({
   id_number: a.idNumber ?? null,
   // Login this application generated on approval (024).
   account_user_id: a.accountUserId ?? null,
+  // Per-document staff verification (026). JSONB — inner camelCase kept as-is.
+  document_reviews: a.documentReviews ?? {},
   // New Application Monitoring (migration 021) — form-filled.
   province: a.province ?? null,
   location: a.location ?? null,

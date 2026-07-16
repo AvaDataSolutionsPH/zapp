@@ -7,9 +7,6 @@ import {
   Phone,
   Mail,
   Building2,
-  FileImage,
-  IdCard,
-  Receipt,
   CheckCircle2,
   XCircle,
   ScrollText,
@@ -37,6 +34,7 @@ import { resolveLocation } from '@/lib/phRegions';
 import { canSetStatus, effectiveAreaSupervisorId, ROLE_LABELS } from '@/lib/applicationMonitoring';
 import { useStorageUrl } from '@/lib/useStorageUrl';
 import MonitoringFieldsCard from './MonitoringFieldsCard';
+import DocumentsSection from './DocumentsSection';
 
 // Resolves a private storage ref to a signed URL (one hook call per render) so
 // the reviewer can open the system-generated PDF copy of the application.
@@ -69,16 +67,8 @@ export default function ApplicationDetailPage() {
 
   const { addToast } = useToast();
 
-  // Resolve any Supabase storage refs into renderable URLs. Public
-  // bucket refs resolve to a permanent public URL; private bucket
-  // refs resolve to a fresh signed URL each render. Legacy mock
-  // URLs (e.g. https://placehold.co/...) pass through unchanged.
-  const storePhotoUrl = useStorageUrl(application?.storePhotoUrl);
-  const govIdUrl = useStorageUrl(application?.govIdUrl);
-  const proofOfBillingUrl = useStorageUrl(application?.proofOfBillingUrl);
-
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const [previewTitle, setPreviewTitle] = useState('');
+  // Document storage refs + their preview modal live in DocumentsSection now —
+  // each of the four tiles needs its own useStorageUrl hook.
   const [notes, setNotes] = useState(application?.notes ?? '');
   // Non-null only in the moment right after approval generated a login. Never
   // re-derivable — closing this dialog loses the password for good.
@@ -171,12 +161,6 @@ export default function ApplicationDetailPage() {
     }
   };
 
-  const openPreview = (url: string, title: string) => {
-    setPreviewImage(url);
-    setPreviewTitle(title);
-  };
-
-  const docPlaceholder = 'https://placehold.co/600x400/f97316/white?text=';
 
   return (
     <div className="p-6 space-y-6">
@@ -484,48 +468,10 @@ export default function ApplicationDetailPage() {
           Role decides which are editable; the rest render read-only. */}
       <MonitoringFieldsCard application={application} />
 
-      {/* Documents */}
-      <Card>
-        <CardHeader>
-          <h2 className="text-lg font-semibold text-gray-900">Documents</h2>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {[
-              { label: 'Store Photo', url: storePhotoUrl, icon: <FileImage size={20} /> },
-              { label: 'Government ID', url: govIdUrl, icon: <IdCard size={20} /> },
-              { label: 'Proof of Billing', url: proofOfBillingUrl, icon: <Receipt size={20} /> },
-            ].map((doc) => (
-              <button
-                key={doc.label}
-                onClick={() => openPreview(doc.url || `${docPlaceholder}${encodeURIComponent(doc.label)}`, doc.label)}
-                className="group relative rounded-xl border border-gray-200 bg-gray-50 overflow-hidden aspect-video flex items-center justify-center hover:border-zapp-orange transition-colors cursor-pointer"
-              >
-                {doc.url ? (
-                  <img
-                    src={doc.url}
-                    alt={doc.label}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = `${docPlaceholder}${encodeURIComponent(doc.label)}`;
-                    }}
-                  />
-                ) : (
-                  <div className="flex flex-col items-center gap-2 text-gray-400">
-                    {doc.icon}
-                    <span className="text-xs">{doc.label}</span>
-                  </div>
-                )}
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
-                  <span className="text-white opacity-0 group-hover:opacity-100 text-sm font-medium bg-black/50 px-3 py-1 rounded-full transition-opacity">
-                    Click to view
-                  </span>
-                </div>
-              </button>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      {/* Documents + per-document verification. Adding the Selfie and the
+          verify/reject actions moved this into its own component — the four
+          tiles each need their own useStorageUrl hook. */}
+      <DocumentsSection application={application} />
 
       {/* Reviewer Notes (read-only when already reviewed) */}
       {application.status !== 'pending' && application.notes && (
@@ -661,25 +607,6 @@ export default function ApplicationDetailPage() {
               </Button>
             </div>
           </div>
-        )}
-      </Modal>
-
-      {/* Image Preview Modal */}
-      <Modal
-        open={!!previewImage}
-        onClose={() => setPreviewImage(null)}
-        title={previewTitle}
-        size="lg"
-      >
-        {previewImage && (
-          <img
-            src={previewImage}
-            alt={previewTitle}
-            className="w-full rounded-lg"
-            onError={(e) => {
-              (e.target as HTMLImageElement).src = `${docPlaceholder}${encodeURIComponent(previewTitle)}`;
-            }}
-          />
         )}
       </Modal>
 

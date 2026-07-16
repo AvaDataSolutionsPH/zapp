@@ -98,6 +98,25 @@ export type DistributorStatus = 'active' | 'inactive' | 'suspended';
  */
 export type AccountStatus = 'not_activated' | 'pending_verification' | 'active';
 
+/**
+ * Per-document verification state (migration 026).
+ * `not_uploaded` / `uploaded` are DERIVED from whether the document's URL is
+ * set — only `verified` / `rejected` are ever stored.
+ */
+export type DocumentStatus = 'not_uploaded' | 'uploaded' | 'verified' | 'rejected';
+
+/** The four documents the Documents section tracks. */
+export type ApplicationDocumentKey = 'storePhoto' | 'govId' | 'proofOfBilling' | 'selfie';
+
+export interface DocumentReview {
+  status: 'verified' | 'rejected';
+  /** Required by the spec when rejecting — the reason shown to the franchisee. */
+  remarks?: string;
+  reviewedBy?: string;
+  reviewedByName?: string;
+  reviewedAt?: string;
+}
+
 export interface User {
   id: string;
   name: string;
@@ -308,6 +327,8 @@ export interface Application {
    * find the user any other way.
    */
   accountUserId?: string;
+  /** Staff verification per document (migration 026). Absent = nothing reviewed yet. */
+  documentReviews?: Partial<Record<ApplicationDocumentKey, DocumentReview>>;
   status: ApplicationStatus;
   submittedAt: string;
   reviewedBy?: string;

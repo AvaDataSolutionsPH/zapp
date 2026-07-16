@@ -26,6 +26,7 @@ import type {
   SalesMetric,
   Notification,
   AuditEntry,
+  ApplicationDocumentKey,
   SpecialOrder,
   EndingInventoryReview,
   EndingInventoryCorrectionItem,
@@ -53,6 +54,12 @@ import {
   specialOrders as mockSpecialOrders,
 } from '@/data/mockData';
 import { diffMonitoringFields, effectiveAreaSupervisorId } from '@/lib/applicationMonitoring';
+import {
+  allDocumentsVerified,
+  documentStatus,
+  DOCUMENT_LABELS,
+  DOCUMENT_STATUS_LABELS,
+} from '@/lib/documentVerification';
 import { resolveLocation } from '@/lib/phRegions';
 import { computeBillingsFromState } from '@/lib/billingComputations';
 import { computeStoreDeliveryStatus } from '@/lib/deliveryEnforcement';
@@ -235,6 +242,17 @@ interface AppStore {
     proofOfBillingUrl: string;
     selfieUrl: string;
   }) => Promise<void>;
+  /**
+   * Staff verify or reject one submitted document. When the LAST document is
+   * verified the franchisee's account flips to `active` in the same call —
+   * that is the moment they gain ERP access.
+   */
+  reviewDocument: (
+    applicationId: string,
+    key: ApplicationDocumentKey,
+    status: 'verified' | 'rejected',
+    remarks?: string,
+  ) => Promise<void>;
 
   // Distributors
   distributors: Distributor[];
@@ -1049,6 +1067,83 @@ export const useStore = create<AppStore>((set, get) => {
     } catch (err) {
       console.error('[useStore] submitAccountVerification failed, rolling back:', err);
       set({ currentUser: prevCurrent, demoUsers: prevUsers, applications: prevApplications });
+      throw err;
+    }
+  },
+
+  // Staff document review. Two writes when the last document lands: the review
+  // onto the application, and (only then) the account flip to `active`.
+  reviewDocument: async (applicationId, key, status, remarks) => {
+    const { currentUser, applications, demoUsers } = get();
+    if (!currentUser) throw new Error('Not signed in.');
+
+    const target = applications.find((a) => a.id === applicationId);
+    if (!target) throw new Error('Application not found.');
+
+    const now = new Date().toISOString();
+    const label = DOCUMENT_LABELS[key];
+    const previous = DOCUMENT_STATUS_LABELS[documentStatus(target, key)];
+
+    const updatedApp: Application = {
+      ...target,
+      documentReviews: {
+        ...target.documentReviews,
+        [key]: {
+          status,
+          remarks: remarks?.trim() || undefined,
+          reviewedBy: currentUser.id,
+          reviewedByName: currentUser.name,
+          reviewedAt: now,
+        },
+      },
+      auditLog: [
+        ...target.auditLog,
+        {
+          id: `audit-${uid()}`,
+          action: status === 'verified' ? 'document_verified' : 'document_rejected',
+          performedBy: currentUser.id,
+          performedByName: currentUser.name,
+          role: currentUser.role,
+          performedAt: now,
+          details: remarks?.trim() || `${label} ${status}`,
+          fieldModified: label,
+          previousValue: previous,
+          newValue: DOCUMENT_STATUS_LABELS[status],
+        },
+      ],
+    };
+
+    // Activation is decided from the UPDATED application, so verifying the last
+    // document activates in the same action rather than needing a second pass.
+    const shouldActivate = allDocumentsVerified(updatedApp) && !!target.accountUserId;
+    const accountUser = shouldActivate
+      ? demoUsers.find((u) => u.id === target.accountUserId)
+      : undefined;
+    const activatedUser: User | undefined =
+      accountUser && accountUser.accountStatus !== 'active'
+        ? { ...accountUser, accountStatus: 'active' }
+        : undefined;
+
+    const prevApplications = applications;
+    const prevUsers = demoUsers;
+
+    set({
+      applications: applications.map((a) => (a.id === applicationId ? updatedApp : a)),
+      demoUsers: activatedUser
+        ? demoUsers.map((u) => (u.id === activatedUser.id ? activatedUser : u))
+        : demoUsers,
+    });
+
+    if (get().dataSource !== 'db') return;
+
+    try {
+      await updateApplication(updatedApp);
+      // Only after the review is durable — activating first would grant access
+      // on the strength of a review that might not have saved.
+      if (activatedUser) await updateUser(activatedUser);
+    } catch (err) {
+      console.error('[useStore] reviewDocument failed, rolling back:', err);
+      set({ applications: prevApplications, demoUsers: prevUsers });
       throw err;
     }
   },

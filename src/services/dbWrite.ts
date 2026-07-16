@@ -13,6 +13,7 @@ import { supabase } from '@/lib/supabase';
 import type {
   Store,
   Application,
+  AuditEntry,
   Delivery,
   BeginningInventory,
   EndingInventory,
@@ -303,6 +304,29 @@ export async function updateApplication(app: Application): Promise<void> {
   if (error) throw error;
 }
 
+/**
+ * Append ONE entry to an application's Transaction History (migration 028).
+ *
+ * Not `updateApplication` with a longer array: that sends the caller's whole
+ * copy, so a stale slice silently deletes entries — and the slice goes stale
+ * routinely, because hydrateFromDB re-runs on every SIGNED_IN / TOKEN_REFRESHED
+ * and can land after an append. The RPC does `audit_log || entry` against the
+ * CURRENT row in one statement, so it cannot drop anything.
+ *
+ * RLS still applies (the function is SECURITY INVOKER) — this is an operation,
+ * not a privilege.
+ */
+export async function appendApplicationAudit(
+  applicationId: string,
+  entry: AuditEntry,
+): Promise<void> {
+  const { error } = await supabase.rpc('append_application_audit', {
+    p_app_id: applicationId,
+    p_entry: entry as never,
+  });
+  if (error) throw error;
+}
+
 export async function insertDelivery(delivery: Delivery): Promise<void> {
   const { error } = await supabase
     .from('deliveries')
@@ -465,6 +489,8 @@ const mapUserToDB = (u: User) => ({
   // Activation gate (024). null = not applicable (staff / pre-024 franchisees).
   account_status: u.accountStatus ?? null,
   password_changed_at: u.passwordChangedAt ?? null,
+  // Login audit (027). Self-updatable — 027 widened the guard trigger's clamp.
+  last_login_at: u.lastLoginAt ?? null,
 });
 
 export async function insertDistributor(d: Distributor): Promise<void> {

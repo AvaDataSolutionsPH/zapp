@@ -94,9 +94,11 @@ import {
   updateAreaSupervisor,
   insertUser,
   updateUser,
+  appendApplicationAudit,
 } from '@/services/dbWrite';
 import { signUpIsolated, generateTempPassword } from '@/lib/authSignup';
 import { resolveLoginEmail, shopCodeToEmail } from '@/lib/shopCodeAuth';
+import { resetPasswordForUser } from '@/services/resetPassword';
 
 // Compute the initial billing list from the seeded mock entities. This replaces
 // the previously hard-coded mockBillingRecords — billings are now derived from
@@ -253,6 +255,26 @@ interface AppStore {
     status: 'verified' | 'rejected',
     remarks?: string,
   ) => Promise<void>;
+  /**
+   * Issue a NEW temporary password for a franchisee (Phase F). Runs through the
+   * reset-password Edge Function because only the service_role key may set
+   * another user's password. Returns it for a one-time reveal — it is never
+   * stored and cannot be read back.
+   */
+  resetFranchiseePassword: (userId: string) => Promise<GeneratedLogin>;
+  /**
+   * The signed-in user replaces their own password (Phase G). Stamps
+   * passwordChangedAt, which is what flips the Login Credentials card off
+   * "Temporary".
+   */
+  changeOwnPassword: (newPassword: string) => Promise<void>;
+  /**
+   * Login audit (Phase G). Stamps lastLoginAt on the signed-in user and — the
+   * first time only — writes a `first_login` entry into their application's
+   * Transaction History. Idempotent and best-effort: a failure here must never
+   * block a sign-in.
+   */
+  recordLogin: () => Promise<void>;
 
   // Distributors
   distributors: Distributor[];
@@ -466,7 +488,14 @@ export const useStore = create<AppStore>((set, get) => {
     set({ currentUser: profile, isAuthenticated: true, pendingApplication: null, authLoading: false });
     // Fire-and-forget DB hydration. If the schema isn't migrated yet (or
     // network fails) the store keeps the mock data and stays usable.
-    void get().hydrateFromDB();
+    //
+    // The login audit runs AFTER hydration, not here: the franchisee's own
+    // application is only in the slice once hydration lands, and hydrateFromDB
+    // swallows its own errors, so this chain always settles. Deliberately NOT
+    // in restoreSession — a page refresh is not a new sign-in.
+    void get()
+      .hydrateFromDB()
+      .then(() => get().recordLogin());
     return true;
   },
 
@@ -1145,6 +1174,187 @@ export const useStore = create<AppStore>((set, get) => {
       console.error('[useStore] reviewDocument failed, rolling back:', err);
       set({ applications: prevApplications, demoUsers: prevUsers });
       throw err;
+    }
+  },
+
+  // Staff issue a new temporary password. The Edge Function is the authority —
+  // it re-checks the caller's scope with the service_role key, so this action
+  // does no gate of its own beyond needing a session.
+  resetFranchiseePassword: async (userId) => {
+    const { currentUser, demoUsers, applications } = get();
+    if (!currentUser) throw new Error('Not signed in.');
+
+    const target = demoUsers.find((u) => u.id === userId);
+    if (!target) throw new Error('Account not found.');
+
+    // Throws on refusal/absence — nothing local has changed yet, so there is
+    // nothing to roll back.
+    const result = await resetPasswordForUser(userId);
+
+    // The password IS changed now. Everything below is bookkeeping: it must
+    // never throw, or the caller would hide a password that already works.
+    const now = new Date().toISOString();
+    const app = applications.find((a) => a.accountUserId === userId);
+
+    // Back to "Temporary" — the function already cleared the column server-side.
+    const resetUser: User = { ...target, passwordChangedAt: undefined };
+    const entry: AuditEntry | null = app
+      ? {
+          id: `audit-${uid()}`,
+          action: 'password_reset',
+          performedBy: currentUser.id,
+          performedByName: currentUser.name,
+          role: currentUser.role,
+          performedAt: now,
+          details: `Issued a new temporary password for ${target.email}.`,
+          fieldModified: 'Password',
+          previousValue: target.passwordChangedAt ? 'Password Updated' : 'Temporary',
+          newValue: 'Temporary (reset)',
+        }
+      : null;
+
+    set({
+      demoUsers: demoUsers.map((u) => (u.id === userId ? resetUser : u)),
+      applications:
+        app && entry
+          ? applications.map((a) =>
+              a.id === app.id ? { ...a, auditLog: [...a.auditLog, entry] } : a,
+            )
+          : applications,
+    });
+
+    if (app && entry && get().dataSource === 'db') {
+      try {
+        // Appends server-side (028) — never re-sends the array, so a stale
+        // slice cannot delete history.
+        await appendApplicationAudit(app.id, entry);
+      } catch (err) {
+        console.error('[useStore] resetFranchiseePassword: audit write failed:', err);
+      }
+    }
+
+    return {
+      // The franchisee signs in with their Shop Code, not the synthetic address.
+      username: app?.shopCode ?? result.username,
+      email: result.username,
+      tempPassword: result.tempPassword,
+    };
+  },
+
+  // The user replaces their own password. Supabase Auth owns the password
+  // itself; passwordChangedAt is only our record that it is no longer the one
+  // we generated.
+  changeOwnPassword: async (newPassword) => {
+    const { currentUser, demoUsers, applications } = get();
+    if (!currentUser) throw new Error('Not signed in.');
+
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw new Error(error.message);
+
+    // Past this point the password has really changed — a rollback would only
+    // make our records disagree with Auth, so failures are logged, not thrown.
+    const now = new Date().toISOString();
+    const updatedUser: User = { ...currentUser, passwordChangedAt: now };
+    const app = applications.find((a) => a.accountUserId === currentUser.id);
+    const entry: AuditEntry | null = app
+      ? {
+          id: `audit-${uid()}`,
+          action: 'password_changed',
+          performedBy: currentUser.id,
+          performedByName: currentUser.name,
+          role: currentUser.role,
+          performedAt: now,
+          details: 'Franchisee set their own password.',
+          fieldModified: 'Password',
+          previousValue: 'Temporary',
+          newValue: 'Password Updated',
+        }
+      : null;
+
+    set({
+      currentUser: updatedUser,
+      demoUsers: demoUsers.map((u) => (u.id === updatedUser.id ? updatedUser : u)),
+      applications:
+        app && entry
+          ? applications.map((a) =>
+              a.id === app.id ? { ...a, auditLog: [...a.auditLog, entry] } : a,
+            )
+          : applications,
+    });
+
+    if (get().dataSource !== 'db') return;
+    try {
+      await updateUser(updatedUser);
+    } catch (err) {
+      console.error('[useStore] changeOwnPassword: passwordChangedAt not saved:', err);
+    }
+    if (app && entry) {
+      try {
+        await appendApplicationAudit(app.id, entry);
+      } catch (err) {
+        console.error('[useStore] changeOwnPassword: audit write failed:', err);
+      }
+    }
+  },
+
+  // Login audit. Called after hydration so the franchisee's own application is
+  // actually in the slice — before that there is nothing to append to.
+  recordLogin: async () => {
+    const { currentUser, demoUsers, applications } = get();
+    if (!currentUser) return;
+
+    // Prefer the hydrated DB row: currentUser may still be the in-memory seed
+    // profile from findProfileByEmail, and the guard trigger compares the WHOLE
+    // row — writing a stale copy back would be rejected outright.
+    const fresh = demoUsers.find((u) => u.id === currentUser.id) ?? currentUser;
+    const now = new Date().toISOString();
+    const updatedUser: User = { ...fresh, lastLoginAt: now };
+
+    // One entry per account, ever. Re-derived from the log itself so it stays
+    // idempotent across reloads, retries and re-hydration.
+    const app = applications.find((a) => a.accountUserId === currentUser.id);
+    const isFirst = !!app && !app.auditLog.some((e) => e.action === 'first_login');
+    const entry: AuditEntry | null =
+      app && isFirst
+        ? {
+            id: `audit-${uid()}`,
+            action: 'first_login',
+            performedBy: currentUser.id,
+            performedByName: currentUser.name,
+            role: currentUser.role,
+            performedAt: now,
+            details: 'Franchisee signed in for the first time.',
+            fieldModified: 'Login',
+            previousValue: 'Never signed in',
+            newValue: new Date(now).toLocaleString(),
+          }
+        : null;
+
+    set({
+      currentUser: updatedUser,
+      demoUsers: demoUsers.map((u) => (u.id === updatedUser.id ? updatedUser : u)),
+      applications:
+        app && entry
+          ? applications.map((a) =>
+              a.id === app.id ? { ...a, auditLog: [...a.auditLog, entry] } : a,
+            )
+          : applications,
+    });
+
+    if (get().dataSource !== 'db') return;
+    // Best-effort throughout: a sign-in must never fail because its own audit
+    // did. Both writes are self-updates permitted by migrations 025 + 027.
+    try {
+      await updateUser(updatedUser);
+    } catch (err) {
+      console.warn('[useStore] recordLogin: lastLoginAt not saved:', err);
+    }
+    if (app && entry) {
+      try {
+        await appendApplicationAudit(app.id, entry);
+      } catch (err) {
+        console.warn('[useStore] recordLogin: first_login audit not saved:', err);
+      }
     }
   },
 

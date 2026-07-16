@@ -35,6 +35,7 @@ import { canSetStatus, effectiveAreaSupervisorId, ROLE_LABELS } from '@/lib/appl
 import { useStorageUrl } from '@/lib/useStorageUrl';
 import MonitoringFieldsCard from './MonitoringFieldsCard';
 import DocumentsSection from './DocumentsSection';
+import LoginCredentialsCard from './LoginCredentialsCard';
 
 // Resolves a private storage ref to a signed URL (one hook call per render) so
 // the reviewer can open the system-generated PDF copy of the application.
@@ -467,6 +468,12 @@ export default function ApplicationDetailPage() {
       {/* New Application Monitoring — the department-owned evaluation fields.
           Role decides which are editable; the rest render read-only. */}
       <MonitoringFieldsCard application={application} />
+
+      {/* The generated login: username, password state, account status, privacy
+          acceptance + Reset Password. Renders itself away when the application
+          minted no login, or the role may not see credentials. Sits above
+          Documents because verifying those is what activates this account. */}
+      <LoginCredentialsCard application={application} />
 
       {/* Documents + per-document verification. Adding the Selfie and the
           verify/reject actions moved this into its own component — the four

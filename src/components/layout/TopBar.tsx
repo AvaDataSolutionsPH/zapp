@@ -8,9 +8,11 @@ import {
   LogOut,
   User,
   Shield,
+  KeyRound,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useStore } from '@/store/useStore';
+import ChangePasswordModal from '@/components/auth/ChangePasswordModal';
 import type { UserRole } from '@/types';
 
 // ── Route-to-title map ─────────────────────────────────────────
@@ -94,6 +96,7 @@ export function TopBar() {
 
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [roleMenuOpen, setRoleMenuOpen] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
 
   const userMenuRef = useRef<HTMLDivElement>(null);
   const roleMenuRef = useRef<HTMLDivElement>(null);
@@ -285,6 +288,18 @@ export function TopBar() {
                   <User size={16} />
                   Profile
                 </button>
+                {/* Every role can change its own password — the franchisee to
+                    get off the temporary one, everyone else on principle. */}
+                <button
+                  onClick={() => {
+                    setChangingPassword(true);
+                    setUserMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer bg-transparent border-none"
+                >
+                  <KeyRound size={16} />
+                  Change Password
+                </button>
                 <hr className="my-1 border-gray-100" />
                 <button
                   onClick={() => {
@@ -302,6 +317,8 @@ export function TopBar() {
           </div>
         </div>
       </div>
+
+      <ChangePasswordModal open={changingPassword} onClose={() => setChangingPassword(false)} />
     </header>
   );
 }

@@ -140,6 +140,12 @@ export interface User {
    * hashes it, and it is revealed exactly once at creation).
    */
   passwordChangedAt?: string;
+  /**
+   * Stamped on every successful sign-in (migration 027). undefined = has not
+   * signed in since that shipped. A full login history is deliberately NOT
+   * here — see the migration for why.
+   */
+  lastLoginAt?: string;
 }
 
 export interface Plant {

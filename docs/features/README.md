@@ -42,6 +42,7 @@ Copy `_TEMPLATE.md` when adding a feature doc.
 - [partner-onboarding](partner-onboarding.md) — self-service applicant flow (`/onboarding`): account creation + docs + selfie + 4 confirmations; awaiting-verification screen (Phase 1)
 - [account-creation](account-creation.md) — "New Account" (`/accounts/new`): create a login + entity for a PD/SPD/Area Supervisor with a temp password (owner/ops any; PD scoped)
 - [application-monitoring](application-monitoring.md) — ZAPP New Application Monitoring: per-department evaluation fields with field-level RBAC + batch Save; Status stays an action (Approve/Decline)
+- [franchisee-activation](franchisee-activation.md) — Login Credentials & First-Time Account Activation: Shop Code login, locked account until documents are verified, Login Credentials card, Reset Password (the project's only Edge Function)
 - [inventory-capture](inventory-capture.md) — Beginning/Ending Inventory data entry (manual-only counting, local DR OCR, no Gemini)
 - [ending-inventory-review](ending-inventory-review.md) — reviewer state machine (approve / needs-review / correction)
 - [billing-and-delivery-recompute](billing-and-delivery-recompute.md) — computed billings + auto delivery-status cascade

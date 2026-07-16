@@ -16,12 +16,14 @@
 // the browser with no way back to the login screen.
 
 import { useState } from 'react';
-import { Clock, LogOut, Lock, ShieldCheck } from 'lucide-react';
+import { Clock, LogOut, Lock, ShieldCheck, KeyRound } from 'lucide-react';
 import { Button, FileUpload } from '@/components/ui';
 import type { UploadedFile } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import { useStore } from '@/store/useStore';
 import { uploadFile, buildObjectPath } from '@/services/storage';
+import ChangePasswordModal from '@/components/auth/ChangePasswordModal';
+import { passwordState } from '@/lib/loginCredentials';
 
 export default function AccountVerificationPage() {
   const currentUser = useStore((s) => s.currentUser);
@@ -34,8 +36,13 @@ export default function AccountVerificationPage() {
   const [selfie, setSelfie] = useState<UploadedFile[]>([]);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
 
   const isPending = currentUser?.accountStatus === 'pending_verification';
+  // Their password was handed to them by another person. This screen is the
+  // first place they can make it theirs, and they cannot reach the TopBar menu
+  // (the account is locked) — so the prompt has to live here.
+  const onTempPassword = passwordState(currentUser ?? undefined) === 'temporary';
   const hasAllDocs = !!govId[0] && !!proof[0] && !!selfie[0];
   // Spec: "The Submit button shall remain disabled until the Data Privacy
   // checkbox has been accepted." Documents are required too — submitting
@@ -172,13 +179,43 @@ export default function AccountVerificationPage() {
           </div>
         )}
 
-        <button
-          onClick={() => void logout()}
-          className="mt-6 inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
-        >
-          <LogOut size={15} /> Sign out
-        </button>
+        {onTempPassword && (
+          <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-3 text-left">
+            <p className="text-xs text-amber-800">
+              You are still using the temporary password that was given to you. Please set your
+              own password.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2"
+              iconLeft={<KeyRound size={14} />}
+              onClick={() => setChangingPassword(true)}
+            >
+              Change Password
+            </Button>
+          </div>
+        )}
+
+        <div className="mt-6 flex justify-center gap-2">
+          {!onTempPassword && (
+            <button
+              onClick={() => setChangingPassword(true)}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+            >
+              <KeyRound size={15} /> Change Password
+            </button>
+          )}
+          <button
+            onClick={() => void logout()}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+          >
+            <LogOut size={15} /> Sign out
+          </button>
+        </div>
       </div>
+
+      <ChangePasswordModal open={changingPassword} onClose={() => setChangingPassword(false)} />
     </div>
   );
 }

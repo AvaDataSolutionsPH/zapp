@@ -53,6 +53,14 @@ export default function ApplicationsPage() {
     if (currentUser?.role === 'partner_distributor') {
       return allApplications.filter((a) => a.assignedDistributorId === currentUser.distributorId);
     }
+    // An SPD sees "Own Referral Code only". RLS (022) already scopes the rows it
+    // can fetch, but filter here too: it keeps the mock/no-DB path honest and
+    // stops an SPD falling through to the see-everything branch below.
+    if (currentUser?.role === 'sub_partner_distributor') {
+      return allApplications.filter(
+        (a) => a.assignedSubPartnerDistributorId === currentUser.subPartnerDistributorId,
+      );
+    }
     return allApplications;
   }, [allApplications, currentUser, areaSupervisors]);
 

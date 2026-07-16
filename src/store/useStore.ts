@@ -186,6 +186,13 @@ interface AppStore {
     reviewerId: string,
     notes?: string,
   ) => Promise<void>;
+  /**
+   * New Application Monitoring — batch-save the evaluation fields a department
+   * owns. Field-level permissions live in src/lib/applicationMonitoring.ts;
+   * this just persists whatever patch the caller assembled. Status is NOT
+   * settable here — approving has side effects, so it stays reviewApplication.
+   */
+  updateApplicationMonitoring: (id: string, patch: Partial<Application>) => Promise<void>;
 
   // Distributors
   distributors: Distributor[];
@@ -783,6 +790,29 @@ export const useStore = create<AppStore>((set, get) => {
         set({ applications: prevApplications, stores: prevStores, demoUsers: prevDemoUsers });
         throw userErr;
       }
+    }
+  },
+
+  // New Application Monitoring — batch save of the evaluation fields. Plain
+  // optimistic + background write + rollback: unlike reviewApplication there
+  // are no side effects (no store/login creation), so a single UPDATE is all
+  // that is needed. An audit entry per changed field lands in Phase 4.
+  updateApplicationMonitoring: async (id, patch) => {
+    const prevApplications = get().applications;
+    const target = prevApplications.find((a) => a.id === id);
+    if (!target) throw new Error('Application not found.');
+
+    const updated: Application = { ...target, ...patch };
+    set({ applications: prevApplications.map((a) => (a.id === id ? updated : a)) });
+
+    if (get().dataSource !== 'db') return;
+
+    try {
+      await updateApplication(updated);
+    } catch (err) {
+      console.error('[useStore] updateApplicationMonitoring: UPDATE failed, rolling back:', err);
+      set({ applications: prevApplications });
+      throw err;
     }
   },
 

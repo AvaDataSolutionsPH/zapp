@@ -29,7 +29,9 @@ import {
 } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import { ensureHttpUrl } from '@/lib/externalUrl';
+import { canSetStatus } from '@/lib/applicationMonitoring';
 import { useStorageUrl } from '@/lib/useStorageUrl';
+import MonitoringFieldsCard from './MonitoringFieldsCard';
 
 // Resolves a private storage ref to a signed URL (one hook call per render) so
 // the reviewer can open the system-generated PDF copy of the application.
@@ -109,8 +111,15 @@ export default function ApplicationDetailPage() {
   // get "Verify & Activate" (creates the partner login + store) / "Request Info"
   // / "Reject". Legacy /apply applications keep plain Approve / Decline.
   const isOnboarding = !!application.applicationNumber;
+  // Two gates: the application must still be open, AND the role must own Status.
+  // The role gate is new — Status used to be status-only, which let an Area
+  // Supervisor approve (RLS permits an AS row UPDATE). The monitoring module's
+  // RBAC table scopes Status to OS + Admin; partner_distributor is kept on top
+  // of that because approving its own-channel franchisees was an explicit boss
+  // request (commit 7796856 + migration 018). See lib/applicationMonitoring.
   const canAct =
-    application.status === 'pending' || application.status === 'needs_more_info';
+    (application.status === 'pending' || application.status === 'needs_more_info') &&
+    canSetStatus(currentUser?.role);
 
   const handleAction = async (action: 'approved' | 'declined' | 'needs_more_info') => {
     setActionLoading(true);
@@ -421,6 +430,10 @@ export default function ApplicationDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* New Application Monitoring — the department-owned evaluation fields.
+          Role decides which are editable; the rest render read-only. */}
+      <MonitoringFieldsCard application={application} />
 
       {/* Documents */}
       <Card>

@@ -81,11 +81,13 @@ const navSections: NavSection[] = [
       },
       {
         // PD sees the website applicants under its own channel (scoped in
-        // ApplicationsPage) and can approve the franchisees under it.
+        // ApplicationsPage) and can approve the franchisees under it. An SPD
+        // sees only its own-referral applications and can fill the PD/SD
+        // evaluation fields, but cannot approve (see lib/applicationMonitoring).
         label: 'New Applications',
         path: '/applications',
         icon: FileText,
-        allowedRoles: ['partner_distributor'],
+        allowedRoles: ['partner_distributor', 'sub_partner_distributor'],
       },
       {
         label: 'Stores',

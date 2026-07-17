@@ -53,7 +53,7 @@ import {
   notifications as mockNotifications,
   specialOrders as mockSpecialOrders,
 } from '@/data/mockData';
-import { diffMonitoringFields, effectiveAreaSupervisorId } from '@/lib/applicationMonitoring';
+import { diffMonitoringFields, effectiveAreaSupervisorId, marketSourceSummary } from '@/lib/applicationMonitoring';
 import {
   allDocumentsVerified,
   documentStatus,
@@ -973,12 +973,18 @@ export const useStore = create<AppStore>((set, get) => {
     const target = prevApplications.find((a) => a.id === id);
     if (!target) throw new Error('Application not found.');
 
-    // The pure diff can't know domain lookups — hand it the plant name.
-    const changes = diffMonitoringFields(target, patch, (field, value) =>
-      field === 'assignedPlantId'
-        ? (plants.find((p) => p.id === value)?.name ?? undefined)
-        : undefined,
-    );
+    // The pure diff can't know domain lookups — hand it the plant name, and
+    // render the Market Source array as its readable labels (the "Other" text
+    // is logged separately via its own field).
+    const changes = diffMonitoringFields(target, patch, (field, value) => {
+      if (field === 'assignedPlantId') {
+        return plants.find((p) => p.id === value)?.name ?? undefined;
+      }
+      if (field === 'marketSource') {
+        return marketSourceSummary(value as string[] | undefined);
+      }
+      return undefined;
+    });
     const now = new Date().toISOString();
     const entries: AuditEntry[] = changes.map((c) => ({
       id: `audit-${uid()}`,

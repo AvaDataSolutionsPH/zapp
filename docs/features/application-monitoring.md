@@ -41,7 +41,7 @@ sees the whole picture; only the input is withheld.
 
 | Role | Editable |
 |---|---|
-| PD / SD | Google Maps Picture, Google Maps Link, Lat/Lng, Market Source, Plant, Remarks (PD/SD) |
+| PD / SD | Google Maps Picture, Google Maps Link, Lat/Lng, Market Source (checklist), Plant, Remarks (PD/SD) |
 | AS | Lat/Lng, Market Source, Comparable, ADS, RTC, Shop Code, Plant, Remarks (AS) |
 | OS | Market Source, Comparable, ADS, RTC, Shop Code, Plant, Remarks (OS) |
 | Admin | everything |
@@ -50,6 +50,22 @@ sees the whole picture; only the input is withheld.
 > columns. A role with row UPDATE could in principle write any column. Column
 > enforcement would need a trigger — deliberately out of scope, consistent with
 > every other role in this app.
+
+### Field shapes (post-boss-feedback)
+- **Market Source** is a **multi-select checklist** (boss: a site can neighbour
+  several traits at once), not a single dropdown. Options live in
+  `MARKET_SOURCE_OPTIONS` (`applicationMonitoring.ts`); `other` reveals a
+  free-text box stored in `marketSourceOther`. Data model: `marketSource:
+  string[]` stored as **JSONB** (migration 030 converts the old TEXT column and
+  wraps the two legacy single values into 1-element arrays); `market_source_other`
+  is a new TEXT column. The reusable `CheckboxGroup` UI component supports both
+  single and multi (`multiple` prop) per the boss's "support both" note — Market
+  Source uses multi. `marketSourceSummary()` renders the array for the read-only
+  view + audit log. The list filter matches any application whose array
+  **includes** the chosen trait.
+- **Comparable** and **ADS** are **free-text boxes** (boss: "box lang"), not
+  Yes/No dropdowns. `comparable`/`ads` are plain `string`; no migration (TEXT
+  columns). List filters are case-insensitive substring matches.
 
 ## Status is an ACTION, not a Save-able field
 The spec contradicts itself — the field list annotates Status "filled up by

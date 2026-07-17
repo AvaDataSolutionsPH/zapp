@@ -207,6 +207,51 @@ export const ROLE_LABELS: Partial<Record<UserRole, string>> = {
   franchisee_direct: 'Franchisee',
 };
 
+/**
+ * Market Source is a MULTI-SELECT checklist of location characteristics (boss
+ * request — a site can neighbour several of these at once). The order here is
+ * the order shown in the checklist. `other` reveals a free-text box whose value
+ * is stored in `marketSourceOther`.
+ */
+export const MARKET_SOURCE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'no_market_source', label: 'No Market Source' },
+  { value: 'no_delivery_route', label: 'No Delivery Route' },
+  { value: 'low_foot_traffic', label: 'Low Foot Traffic' },
+  { value: 'existing_franchisee_nearby', label: 'Existing Franchisee Nearby' },
+  { value: 'schools', label: 'Schools' },
+  { value: 'church', label: 'Church' },
+  { value: 'talipapa', label: 'Talipapa' },
+  { value: 'public_market', label: 'Public Market' },
+  { value: 'town_center', label: 'Town Center / Poblacion' },
+  { value: 'municipality_hall', label: 'Municipality Hall' },
+  { value: 'terminal', label: 'Terminal' },
+  { value: 'drop_point', label: 'Drop Point (Bus / Jeep / PUV)' },
+  { value: 'high_foot_traffic', label: 'High Foot Traffic' },
+  { value: 'other', label: 'Other' },
+];
+
+export const MARKET_SOURCE_LABELS: Record<string, string> = Object.fromEntries(
+  MARKET_SOURCE_OPTIONS.map((o) => [o.value, o.label]),
+);
+
+/**
+ * The selected market sources as one readable string — for the read-only view
+ * and the audit log. Unknown keys (e.g. the two obsolete single-select values
+ * from before migration 030) pass through as-is rather than vanish. The custom
+ * "Other" text is appended in parentheses.
+ */
+export const marketSourceSummary = (
+  values: string[] | undefined,
+  other?: string,
+): string => {
+  const list = (values ?? []).map((v) =>
+    v === 'other' && other?.trim()
+      ? `Other: ${other.trim()}`
+      : (MARKET_SOURCE_LABELS[v] ?? v),
+  );
+  return list.length ? list.join(', ') : '—';
+};
+
 /** Option-style values → their display text (so the log reads "Walk-in", not "walk_in"). */
 export const VALUE_LABELS: Record<string, string> = {
   facebook: 'Facebook',
@@ -233,6 +278,7 @@ const FIELD_LABELS: Record<string, string> = {
   lat: 'Latitude',
   lng: 'Longitude',
   marketSource: 'Market Source',
+  marketSourceOther: 'Market Source (Other)',
   comparable: 'Comparable',
   ads: 'ADS',
   rtc: 'RTC',

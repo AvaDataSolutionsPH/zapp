@@ -19,24 +19,21 @@
 
 import { useMemo, useState } from 'react';
 import { Save, MapPin, ExternalLink, Undo2 } from 'lucide-react';
-import { Card, CardHeader, CardContent, CardFooter, Button, Input, Select, FileUpload } from '@/components/ui';
+import { Card, CardHeader, CardContent, CardFooter, Button, Input, Select, CheckboxGroup, FileUpload } from '@/components/ui';
 import type { SelectOption, UploadedFile } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import { useStore } from '@/store/useStore';
 import { useStorageUrl } from '@/lib/useStorageUrl';
 import { ensureHttpUrl } from '@/lib/externalUrl';
 import { uploadFile, buildObjectPath } from '@/services/storage';
-import { canEditField, canEditAnyField, VALUE_LABELS } from '@/lib/applicationMonitoring';
-import type { Application, MarketSource, RtcStatus } from '@/types';
-
-const MARKET_SOURCE_OPTIONS: SelectOption[] = [
-  { value: '', label: '—' },
-  { value: 'facebook', label: 'Facebook' },
-  { value: 'referral', label: 'Referral' },
-  { value: 'walk_in', label: 'Walk-in' },
-  { value: 'website', label: 'Website' },
-  { value: 'others', label: 'Others' },
-];
+import {
+  canEditField,
+  canEditAnyField,
+  VALUE_LABELS,
+  MARKET_SOURCE_OPTIONS,
+  marketSourceSummary,
+} from '@/lib/applicationMonitoring';
+import type { Application, RtcStatus } from '@/types';
 
 const RTC_OPTIONS: SelectOption[] = [
   { value: '', label: '—' },
@@ -83,7 +80,8 @@ export default function MonitoringFieldsCard({ application }: { application: App
   const [googleMapsLink, setGoogleMapsLink] = useState(application.googleMapsLink ?? '');
   const [lat, setLat] = useState(String(application.lat ?? ''));
   const [lng, setLng] = useState(String(application.lng ?? ''));
-  const [marketSource, setMarketSource] = useState(application.marketSource ?? '');
+  const [marketSource, setMarketSource] = useState<string[]>(application.marketSource ?? []);
+  const [marketSourceOther, setMarketSourceOther] = useState(application.marketSourceOther ?? '');
   const [comparable, setComparable] = useState(application.comparable ?? '');
   const [ads, setAds] = useState(application.ads ?? '');
   const [rtc, setRtc] = useState(application.rtc ?? '');
@@ -110,7 +108,8 @@ export default function MonitoringFieldsCard({ application }: { application: App
       googleMapsLink !== (application.googleMapsLink ?? '') ||
       lat !== String(application.lat ?? '') ||
       lng !== String(application.lng ?? '') ||
-      marketSource !== (application.marketSource ?? '') ||
+      JSON.stringify(marketSource) !== JSON.stringify(application.marketSource ?? []) ||
+      marketSourceOther !== (application.marketSourceOther ?? '') ||
       comparable !== (application.comparable ?? '') ||
       ads !== (application.ads ?? '') ||
       rtc !== (application.rtc ?? '') ||
@@ -121,8 +120,8 @@ export default function MonitoringFieldsCard({ application }: { application: App
       remarksOs !== (application.remarksOs ?? '') ||
       mapsPicture.length > 0,
     [
-      application, googleMapsLink, lat, lng, marketSource, comparable, ads, rtc,
-      shopCode, plantId, remarksPdSd, remarksAs, remarksOs, mapsPicture,
+      application, googleMapsLink, lat, lng, marketSource, marketSourceOther, comparable,
+      ads, rtc, shopCode, plantId, remarksPdSd, remarksAs, remarksOs, mapsPicture,
     ],
   );
 
@@ -130,7 +129,8 @@ export default function MonitoringFieldsCard({ application }: { application: App
     setGoogleMapsLink(application.googleMapsLink ?? '');
     setLat(String(application.lat ?? ''));
     setLng(String(application.lng ?? ''));
-    setMarketSource(application.marketSource ?? '');
+    setMarketSource(application.marketSource ?? []);
+    setMarketSourceOther(application.marketSourceOther ?? '');
     setComparable(application.comparable ?? '');
     setAds(application.ads ?? '');
     setRtc(application.rtc ?? '');
@@ -170,7 +170,13 @@ export default function MonitoringFieldsCard({ application }: { application: App
         patch.lat = parsedLat;
         patch.lng = parsedLng;
       }
-      if (can('marketSource')) patch.marketSource = (marketSource || undefined) as MarketSource | undefined;
+      if (can('marketSource')) {
+        patch.marketSource = marketSource.length ? marketSource : undefined;
+        // The custom text only means anything while "Other" is ticked.
+        patch.marketSourceOther = marketSource.includes('other')
+          ? marketSourceOther.trim() || undefined
+          : undefined;
+      }
       if (can('comparable')) patch.comparable = comparable.trim() || undefined;
       if (can('ads')) patch.ads = ads.trim() || undefined;
       if (can('rtc')) patch.rtc = (rtc || undefined) as RtcStatus | undefined;
@@ -279,15 +285,34 @@ export default function MonitoringFieldsCard({ application }: { application: App
             </>
           )}
 
+          {/* Market Source — a multi-select checklist of location traits
+              (boss request); "Other" reveals a free-text box. Full width. */}
           {can('marketSource') ? (
-            <Select
-              label="Market Source"
-              options={MARKET_SOURCE_OPTIONS}
-              value={marketSource}
-              onChange={(e) => setMarketSource(e.target.value as MarketSource)}
-            />
+            <div className="sm:col-span-2">
+              <CheckboxGroup
+                label="Market Source"
+                options={MARKET_SOURCE_OPTIONS}
+                value={marketSource}
+                onChange={setMarketSource}
+                multiple
+              />
+              {marketSource.includes('other') && (
+                <div className="mt-2">
+                  <Input
+                    placeholder="Isulat ang ibang market source"
+                    value={marketSourceOther}
+                    onChange={(e) => setMarketSourceOther(e.target.value)}
+                  />
+                </div>
+              )}
+            </div>
           ) : (
-            <ReadOnly label="Market Source" value={application.marketSource && LABELS[application.marketSource]} />
+            <div className="sm:col-span-2">
+              <ReadOnly
+                label="Market Source"
+                value={marketSourceSummary(application.marketSource, application.marketSourceOther)}
+              />
+            </div>
           )}
 
           {can('assignedPlantId') ? (

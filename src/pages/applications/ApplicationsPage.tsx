@@ -25,7 +25,7 @@ import {
   Skeleton,
 } from '@/components/ui';
 import type { TableColumn, SelectOption } from '@/components/ui';
-import { applicationType, effectiveAreaSupervisorId } from '@/lib/applicationMonitoring';
+import { applicationType, effectiveAreaSupervisorId, MARKET_SOURCE_OPTIONS } from '@/lib/applicationMonitoring';
 import { ensureHttpUrl } from '@/lib/externalUrl';
 import type { Application } from '@/types';
 
@@ -167,7 +167,7 @@ export default function ApplicationsPage() {
       );
     }
     if (marketSourceFilter) {
-      result = result.filter((a) => a.marketSource === marketSourceFilter);
+      result = result.filter((a) => a.marketSource?.includes(marketSourceFilter));
     }
     if (rtcFilter) {
       result = result.filter((a) => a.rtc === rtcFilter);
@@ -281,13 +281,11 @@ export default function ApplicationsPage() {
       ...scoped.map((s) => ({ value: s.id, label: s.name })),
     ];
   }, [subPartnerDistributors, currentUser]);
+  // Market Source is now a multi-select checklist; the filter matches any
+  // application whose selected list INCLUDES the chosen trait.
   const marketSourceOptions: SelectOption[] = [
     { value: '', label: 'All Market Sources' },
-    { value: 'facebook', label: 'Facebook' },
-    { value: 'referral', label: 'Referral' },
-    { value: 'walk_in', label: 'Walk-in' },
-    { value: 'website', label: 'Website' },
-    { value: 'others', label: 'Others' },
+    ...MARKET_SOURCE_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
   ];
   const rtcOptions: SelectOption[] = [
     { value: '', label: 'All RTC' },

@@ -4,6 +4,8 @@ export { Badge } from './Badge';
 export { Input } from './Input';
 export { Select } from './Select';
 export type { SelectOption } from './Select';
+export { CheckboxGroup } from './CheckboxGroup';
+export type { CheckboxOption } from './CheckboxGroup';
 export { Modal } from './Modal';
 export { Drawer } from './Drawer';
 export { Table } from './Table';

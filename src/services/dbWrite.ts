@@ -252,7 +252,9 @@ const mapApplicationToDB = (a: Application) => ({
   // ...PD/SD-filled during evaluation.
   google_maps_picture_url: a.googleMapsPictureUrl ?? null,
   google_maps_link: a.googleMapsLink ?? null,
+  // JSONB array of option keys (migration 030); passed through verbatim.
   market_source: a.marketSource ?? null,
+  market_source_other: a.marketSourceOther ?? null,
   remarks_pd_sd: a.remarksPdSd ?? null,
   // ...AS/OS-filled during evaluation.
   comparable: a.comparable ?? null,

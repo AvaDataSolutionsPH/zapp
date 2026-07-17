@@ -29,7 +29,13 @@ export type ApplicationStatus = 'pending' | 'approved' | 'declined' | 'needs_mor
 // The module labels `declined` as "Disapproved"; the stored value stays
 // `declined` for back-compat with every existing row and consumer.
 
-/** Where the applicant came from. Set by PD/SD/AS/OS during evaluation. */
+/**
+ * Legacy single-select Market Source union. Market Source became a MULTI-SELECT
+ * checklist of location characteristics (boss request) — `marketSource` is now
+ * `string[]` of option keys from MARKET_SOURCE_OPTIONS in applicationMonitoring,
+ * plus `marketSourceOther` for the free text when "other" is ticked. Kept
+ * exported for back-compat.
+ */
 export type MarketSource = 'facebook' | 'referral' | 'walk_in' | 'website' | 'others';
 
 /**
@@ -304,7 +310,11 @@ export interface Application {
   // Filled by PD/SD during evaluation.
   googleMapsPictureUrl?: string;
   googleMapsLink?: string;
-  marketSource?: MarketSource;
+  // Multi-select checklist of location characteristics (keys from
+  // MARKET_SOURCE_OPTIONS). marketSourceOther holds the custom text when the
+  // "other" key is included.
+  marketSource?: string[];
+  marketSourceOther?: string;
   remarksPdSd?: string;
   // Filled by AS/OS during evaluation.
   // Free text — staff type these (boss: "box lang"). ADS = Average Daily Sales.

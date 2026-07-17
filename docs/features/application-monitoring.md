@@ -165,7 +165,10 @@ called for.)
 **Primary** (always visible): Status · Area (Province) · Area Supervisor · Type ·
 Application Date (From/To) · Search. **Secondary** (behind an *Advanced filters*
 toggle): Market Source · RTC · Comparable · ADS · Shop Code · Google Maps Link ·
-Store Google Maps Picture · Plant. Plus a **Reset Filters** button and a
+Store Google Maps Picture · Plant. Comparable + ADS are free-text substring
+filters (they became free-text boxes per the boss — ops/area supervisors type
+the value; ADS = Average Daily Sales); the rest are Selects. Plus a **Reset
+Filters** button and a
 `{filtered} of {total}` counter. Every setter also resets to page 1 — filtering
 while on page 3 would otherwise land on an empty page.
 

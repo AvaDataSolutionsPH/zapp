@@ -32,7 +32,12 @@ export type ApplicationStatus = 'pending' | 'approved' | 'declined' | 'needs_mor
 /** Where the applicant came from. Set by PD/SD/AS/OS during evaluation. */
 export type MarketSource = 'facebook' | 'referral' | 'walk_in' | 'website' | 'others';
 
-/** Comparable / ADS — simple staff-answered yes-no checks. */
+/**
+ * Legacy Yes/No union. Comparable and ADS were briefly Yes/No dropdowns; the
+ * boss asked for free-text boxes instead (ops/area supervisors type the value —
+ * e.g. a peso Average Daily Sales figure), so both are now plain `string`. Kept
+ * exported for back-compat with any stored 'yes'/'no' rows and VALUE_LABELS.
+ */
 export type YesNo = 'yes' | 'no';
 
 /** RTC runs its own approval track, separate from the application Status. */
@@ -302,8 +307,9 @@ export interface Application {
   marketSource?: MarketSource;
   remarksPdSd?: string;
   // Filled by AS/OS during evaluation.
-  comparable?: YesNo;
-  ads?: YesNo;
+  // Free text — staff type these (boss: "box lang"). ADS = Average Daily Sales.
+  comparable?: string;
+  ads?: string;
   rtc?: RtcStatus;
   remarksAs?: string;
   remarksOs?: string;

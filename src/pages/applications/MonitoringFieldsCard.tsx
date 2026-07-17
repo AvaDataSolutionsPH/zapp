@@ -27,7 +27,7 @@ import { useStorageUrl } from '@/lib/useStorageUrl';
 import { ensureHttpUrl } from '@/lib/externalUrl';
 import { uploadFile, buildObjectPath } from '@/services/storage';
 import { canEditField, canEditAnyField, VALUE_LABELS } from '@/lib/applicationMonitoring';
-import type { Application, MarketSource, YesNo, RtcStatus } from '@/types';
+import type { Application, MarketSource, RtcStatus } from '@/types';
 
 const MARKET_SOURCE_OPTIONS: SelectOption[] = [
   { value: '', label: '—' },
@@ -36,12 +36,6 @@ const MARKET_SOURCE_OPTIONS: SelectOption[] = [
   { value: 'walk_in', label: 'Walk-in' },
   { value: 'website', label: 'Website' },
   { value: 'others', label: 'Others' },
-];
-
-const YES_NO_OPTIONS: SelectOption[] = [
-  { value: '', label: '—' },
-  { value: 'yes', label: 'Yes' },
-  { value: 'no', label: 'No' },
 ];
 
 const RTC_OPTIONS: SelectOption[] = [
@@ -177,8 +171,8 @@ export default function MonitoringFieldsCard({ application }: { application: App
         patch.lng = parsedLng;
       }
       if (can('marketSource')) patch.marketSource = (marketSource || undefined) as MarketSource | undefined;
-      if (can('comparable')) patch.comparable = (comparable || undefined) as YesNo | undefined;
-      if (can('ads')) patch.ads = (ads || undefined) as YesNo | undefined;
+      if (can('comparable')) patch.comparable = comparable.trim() || undefined;
+      if (can('ads')) patch.ads = ads.trim() || undefined;
       if (can('rtc')) patch.rtc = (rtc || undefined) as RtcStatus | undefined;
       if (can('shopCode')) patch.shopCode = shopCode.trim() || undefined;
       if (can('assignedPlantId') && plantId) patch.assignedPlantId = plantId;
@@ -307,27 +301,28 @@ export default function MonitoringFieldsCard({ application }: { application: App
             <ReadOnly label="Plant" value={plantName} />
           )}
 
-          {/* ── AS/OS ─────────────────────────────────────────── */}
+          {/* ── AS/OS — free-text boxes (boss: "box lang, ops/area supv ang
+                 magta-type"). ADS = Average Daily Sales. ──────────── */}
           {can('comparable') ? (
-            <Select
+            <Input
               label="Comparable"
-              options={YES_NO_OPTIONS}
+              placeholder="Type value"
               value={comparable}
-              onChange={(e) => setComparable(e.target.value as YesNo)}
+              onChange={(e) => setComparable(e.target.value)}
             />
           ) : (
-            <ReadOnly label="Comparable" value={application.comparable && LABELS[application.comparable]} />
+            <ReadOnly label="Comparable" value={application.comparable} />
           )}
 
           {can('ads') ? (
-            <Select
+            <Input
               label="ADS"
-              options={YES_NO_OPTIONS}
+              placeholder="Average Daily Sales"
               value={ads}
-              onChange={(e) => setAds(e.target.value as YesNo)}
+              onChange={(e) => setAds(e.target.value)}
             />
           ) : (
-            <ReadOnly label="ADS" value={application.ads && LABELS[application.ads]} />
+            <ReadOnly label="ADS" value={application.ads} />
           )}
 
           {can('rtc') ? (

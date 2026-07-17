@@ -172,11 +172,15 @@ export default function ApplicationsPage() {
     if (rtcFilter) {
       result = result.filter((a) => a.rtc === rtcFilter);
     }
-    if (comparableFilter) {
-      result = result.filter((a) => a.comparable === comparableFilter);
+    // Comparable / ADS are free text now, so these match as case-insensitive
+    // substrings rather than an exact Yes/No.
+    if (comparableFilter.trim()) {
+      const q = comparableFilter.trim().toLowerCase();
+      result = result.filter((a) => a.comparable?.toLowerCase().includes(q));
     }
-    if (adsFilter) {
-      result = result.filter((a) => a.ads === adsFilter);
+    if (adsFilter.trim()) {
+      const q = adsFilter.trim().toLowerCase();
+      result = result.filter((a) => a.ads?.toLowerCase().includes(q));
     }
     // "with / without" presence filters
     if (shopCodeFilter) {
@@ -290,11 +294,6 @@ export default function ApplicationsPage() {
     { value: 'pending', label: 'Pending' },
     { value: 'approved', label: 'Approved' },
     { value: 'disapproved', label: 'Disapproved' },
-  ];
-  const yesNoOptions = (label: string): SelectOption[] => [
-    { value: '', label },
-    { value: 'yes', label: 'Yes' },
-    { value: 'no', label: 'No' },
   ];
   const presenceOptions = (all: string, withL: string, withoutL: string): SelectOption[] => [
     { value: '', label: all },
@@ -527,17 +526,19 @@ export default function ApplicationsPage() {
                 onChange={(e) => { setRtcFilter(e.target.value); setPage(1); }}
                 placeholder="RTC"
               />
-              <Select
-                options={yesNoOptions('All Comparable')}
+              <input
+                type="text"
                 value={comparableFilter}
                 onChange={(e) => { setComparableFilter(e.target.value); setPage(1); }}
+                className="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-zapp-orange/30 focus:border-zapp-orange"
                 placeholder="Comparable"
               />
-              <Select
-                options={yesNoOptions('All ADS')}
+              <input
+                type="text"
                 value={adsFilter}
                 onChange={(e) => { setAdsFilter(e.target.value); setPage(1); }}
-                placeholder="ADS"
+                className="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-zapp-orange/30 focus:border-zapp-orange"
+                placeholder="ADS (Average Daily Sales)"
               />
               <Select
                 options={presenceOptions('All Shop Codes', 'With Shop Code', 'Without Shop Code')}

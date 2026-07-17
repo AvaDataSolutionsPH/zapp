@@ -156,10 +156,26 @@ The fallback is what makes an **empty** master list safe: until an admin fills i
 in, assignment behaves exactly as before Phase 5.
 
 ### AS scope
-`ApplicationsPage` now scopes an Area Supervisor by `effectiveAreaSupervisorId`,
-so assigning a province in admin settings instantly re-scopes that AS's queue.
+`ApplicationsPage` scopes an Area Supervisor by `effectiveAreaSupervisorId`, so
+assigning a province in admin settings instantly re-scopes that AS's queue.
 (This is the province-based visibility the spec's "assigned provinces" wording
 called for.)
+
+**⚠️ RLS must agree with the client, or the AS sees nothing (migration 029).**
+The client resolves ownership at read time; RLS is row-level and originally
+filtered `area_manager` by the FROZEN `assigned_area_supervisor_id = ANY(area_ids)`.
+Two faults made an AS see ZERO: (1) the seeded AS user's `users.area_ids` held
+`area-albay-*` ids, not the `am-*` `area_supervisors` ids, so the membership test
+never matched; (2) a Sorsogon application with a NULL frozen id resolves to the
+Sorsogon AS on the client, but RLS only saw the NULL and dropped the row before
+the client could resolve it. Migration 029 adds `app_area_supervisor_id()` (the
+caller's AS row, matched by id **or name** like the client) and
+`app_area_owns_application(province, frozen)` (`COALESCE(resolveByProvince, frozen)
+= me` — the exact `??` of `effectiveAreaSupervisorId`), and rewrites `apps_select`
++ `apps_update` to use it. ⬜ The name-match is fragile (two same-named
+supervisors collide); a real `users → area_supervisors` FK is the proper fix.
+⬜ `stores` / `deliveries` area_manager RLS may share the `area_ids` assumption —
+check if AS scoping there is ever exercised.
 
 ## Filters (Phase 6)
 **Primary** (always visible): Status · Area (Province) · Area Supervisor · Type ·

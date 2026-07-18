@@ -7,8 +7,8 @@
 //
 //   CLEARS (operational + demo franchisees):
 //     notifications, special_orders, sales_metrics, forecasts,
-//     packaging_orders, payments, ending_inventories, beginning_inventories,
-//     deliveries, applications, stores
+//     packaging_orders, payments, billing_revisions, ending_inventories,
+//     beginning_inventories, deliveries, applications, stores
 //
 //   KEEPS (scaffolding — logins, org, catalog, channel codes):
 //     users, distributors, sub_partner_distributors, area_supervisors,
@@ -55,6 +55,9 @@ const CLEAR_ORDER = [
   'forecasts',
   'packaging_orders',
   'payments',
+  // billing_revisions (migration 019) has a FK to deliveries, so it MUST be
+  // cleared before deliveries or the delete fails with a 23503.
+  'billing_revisions',
   'ending_inventories',
   'beginning_inventories',
   'deliveries',

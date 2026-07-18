@@ -77,17 +77,20 @@ const navSections: NavSection[] = [
         label: 'Applications',
         path: '/applications',
         icon: FileText,
-        allowedRoles: ['owner', 'operations_manager', 'area_manager'],
+        allowedRoles: ['owner', 'operations_manager'],
       },
       {
         // PD sees the website applicants under its own channel (scoped in
         // ApplicationsPage) and can approve the franchisees under it. An SPD
         // sees only its own-referral applications and can fill the PD/SD
         // evaluation fields, but cannot approve (see lib/applicationMonitoring).
+        // The Area Supervisor uses the same "New Applications" label as the PD
+        // (boss request) — it points to the same scoped page; only the wording
+        // matched so the AS isn't confused by a different name for the same thing.
         label: 'New Applications',
         path: '/applications',
         icon: FileText,
-        allowedRoles: ['partner_distributor', 'sub_partner_distributor'],
+        allowedRoles: ['partner_distributor', 'sub_partner_distributor', 'area_manager'],
       },
       {
         label: 'Stores',

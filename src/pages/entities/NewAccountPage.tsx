@@ -272,9 +272,13 @@ export default function NewAccountPage() {
                   <>
                     <Input label="Full Name" placeholder="Juan Dela Cruz" value={name}
                       onChange={(e) => setName(e.target.value)} error={errors.name} iconLeft={<User size={16} />} />
-                    <Input label="Email" type="email" placeholder="juan@example.com" value={email}
+                    {/* Free text on purpose: HQ staff belong on @zappdonuts.com,
+                        but a Partner Distributor is a separate business and
+                        brings its own company address. The placeholder points
+                        at the house domain without forcing it. */}
+                    <Input label="Email" type="email" placeholder="juan@zappdonuts.com" value={email}
                       onChange={(e) => setEmail(e.target.value)} error={errors.email} iconLeft={<Mail size={16} />}
-                      helperText="Ito ang gagamitin niyang login." />
+                      helperText="Ito ang gagamitin niyang login. Para sa ZAPP staff, gamitin ang @zappdonuts.com." />
                     <Input label="Phone" placeholder="09171234567" value={phone}
                       onChange={(e) => setPhone(e.target.value)} error={errors.phone} iconLeft={<Phone size={16} />} />
 

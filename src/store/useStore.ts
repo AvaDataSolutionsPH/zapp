@@ -101,7 +101,7 @@ import {
   appendApplicationAudit,
 } from '@/services/dbWrite';
 import { signUpIsolated, generateTempPassword } from '@/lib/authSignup';
-import { resolveLoginEmail, shopCodeToEmail } from '@/lib/shopCodeAuth';
+import { resolveLoginEmailCandidates, shopCodeToEmail } from '@/lib/shopCodeAuth';
 import { resetPasswordForUser } from '@/services/resetPassword';
 
 // Compute the initial billing list from the seeded mock entities. This replaces
@@ -500,11 +500,20 @@ export const useStore = create<AppStore>((set, get) => {
     // to authenticate an email — so anything without an "@" is treated as a
     // Shop Code and mapped to its generated address. Staff (and /onboarding
     // partners, who chose their own email) are unaffected.
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: resolveLoginEmail(email),
-      password,
-    });
-    if (error || !data.session) {
+    //
+    // A Shop Code yields SEVERAL candidate addresses (current domain + any
+    // legacy one it may have been minted under), tried in order. Accounts
+    // created before the shop domain was renamed keep working without a data
+    // migration, and the franchisee still just types their Shop Code.
+    let data: Awaited<ReturnType<typeof supabase.auth.signInWithPassword>>['data'] | null = null;
+    for (const candidate of resolveLoginEmailCandidates(email)) {
+      const attempt = await supabase.auth.signInWithPassword({ email: candidate, password });
+      if (!attempt.error && attempt.data.session) {
+        data = attempt.data;
+        break;
+      }
+    }
+    if (!data?.session) {
       return false;
     }
     const sessionEmail = data.user?.email;

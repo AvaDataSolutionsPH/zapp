@@ -27,7 +27,8 @@ path, which is **exempt** — see Gotchas).
 
 **Pure libs (no React, no store):**
 - `src/lib/shopCodeAuth.ts` — Shop Code ⇄ synthetic email (`resolveLoginEmail`,
-  `shopCodeToEmail`, `isShopLoginEmail`, `SHOP_LOGIN_DOMAIN`)
+  `resolveLoginEmailCandidates`, `shopCodeToEmail`, `shopCodeToEmailCandidates`,
+  `isShopLoginEmail`, `SHOP_LOGIN_DOMAIN`, `LEGACY_SHOP_LOGIN_DOMAINS`)
 - `src/lib/accountGate.ts` — `isAccountLocked`
 - `src/lib/documentVerification.ts` — `documentStatus`, `allDocumentsVerified`,
   `unverifiedDocuments`, `canVerifyDocuments`, labels
@@ -59,7 +60,7 @@ auth-uuid RPC), `028` (`append_application_audit` RPC).
 
 ```
 Approve (Shop Code required)
-  └─ signUpIsolated(<shopcode>@shop.zappdonuts.ph, temp)   ← auth layer
+  └─ signUpIsolated(<shopcode>@shop.zappdonuts.com, temp)  ← auth layer
      users row { id, email: synthetic, account_status: 'not_activated' }
      applications.account_user_id = that users.id           ← the link
      → GeneratedLogin revealed ONCE
@@ -108,8 +109,25 @@ to `account_status`.
 - **⚠️ `NOTIFY pgrst, 'reload schema';` after any migration that adds a column.**
   PostgREST caches the schema and returns `PGRST204` otherwise (this bit us on
   024). 027 ends with it.
-- **⚠️ Requires Supabase "Confirm email" = OFF.** `<shopcode>@shop.zappdonuts.ph`
+- **⚠️ Requires Supabase "Confirm email" = OFF.** `<shopcode>@shop.zappdonuts.com`
   receives no mail; a confirmation step would make every generated login dead.
+- **⚠️ The "Login Address (system)" is NOT a link, NOT a mailbox, and NOT where
+  documents get uploaded.** It is only the address Supabase authenticates,
+  because Supabase Auth has no username login. A franchisee uploads their
+  documents by signing IN (Shop Code + temp password) and landing on the locked
+  Account Verification screen. This was misread as an upload link by staff
+  reading the card, which is why the field now carries an inline explanation.
+- **⚠️ Renaming `SHOP_LOGIN_DOMAIN` does NOT rename existing logins.** The
+  address is frozen into `auth.users` at signUp. Change the constant alone and
+  every account minted under the old domain fails login with a bare "invalid
+  credentials" — the Shop Code → email mapping simply stops finding their row.
+  That is why the old value must be appended to `LEGACY_SHOP_LOGIN_DOMAINS`:
+  `login` walks the candidates in order (current domain first, then legacy), so
+  old accounts keep working with no data migration and no change for the user.
+  Cost: one expected 400 in the browser console for a legacy account (the
+  current-domain attempt missing) before the successful retry. Renamed
+  `shop.zappdonuts.ph` → `shop.zappdonuts.com` on 2026-07-19 to match the real
+  ZAPP domain.
 - **`account_status` is nullable with NO default, and `undefined` means
   UNLOCKED.** Every staff account and every pre-024 franchisee has none.
   Defaulting undefined to "locked" would have locked out the entire existing

@@ -139,8 +139,20 @@ export default function LoginCredentialsCard({ application }: { application: App
           <div className="sm:col-span-2 lg:col-span-3">
             <Field label="Login Address (system)">
               {/* The franchisee types the Shop Code, never this — but staff
-                  debugging a "cannot log in" call need to see it. */}
+                  debugging a "cannot log in" call need to see it.
+
+                  The hint below exists because this was read as a LINK the
+                  applicant should open to upload documents. It is neither a
+                  link nor a working mailbox: it is the internal address
+                  Supabase authenticates, since Supabase has no username
+                  login. The applicant uploads documents by signing in to the
+                  ERP with their Shop Code. */}
               <span className="font-mono break-all text-gray-500">{accountUser?.email ?? '—'}</span>
+              <p className="mt-1 text-xs text-gray-500">
+                Panloob na address ng sistema — <strong>hindi ito link at hindi ito email</strong>{' '}
+                na may padala. Ang i-log in ng franchisee ay ang <strong>Username</strong> sa itaas
+                (Shop Code) at ang temporary password, dito mismo sa ERP.
+              </p>
             </Field>
           </div>
         </dl>

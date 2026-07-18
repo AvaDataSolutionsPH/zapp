@@ -23,17 +23,17 @@ DO $$
 DECLARE
   demo_password TEXT := '111111';
   user_emails TEXT[] := ARRAY[
-    'alfonso@zappdonuts.ph',          -- user-01 Owner
-    'diana@zappdonuts.ph',            -- user-02 Ops Manager
-    'gabriel@zappdonuts.ph',          -- user-03 Forecaster
-    'helen@zappdonuts.ph',            -- user-04 Plant Manager
-    'ivan@zappdonuts.ph',             -- user-05 Billing User
-    'marco@bicolexpress.ph',          -- user-06 Partner Distributor (Bicol)
-    'legazpi.centro@zapp.ph',         -- user-07 Franchisee (Dist) - Maria Santos
-    'legazpi.port@zapp.ph',           -- user-08 Franchisee (Direct) - Ana Lim
-    'patricia@zappdonuts.ph',         -- user-09 Area Supervisor
-    'ricardo@mmfoods.ph',             -- user-10 Partner Distributor (Manila)
-    'mariel@albaysouthdist.ph'        -- user-11 Sub-Partner Distributor
+    'alfonso@zappdonuts.com',          -- user-01 Owner
+    'diana@zappdonuts.com',            -- user-02 Ops Manager
+    'gabriel@zappdonuts.com',          -- user-03 Forecaster
+    'helen@zappdonuts.com',            -- user-04 Plant Manager
+    'ivan@zappdonuts.com',             -- user-05 Billing User
+    'marco@zappdonuts.com',          -- user-06 Partner Distributor (Bicol)
+    'legazpi.centro@zappdonuts.com',         -- user-07 Franchisee (Dist) - Maria Santos
+    'legazpi.port@zappdonuts.com',           -- user-08 Franchisee (Direct) - Ana Lim
+    'patricia@zappdonuts.com',         -- user-09 Area Supervisor
+    'ricardo@zappdonuts.com',             -- user-10 Partner Distributor (Manila)
+    'mariel@zappdonuts.com'        -- user-11 Sub-Partner Distributor
   ];
   user_email TEXT;
   new_user_id UUID;

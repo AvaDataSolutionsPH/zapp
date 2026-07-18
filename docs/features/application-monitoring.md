@@ -285,7 +285,7 @@ Fixing RLS alone left the Sub-PD unable to reach the page at all:
   Link + Market Source + Remarks (PD/SD) → Save → **persisted across a full
   reload**.
 - **Admin (owner)**: every field renders as an input/combobox.
-- **SPD (mariel@albaysouthdist.ph)**: sidebar shows New Applications; list drops
+- **SPD (mariel@zappdonuts.com)**: sidebar shows New Applications; list drops
   from 8 rows to **3 — all `SPD-MARIEL`**, no `BICOL-MARCO`; Evaluation Details
   renders with the PD/SD fields editable and AS/OS ones read-only; **no
   Approve/Verify & Activate/Reject** button (confirms `canSetStatus` excludes SD);

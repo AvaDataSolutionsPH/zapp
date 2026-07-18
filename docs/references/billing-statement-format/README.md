@@ -31,7 +31,7 @@ session.
 
 ## Notes — BUILT
 
-- Sino ang gumagamit: **billing user** (e.g. `ivan@zappdonuts.ph`) + owner / ops.
+- Sino ang gumagamit: **billing user** (e.g. `ivan@zappdonuts.com`) + owner / ops.
 - **Implemented:** `src/pages/billing/BillingStatementPage.tsx`, route
   `/billing/statement` (standalone, outside the dashboard Layout for a clean
   Print → PDF), gated to `billing_user` / `owner` / `operations_manager`.

@@ -351,7 +351,7 @@ export interface Application {
   pdfUrl?: string;
   /**
    * The login this application generated on approval (migration 024). Needed
-   * because the generated username email (<shopcode>@shop.zappdonuts.ph) never
+   * because the generated username email (<shopcode>@shop.zappdonuts.com) never
    * matches the applicant's own email, so the Login Credentials card cannot
    * find the user any other way.
    */

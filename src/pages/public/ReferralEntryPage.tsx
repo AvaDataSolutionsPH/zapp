@@ -345,7 +345,7 @@ export default function ReferralEntryPage() {
                       homepage
                     </button>{' '}
                     to learn more about franchise opportunities. You can also reach us at{' '}
-                    <span className="font-medium text-gray-700">franchising@zappdonuts.ph</span>.
+                    <span className="font-medium text-gray-700">franchising@zappdonuts.com</span>.
                   </p>
                 </div>
               </div>

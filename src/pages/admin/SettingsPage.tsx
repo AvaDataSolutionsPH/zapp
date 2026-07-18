@@ -82,7 +82,7 @@ export default function SettingsPage() {
   const [businessName, setBusinessName] = useState('ZAPP Donuts Philippines');
   const [address, setAddress] = useState('123 Donut Avenue, Makati City, Metro Manila');
   const [contactPhone, setContactPhone] = useState('+63 917 123 4567');
-  const [contactEmail, setContactEmail] = useState('admin@zappdonuts.ph');
+  const [contactEmail, setContactEmail] = useState('admin@zappdonuts.com');
   const [paymentDeadline, setPaymentDeadline] = useState('48');
   const [deliveryBlocked, setDeliveryBlocked] = useState(true);
   const [generalSaving, setGeneralSaving] = useState(false);

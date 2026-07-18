@@ -22,9 +22,15 @@
 // fails we simply stop and nothing has drifted, whereas a failed profile update
 // after a successful auth rename is reported loudly as a rift to repair by hand.
 //
-// ⚠️ SCOPE: HQ staff only. Partner/franchisee logins deliberately keep their own
-// company domains (marco@bicolexpress.ph, legazpi.centro@zapp.ph, ...) — those
-// are NOT ZAPP addresses and renaming them would be wrong, not tidy.
+// ⚠️ SCOPE: the DEMO accounts only — HQ staff plus the demo partner/franchisee
+// logins, which are seeded fiction and are all being replaced by real encoding
+// anyway. Anything on example.com is a leftover TEST account queued for
+// deletion, not something to rename.
+//
+// NOTE for real encoding: a real Partner Distributor is a separate BUSINESS and
+// will bring its own company address (…@theircompany.com), and a real franchisee
+// signs in with a SHOP CODE, not an email at all. So do not read this uniform
+// .com demo set as the house rule for live data — it is only a tidy demo.
 //
 // Run AFTER deploying nothing / BEFORE nothing — it is self-contained. The
 // matching source-side rename (mockData.ts + seed/01_demo_users.sql) is in the
@@ -55,16 +61,26 @@ const supabase = createClient(url, serviceKey, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-const OLD_DOMAIN = 'zappdonuts.ph';
 const NEW_DOMAIN = 'zappdonuts.com';
 
-/** HQ staff local-parts. Anything not listed here is left alone. */
-const STAFF_LOCAL_PARTS = ['alfonso', 'diana', 'gabriel', 'helen', 'ivan', 'patricia'];
+/**
+ * Demo domains to fold into NEW_DOMAIN. The local part is kept as-is, so
+ * `marco@bicolexpress.ph` becomes `marco@zappdonuts.com`.
+ *
+ * `example.com` is deliberately absent — those are TEST accounts to delete.
+ */
+const OLD_DOMAINS = [
+  'zappdonuts.ph', // HQ staff
+  'bicolexpress.ph', // PD Bicol
+  'mmfoods.ph', // PD Manila
+  'albaysouthdist.ph', // SPD
+  'zapp.ph', // franchisee stores
+];
 
 const apply = process.argv.includes('--yes');
 
 async function main() {
-  console.log(`\nZAPP staff email rename — @${OLD_DOMAIN} → @${NEW_DOMAIN}`);
+  console.log(`\nZAPP demo email rename — ${OLD_DOMAINS.map((d) => `@${d}`).join(', ')} → @${NEW_DOMAIN}`);
   console.log(`Project: ${url}`);
   console.log(apply ? 'Mode:    APPLY\n' : 'Mode:    DRY RUN (pass --yes to apply)\n');
 
@@ -76,13 +92,12 @@ async function main() {
   }
 
   const targets = list.users.filter((u) => {
-    const email = u.email?.toLowerCase() ?? '';
-    const [local, domain] = email.split('@');
-    return domain === OLD_DOMAIN && STAFF_LOCAL_PARTS.includes(local);
+    const domain = u.email?.toLowerCase().split('@')[1] ?? '';
+    return OLD_DOMAINS.includes(domain);
   });
 
   if (!targets.length) {
-    console.log('Nothing to do — no staff account still uses the old domain.');
+    console.log('Nothing to do — no demo account still uses an old domain.');
     return;
   }
 

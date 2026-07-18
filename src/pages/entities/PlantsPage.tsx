@@ -1,10 +1,12 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Factory,
   MapPin,
   Store as StoreIcon,
   Building2,
   Truck,
+  Plus,
+  Pencil,
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import {
@@ -12,11 +14,22 @@ import {
   CardHeader,
   CardContent,
   Badge,
+  Button,
   Stat,
 } from '@/components/ui';
+import PlantFormModal from './PlantFormModal';
+import type { Plant } from '@/types';
 
 export default function PlantsPage() {
-  const { plants, stores, distributors, deliveries } = useStore();
+  const { plants, stores, distributors, deliveries, currentUser } = useStore();
+
+  // Plants are reference data — only the Admin (Owner) may add or correct them.
+  const canManage = currentUser?.role === 'owner';
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<Plant | null>(null);
+
+  const openCreate = () => { setEditing(null); setFormOpen(true); };
+  const openEdit = (p: Plant) => { setEditing(p); setFormOpen(true); };
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -47,9 +60,16 @@ export default function PlantsPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Plants</h1>
-        <p className="text-sm text-gray-500 mt-1">Production facilities and their network overview</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Plants</h1>
+          <p className="text-sm text-gray-500 mt-1">Production facilities and their network overview</p>
+        </div>
+        {canManage && (
+          <Button variant="primary" iconLeft={<Plus size={16} />} onClick={openCreate}>
+            New Plant
+          </Button>
+        )}
       </div>
 
       {/* Summary Stats */}
@@ -71,8 +91,20 @@ export default function PlantsPage() {
                     <MapPin size={14} /> {plant.location}
                   </p>
                 </div>
-                <div className="w-10 h-10 rounded-lg bg-orange-50 flex items-center justify-center text-zapp-orange shrink-0">
-                  <Factory size={20} />
+                <div className="flex items-center gap-2 shrink-0">
+                  {canManage && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      iconLeft={<Pencil size={13} />}
+                      onClick={() => openEdit(plant)}
+                    >
+                      Edit
+                    </Button>
+                  )}
+                  <div className="w-10 h-10 rounded-lg bg-orange-50 flex items-center justify-center text-zapp-orange">
+                    <Factory size={20} />
+                  </div>
                 </div>
               </div>
             </CardHeader>
@@ -143,6 +175,12 @@ export default function PlantsPage() {
           </Card>
         ))}
       </div>
+
+      <PlantFormModal
+        open={formOpen}
+        plant={editing}
+        onClose={() => setFormOpen(false)}
+      />
     </div>
   );
 }

@@ -14,6 +14,7 @@ import type {
   Store,
   Application,
   AuditEntry,
+  Plant,
   Delivery,
   BeginningInventory,
   EndingInventory,
@@ -484,6 +485,8 @@ const mapUserToDB = (u: User) => ({
   role: u.role,
   avatar: u.avatar,
   plant_id: u.plantId ?? null,
+  // Multi-plant coverage for Billing (031). Empty = all plants, not none.
+  plant_ids: u.plantIds ?? null,
   distributor_id: u.distributorId ?? null,
   sub_partner_distributor_id: u.subPartnerDistributorId ?? null,
   area_ids: u.areaIds ?? null,
@@ -497,6 +500,37 @@ const mapUserToDB = (u: User) => ({
 
 export async function insertDistributor(d: Distributor): Promise<void> {
   const { error } = await supabase.from('distributors').insert(mapDistributorToDB(d) as never);
+  if (error) throw error;
+}
+
+export async function updateDistributor(d: Distributor): Promise<void> {
+  const { error } = await supabase
+    .from('distributors')
+    .update(mapDistributorToDB(d) as never)
+    .eq('id', d.id);
+  if (error) throw error;
+}
+
+// Plants are reference data — admin-only writes (003 ref_write). Editable so a
+// typo in a plant's name/code/region can be corrected without a redeploy.
+const mapPlantToDB = (p: Plant) => ({
+  id: p.id,
+  name: p.name,
+  location: p.location,
+  region: p.region,
+  code: p.code,
+});
+
+export async function insertPlant(p: Plant): Promise<void> {
+  const { error } = await supabase.from('plants').insert(mapPlantToDB(p) as never);
+  if (error) throw error;
+}
+
+export async function updatePlant(p: Plant): Promise<void> {
+  const { error } = await supabase
+    .from('plants')
+    .update(mapPlantToDB(p) as never)
+    .eq('id', p.id);
   if (error) throw error;
 }
 

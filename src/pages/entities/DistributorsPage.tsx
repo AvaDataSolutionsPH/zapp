@@ -3,6 +3,7 @@ import {
   Building2,
   ChevronDown,
   ChevronUp,
+  Pencil,
   Store as StoreIcon,
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
@@ -15,15 +16,21 @@ import {
   Table,
   StatusBadge,
   Badge,
+  Button,
   Stat,
 } from '@/components/ui';
 import type { TableColumn, SelectOption } from '@/components/ui';
+import DistributorFormModal from './DistributorFormModal';
+import type { Distributor } from '@/types';
 
 const PAGE_SIZE = 10;
 
 export default function DistributorsPage() {
-  const { distributors, plants, stores, salesMetrics } = useStore();
+  const { distributors, plants, stores, salesMetrics, currentUser } = useStore();
 
+  // Reference data — Admin (Owner) only, matching 003's ref_write.
+  const canManage = currentUser?.role === 'owner';
+  const [editing, setEditing] = useState<Distributor | null>(null);
   const [search, setSearch] = useState('');
   const [plantFilter, setPlantFilter] = useState('');
   const [page, setPage] = useState(1);
@@ -118,6 +125,29 @@ export default function DistributorsPage() {
       header: 'Stores',
       render: (row) => row.storeCount,
     },
+    // Boss: "lagyan mo din edit option sa distributor" — so a wrong name/plant/
+    // contact can be corrected without a redeploy. Admin (Owner) only.
+    ...(canManage
+      ? ([
+          {
+            key: 'edit',
+            header: '',
+            render: (row) => (
+              <Button
+                variant="outline"
+                size="sm"
+                iconLeft={<Pencil size={13} />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditing(distributors.find((d) => d.id === row.id) ?? null);
+                }}
+              >
+                Edit
+              </Button>
+            ),
+          },
+        ] as TableColumn<EnrichedDist>[])
+      : []),
     {
       key: 'expand',
       header: '',
@@ -226,6 +256,12 @@ export default function DistributorsPage() {
           </CardContent>
         </Card>
       )}
+
+      <DistributorFormModal
+        open={!!editing}
+        distributor={editing}
+        onClose={() => setEditing(null)}
+      />
     </div>
   );
 }

@@ -135,6 +135,13 @@ export interface User {
   role: UserRole;
   avatar: string;
   plantId?: string;
+  /**
+   * Plants a Billing User covers — they are per-plant but may hold SEVERAL
+   * (boss). **Empty/undefined means ALL plants, not none**, so the seeded
+   * billing user (no plants) keeps seeing company-wide instead of going blank.
+   * Operations Manager covers every plant by definition and leaves this empty.
+   */
+  plantIds?: string[];
   distributorId?: string;
   subPartnerDistributorId?: string;
   areaIds?: string[];

@@ -16,7 +16,7 @@ import {
   UserPlus, User, Mail, Phone, Handshake, Users, ClipboardList,
   Copy, CheckCircle2, ArrowLeft, KeyRound, AlertCircle, Store, ArrowRight,
 } from 'lucide-react';
-import { Button, Card, CardContent, CardHeader, CardFooter, Input, Select } from '@/components/ui';
+import { Button, Card, CardContent, CardHeader, CardFooter, CheckboxGroup, Input, Select } from '@/components/ui';
 import type { SelectOption } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import { useStore } from '@/store/useStore';
@@ -33,6 +33,8 @@ const ROLE_LABEL: Record<NewAccountRole, string> = {
   partner_distributor: 'Partner Distributor',
   sub_partner_distributor: 'Sub-Partner Distributor',
   area_manager: 'Area Supervisor',
+  operations_manager: 'Operations Manager',
+  billing_user: 'Billing User',
 };
 
 // The dropdown offers 'franchisee' as a shortcut that ROUTES to the full
@@ -49,6 +51,9 @@ export default function NewAccountPage() {
   const isAdmin = currentUser?.role === 'owner' || currentUser?.role === 'operations_manager';
   const isPD = currentUser?.role === 'partner_distributor';
   const canUse = isAdmin || isPD;
+  // Boss: only the Admin (Owner) may mint HQ staff logins. The store enforces
+  // this too — this just keeps the options out of the dropdown.
+  const isOwner = currentUser?.role === 'owner';
 
   useEffect(() => {
     if (currentUser && !canUse) navigate('/dashboard', { replace: true });
@@ -66,9 +71,16 @@ export default function NewAccountPage() {
           { value: 'partner_distributor', label: 'Partner Distributor' },
           { value: 'sub_partner_distributor', label: 'Sub-Partner Distributor' },
           { value: 'area_manager', label: 'Area Supervisor' },
+          // HQ staff — Owner only.
+          ...(isOwner
+            ? ([
+                { value: 'operations_manager', label: 'Operations Manager' },
+                { value: 'billing_user', label: 'Billing User' },
+              ] as { value: DropdownRole; label: string }[])
+            : []),
         ];
     return opts;
-  }, [isPD]);
+  }, [isPD, isOwner]);
 
   const [role, setRole] = useState<DropdownRole>(
     isPD ? 'sub_partner_distributor' : 'partner_distributor',
@@ -77,6 +89,9 @@ export default function NewAccountPage() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [plantId, setPlantId] = useState('');
+  // Billing is per-plant but may hold several (boss), so it gets a checklist
+  // rather than the single-plant Select the other roles use.
+  const [plantIds, setPlantIds] = useState<string[]>([]);
   const [parentDistributorId, setParentDistributorId] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -92,10 +107,17 @@ export default function NewAccountPage() {
     ...distributors.map((d) => ({ value: d.id, label: d.name })),
   ];
 
+  // Operations Manager covers EVERY plant, so it is never asked. Billing is
+  // per-plant with a multi-select. Everyone else keeps the single-plant Select.
+  const isOps = role === 'operations_manager';
+  const isBilling = role === 'billing_user';
   // owner/ops pick plant + (for SPD) the parent PD. A PD uses its own scope, so
   // those inputs are hidden for them.
-  const showPlant = isAdmin;
+  const showPlant = isAdmin && !isOps && !isBilling;
+  const showPlantMulti = isBilling;
   const showParent = isAdmin && role === 'sub_partner_distributor';
+
+  const plantCheckOptions = plants.map((p) => ({ value: p.id, label: p.name }));
 
   const validate = (): boolean => {
     const e: Record<string, string> = {};
@@ -104,6 +126,9 @@ export default function NewAccountPage() {
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) e.email = 'Enter a valid email.';
     if (!phone.trim()) e.phone = 'Phone is required.';
     if (showPlant && !plantId) e.plantId = 'Plant is required.';
+    // A NEW billing account must name its plants — "per plant" is the whole
+    // point. (Legacy billing users with none still read company-wide.)
+    if (showPlantMulti && plantIds.length === 0) e.plantIds = 'Pumili ng kahit isang plant.';
     if (showParent && !parentDistributorId) e.parentDistributorId = 'Parent Distributor is required.';
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -122,6 +147,7 @@ export default function NewAccountPage() {
         phone: phone.trim(),
         plantId,
         parentDistributorId: parentDistributorId || undefined,
+        plantIds: showPlantMulti ? plantIds : undefined,
       });
       setCreated({ name: name.trim(), email: res.email, tempPassword: res.tempPassword, role });
       addToast('success', `Account created for ${name.trim()}.`);
@@ -259,6 +285,32 @@ export default function NewAccountPage() {
                     {showPlant && (
                       <Select label="Plant" options={plantOptions} value={plantId}
                         onChange={(e) => setPlantId(e.target.value)} error={errors.plantId} />
+                    )}
+                    {/* Billing is per-plant but may hold SEVERAL (boss), hence a
+                        checklist instead of the single-plant Select. */}
+                    {showPlantMulti && (
+                      <div>
+                        <CheckboxGroup
+                          label="Plants (hawak niya)"
+                          options={plantCheckOptions}
+                          value={plantIds}
+                          onChange={setPlantIds}
+                          multiple
+                        />
+                        {errors.plantIds ? (
+                          <p className="mt-1 text-xs text-red-600">{errors.plantIds}</p>
+                        ) : (
+                          <p className="mt-1 text-xs text-gray-500">
+                            Pwedeng higit sa isa — makikita niya ang datos ng lahat ng plant na napili.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {isOps && (
+                      <p className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                        Sakop ng Operations Manager ang <strong>lahat ng plant</strong> — walang
+                        kailangang piliin.
+                      </p>
                     )}
                     {isPD && (
                       <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">

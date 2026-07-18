@@ -4,6 +4,7 @@ import {
   ChevronDown,
   ChevronUp,
   MapPin,
+  Pencil,
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import {
@@ -21,6 +22,7 @@ import {
 import type { TableColumn, SelectOption } from '@/components/ui';
 import type { AreaSupervisor } from '@/types';
 import AssignProvincesModal from './AssignProvincesModal';
+import AreaSupervisorFormModal from './AreaSupervisorFormModal';
 
 const PAGE_SIZE = 10;
 
@@ -32,6 +34,7 @@ export default function AreaManagersPage() {
   const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [assigning, setAssigning] = useState<AreaSupervisor | null>(null);
+  const [editing, setEditing] = useState<AreaSupervisor | null>(null);
 
   const enriched = useMemo(() =>
     areaSupervisors.map((am) => {
@@ -124,17 +127,32 @@ export default function AreaManagersPage() {
       key: 'assign',
       header: '',
       render: (row) => (
-        <Button
-          variant="outline"
-          size="sm"
-          iconLeft={<MapPin size={14} />}
-          onClick={(e) => {
-            e.stopPropagation();
-            setAssigning(areaSupervisors.find((a) => a.id === row.id) ?? null);
-          }}
-        >
-          Assign Areas
-        </Button>
+        <div className="flex gap-2">
+          {/* Boss: "same sa area supv, lagyan mo ng edit option." Kept separate
+              from Assign Areas — that one decides application routing. */}
+          <Button
+            variant="outline"
+            size="sm"
+            iconLeft={<Pencil size={13} />}
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditing(areaSupervisors.find((a) => a.id === row.id) ?? null);
+            }}
+          >
+            Edit
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            iconLeft={<MapPin size={14} />}
+            onClick={(e) => {
+              e.stopPropagation();
+              setAssigning(areaSupervisors.find((a) => a.id === row.id) ?? null);
+            }}
+          >
+            Assign Areas
+          </Button>
+        </div>
       ),
     },
     {
@@ -256,6 +274,12 @@ export default function AreaManagersPage() {
         key={assigning?.id ?? 'none'}
         supervisor={assigning}
         onClose={() => setAssigning(null)}
+      />
+
+      <AreaSupervisorFormModal
+        open={!!editing}
+        supervisor={editing}
+        onClose={() => setEditing(null)}
       />
     </div>
   );

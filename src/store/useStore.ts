@@ -89,6 +89,10 @@ import {
   insertNotification,
   updateNotification,
   insertDistributor,
+  // Aliased — the Zustand actions share these names.
+  updateDistributor as updateDistributorDB,
+  insertPlant,
+  updatePlant as updatePlantDB,
   insertSubPartnerDistributor,
   insertAreaSupervisor,
   updateAreaSupervisor,
@@ -125,13 +129,37 @@ const initialStores = mockStores.map((s) => ({
 const delay = (ms = 400): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * The plants a Billing User covers, or null when unscoped.
+ *
+ * Boss: "Si billing ay per plant. Pero dapat multiple plants ang option at may
+ * mga billing na multiple plants ang hawak." So billing filters by its plants —
+ * but an EMPTY list means ALL plants, not none (migration 031). That fallback is
+ * load-bearing: the seeded billing account has no plants, and treating empty as
+ * "no access" would blank its entire screen — the same failure that hit the
+ * Area Supervisor in 029.
+ */
+const billingPlantScope = (user: User): string[] | null => {
+  const ids = user.plantIds ?? [];
+  return ids.length > 0 ? ids : null;
+};
+
 const uid = (): string =>
   `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
 export type NewAccountRole =
   | 'partner_distributor'
   | 'sub_partner_distributor'
-  | 'area_manager';
+  | 'area_manager'
+  // HQ staff (boss: "Si admin nalang ang pwede gumawa"). Unlike the three
+  // above, these have NO entity record and NO referral code — they are a login
+  // + role only, because they refer no applicants and own no channel.
+  | 'operations_manager'
+  | 'billing_user';
+
+/** True for the HQ staff roles that get a login but no entity/referral code. */
+const isStaffRole = (r: NewAccountRole): boolean =>
+  r === 'operations_manager' || r === 'billing_user';
 
 /**
  * One-time credentials for a login generated on approval. Returned to the
@@ -154,6 +182,11 @@ export interface NewAccountInput {
   plantId: string;
   /** Required when role === 'sub_partner_distributor' (the parent PD). */
   parentDistributorId?: string;
+  /**
+   * Plants a Billing User covers — per-plant but possibly SEVERAL (boss).
+   * Ignored for every other role; Operations Manager covers all plants.
+   */
+  plantIds?: string[];
 }
 
 /** Derive a channel/referral code from a display name (e.g. "Juan Cruz" → "JUAN-CRUZ-4F2"). */
@@ -233,6 +266,15 @@ interface AppStore {
    * boss can re-point coverage without a deploy.
    */
   updateAreaSupervisorProvinces: (id: string, provinces: string[]) => Promise<void>;
+  /**
+   * Admin edits to the reference tables (boss: "para if may mali madali ma edit
+   * in the future"). All three are admin-only writes (003 ref_write), optimistic
+   * + rollback like every other mutation.
+   */
+  addPlant: (input: Omit<Plant, 'id'>) => Promise<void>;
+  updatePlant: (id: string, updates: Partial<Plant>) => Promise<void>;
+  updateDistributor: (id: string, updates: Partial<Distributor>) => Promise<void>;
+  updateAreaSupervisorDetails: (id: string, updates: Partial<AreaSupervisor>) => Promise<void>;
   /**
    * First-login account verification. The franchisee submits their documents +
    * Data Privacy acceptance; the account moves to `pending_verification` and
@@ -1039,6 +1081,83 @@ export const useStore = create<AppStore>((set, get) => {
     }
   },
 
+  // ─── Reference-table admin edits ──────────────────────────────
+  // Boss: "lagyan mo ng edit option... para if may mali madali ma edit in the
+  // future." plants / distributors / area_supervisors are reference tables, so
+  // 003's ref_write (app_is_admin) already gates these — no new policy needed.
+
+  addPlant: async (input) => {
+    const plant: Plant = { ...input, id: `plant-${uid()}` };
+    const prev = get().plants;
+    set({ plants: [...prev, plant] });
+
+    if (get().dataSource !== 'db') return;
+    try {
+      await insertPlant(plant);
+    } catch (err) {
+      console.error('[useStore] addPlant failed, rolling back:', err);
+      set({ plants: prev });
+      throw err;
+    }
+  },
+
+  updatePlant: async (id, updates) => {
+    const prev = get().plants;
+    const target = prev.find((p) => p.id === id);
+    if (!target) throw new Error('Plant not found.');
+
+    const updated: Plant = { ...target, ...updates };
+    set({ plants: prev.map((p) => (p.id === id ? updated : p)) });
+
+    if (get().dataSource !== 'db') return;
+    try {
+      await updatePlantDB(updated);
+    } catch (err) {
+      console.error('[useStore] updatePlant failed, rolling back:', err);
+      set({ plants: prev });
+      throw err;
+    }
+  },
+
+  updateDistributor: async (id, updates) => {
+    const prev = get().distributors;
+    const target = prev.find((d) => d.id === id);
+    if (!target) throw new Error('Distributor not found.');
+
+    const updated: Distributor = { ...target, ...updates };
+    set({ distributors: prev.map((d) => (d.id === id ? updated : d)) });
+
+    if (get().dataSource !== 'db') return;
+    try {
+      await updateDistributorDB(updated);
+    } catch (err) {
+      console.error('[useStore] updateDistributor failed, rolling back:', err);
+      set({ distributors: prev });
+      throw err;
+    }
+  },
+
+  // Separate from updateAreaSupervisorProvinces so the province master list
+  // (which drives application routing) stays a deliberate, single-purpose
+  // action rather than something a general edit can clobber by accident.
+  updateAreaSupervisorDetails: async (id, updates) => {
+    const prev = get().areaSupervisors;
+    const target = prev.find((a) => a.id === id);
+    if (!target) throw new Error('Area Supervisor not found.');
+
+    const updated: AreaSupervisor = { ...target, ...updates };
+    set({ areaSupervisors: prev.map((a) => (a.id === id ? updated : a)) });
+
+    if (get().dataSource !== 'db') return;
+    try {
+      await updateAreaSupervisor(updated);
+    } catch (err) {
+      console.error('[useStore] updateAreaSupervisorDetails failed, rolling back:', err);
+      set({ areaSupervisors: prev });
+      throw err;
+    }
+  },
+
   // First-login verification. Two writes: the documents onto the application,
   // and the account status onto the user. Both are self-service, so migration
   // 025's triggers clamp them to exactly these columns — a franchisee cannot
@@ -1381,6 +1500,13 @@ export const useStore = create<AppStore>((set, get) => {
     if (isPD && input.role === 'partner_distributor') {
       throw new Error('A Partner Distributor can only create Sub-Partner or Area Supervisor accounts.');
     }
+    // Boss: "Si admin nalang ang pwede gumawa ng ops manager at billing user."
+    // These are HQ-wide roles, so the gate is the OWNER specifically — not the
+    // broader isAdmin (which also covers operations_manager; an ops manager
+    // minting more ops managers is an escalation path we don't want).
+    if (isStaffRole(input.role) && currentUser.role !== 'owner') {
+      throw new Error('Only the Admin (Owner) can create Operations Manager or Billing accounts.');
+    }
 
     const email = input.email.trim().toLowerCase();
     const name = input.name.trim();
@@ -1395,11 +1521,24 @@ export const useStore = create<AppStore>((set, get) => {
     // doesn't get an empty src.
     const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=F59E0B&color=fff`;
 
-    let entity: Distributor | SubPartnerDistributor | AreaSupervisor;
+    // null for HQ staff — they own no entity record and no channel code.
+    let entity: Distributor | SubPartnerDistributor | AreaSupervisor | null = null;
     let userProfile: User;
     let refCode: ReferralCode | null = null;
 
-    if (input.role === 'partner_distributor') {
+    if (isStaffRole(input.role)) {
+      userProfile = {
+        id: userId,
+        name,
+        email,
+        role: input.role === 'billing_user' ? 'billing_user' : 'operations_manager',
+        avatar,
+        // Operations Manager covers every plant, so it stores none. Billing is
+        // per-plant and may hold several; an empty list still means "all"
+        // (see migration 031) so a billing account is never born blank.
+        plantIds: input.role === 'billing_user' ? (input.plantIds ?? []) : undefined,
+      };
+    } else if (input.role === 'partner_distributor') {
       const distId = `dist-${uid()}`;
       entity = {
         id: distId, name, contactPerson: name, email, phone, plantId,
@@ -1450,9 +1589,10 @@ export const useStore = create<AppStore>((set, get) => {
       // 2) entity → referral → user profile. Order matters: the PD `users`
       //    RLS policy (011) subqueries the freshly-inserted SPD row.
       try {
+        // HQ staff skip straight to the profile — no entity, no referral code.
         if (input.role === 'partner_distributor') await insertDistributor(entity as Distributor);
         else if (input.role === 'sub_partner_distributor') await insertSubPartnerDistributor(entity as SubPartnerDistributor);
-        else await insertAreaSupervisor(entity as AreaSupervisor);
+        else if (entity) await insertAreaSupervisor(entity as AreaSupervisor);
         if (refCode) await insertReferralCode(refCode);
         await insertUser(userProfile);
       } catch (err) {
@@ -1469,6 +1609,8 @@ export const useStore = create<AppStore>((set, get) => {
         demoUsers: [...s.demoUsers, userProfile],
         referralCodes: refCode ? [...s.referralCodes, refCode] : s.referralCodes,
       };
+      // HQ staff add no entity row — only the user profile above.
+      if (!entity) return base;
       if (input.role === 'partner_distributor')
         return { ...base, distributors: [...s.distributors, entity as Distributor] };
       if (input.role === 'sub_partner_distributor')
@@ -2196,13 +2338,17 @@ export const useStore = create<AppStore>((set, get) => {
     const { currentUser, stores } = get();
     if (!currentUser) return [];
 
-    // Billing is a company-wide back-office function (it invoices every
-    // distributor/store), so billing_user reads all stores — not plant-scoped.
     switch (currentUser.role) {
       case 'owner':
       case 'operations_manager':
-      case 'billing_user':
         return stores;
+
+      // Billing is per-plant, but may hold several — and holding NONE still
+      // means company-wide (see billingPlantScope).
+      case 'billing_user': {
+        const scope = billingPlantScope(currentUser);
+        return scope ? stores.filter((s) => scope.includes(s.plantId)) : stores;
+      }
 
       case 'plant_manager':
       case 'forecaster':
@@ -2241,8 +2387,12 @@ export const useStore = create<AppStore>((set, get) => {
     switch (currentUser.role) {
       case 'owner':
       case 'operations_manager':
-      case 'billing_user': // company-wide billing — see all deliveries
         return deliveries;
+
+      case 'billing_user': {
+        const scope = billingPlantScope(currentUser);
+        return scope ? deliveries.filter((d) => scope.includes(d.plantId)) : deliveries;
+      }
 
       case 'plant_manager':
       case 'forecaster':
@@ -2279,8 +2429,12 @@ export const useStore = create<AppStore>((set, get) => {
     switch (currentUser.role) {
       case 'owner':
       case 'operations_manager':
-      case 'billing_user': // company-wide billing — see all billings
         return billingRecords;
+
+      case 'billing_user': {
+        const scope = billingPlantScope(currentUser);
+        return scope ? billingRecords.filter((b) => scope.includes(b.plantId)) : billingRecords;
+      }
 
       case 'plant_manager':
         return billingRecords.filter((b) => b.plantId === currentUser.plantId);

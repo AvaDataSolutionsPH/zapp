@@ -351,12 +351,21 @@ export default function MonitoringFieldsCard({ application }: { application: App
           )}
 
           {can('rtc') ? (
-            <Select
-              label="RTC"
-              options={RTC_OPTIONS}
-              value={rtc}
-              onChange={(e) => setRtc(e.target.value as RtcStatus)}
-            />
+            /* An "Approved" RTC reads like THE approval and is not — it is a
+               site evaluation. A boss set it, saved, and expected the login
+               credentials to appear. The hint below is the fix for that. */
+            <div>
+              <Select
+                label="RTC"
+                options={RTC_OPTIONS}
+                value={rtc}
+                onChange={(e) => setRtc(e.target.value as RtcStatus)}
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Evaluation lang ito. <strong>Hindi ito ang pag-approve</strong> ng
+                application — gamitin ang <strong>Approve</strong> na button sa itaas.
+              </p>
+            </div>
           ) : (
             <ReadOnly label="RTC" value={application.rtc && LABELS[application.rtc]} />
           )}

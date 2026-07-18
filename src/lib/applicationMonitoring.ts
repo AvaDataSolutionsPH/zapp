@@ -111,13 +111,23 @@ export const canEditAnyField = (role: UserRole | undefined): boolean =>
  *
  * The spec is self-contradictory here: the field list annotates Status as
  * "filled up by PD/SD/AS/OS" while the RBAC table grants it to OS + Admin only.
- * We follow neither literally — `partner_distributor` keeps it because approving
- * its own-channel franchisees was an explicit earlier boss request (commit
- * 7796856 + migration 018), and dropping it would be a regression. AS and SD are
- * excluded per the RBAC table. Confirmed with the user.
+ * We follow the FIELD LIST minus SD:
+ *   • partner_distributor — approving its own-channel franchisees was an
+ *     explicit earlier boss request (commit 7796856 + migration 018).
+ *   • area_manager — the AS evaluates the site and assigns the Shop Code, so
+ *     the boss expects to approve from that same screen. It was briefly
+ *     excluded per the RBAC table; that read of the spec was wrong in practice.
+ *     ⚠️ Requires migration 032 — an AS approval INSERTs the franchisee's
+ *     `users` profile, which `ref_write` (admin-only) would otherwise reject
+ *     AFTER the store and auth login are already committed.
+ *   • sub_partner_distributor stays excluded — an SPD is view-only by design
+ *     (003's app_is_viewonly), so it cannot create the store either.
  */
 export const canSetStatus = (role: UserRole | undefined): boolean =>
-  role === 'owner' || role === 'operations_manager' || role === 'partner_distributor';
+  role === 'owner' ||
+  role === 'operations_manager' ||
+  role === 'partner_distributor' ||
+  role === 'area_manager';
 
 /**
  * The module's "Type", auto-determined from the referral code.

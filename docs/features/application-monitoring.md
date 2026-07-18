@@ -72,12 +72,29 @@ The spec contradicts itself — the field list annotates Status "filled up by
 PD/SD/AS/OS" while the RBAC table grants it to OS + Admin only. Two decisions,
 both confirmed with the user:
 
-1. **Who:** `canSetStatus` = **owner + operations_manager + partner_distributor**.
-   PD is kept on top of the RBAC table because approving its own-channel
-   franchisees was an explicit earlier boss request (commit `7796856` +
-   migration 018); following the table literally would have been a regression.
-   AS and SD are excluded per the table — note this **tightened** `canAct`, which
-   used to be status-only and therefore let an AS approve.
+1. **Who:** `canSetStatus` = **owner + operations_manager + partner_distributor
+   + area_manager**. We follow the FIELD LIST minus SD, not the RBAC table:
+   - **PD** — approving its own-channel franchisees was an explicit earlier boss
+     request (commit `7796856` + migration 018).
+   - **AS** — the supervisor evaluates the site and assigns the Shop Code, so the
+     boss expects to approve from that same screen. AS was briefly excluded per
+     the RBAC table; **that read of the spec was wrong in practice** — the boss
+     hit it live, set `RTC = Approved` thinking it was the approval, and reported
+     "walang lumabas na login information". Re-granted with **migration 032**.
+   - **SD** stays excluded — an SPD is view-only (`app_is_viewonly`), so it
+     cannot create the store either.
+
+   ⚠️ **Granting approve to a role is never a client-only change.** Approval runs
+   four writes: auth signUp → UPDATE applications → INSERT stores → INSERT users.
+   `stores_insert` checks `app_is_reviewer()` (already includes AS and PD), but
+   `users` is a reference table whose `ref_write` is **admin-only** — so the
+   profile INSERT is the step that blocks, and it blocks *last*, after the store
+   and the auth login have already committed. The in-memory rollback cannot undo
+   those, and `login` force-signs-out an account with no profile, so the
+   franchisee would be permanently unable to log in while the UI shows the
+   approval as done. Migration 018 fixed this for PD; **032 does the same for AS**
+   (whitelisted to `franchisee_*` roles only — an unrestricted INSERT would let a
+   supervisor mint themselves an `owner` row).
 2. **How:** Status stays the **Approve / Decline / Request Info buttons**, NOT a
    dropdown the batch Save writes. Approving has side effects — `reviewApplication`
    creates the `Store` and (for onboarding applications) the franchisee login. A

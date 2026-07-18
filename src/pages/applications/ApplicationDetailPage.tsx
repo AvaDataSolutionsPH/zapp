@@ -115,11 +115,8 @@ export default function ApplicationDetailPage() {
   // / "Reject". Legacy /apply applications keep plain Approve / Decline.
   const isOnboarding = !!application.applicationNumber;
   // Two gates: the application must still be open, AND the role must own Status.
-  // The role gate is new — Status used to be status-only, which let an Area
-  // Supervisor approve (RLS permits an AS row UPDATE). The monitoring module's
-  // RBAC table scopes Status to OS + Admin; partner_distributor is kept on top
-  // of that because approving its own-channel franchisees was an explicit boss
-  // request (commit 7796856 + migration 018). See lib/applicationMonitoring.
+  // Admin / OS / PD / AS own it — see canSetStatus in lib/applicationMonitoring
+  // for why each is on the list (and why SD is not).
   const canAct =
     (application.status === 'pending' || application.status === 'needs_more_info') &&
     canSetStatus(currentUser?.role);

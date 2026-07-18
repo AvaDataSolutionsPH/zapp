@@ -123,7 +123,7 @@ export default function LoginPage() {
                 autoCorrect="off"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@zappdonuts.ph or your Shop Code"
+                placeholder="you@zappdonuts.com or your Shop Code"
                 className="w-full px-3.5 py-2.5 rounded-lg border border-gray-300 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-zapp-orange/40 focus:border-zapp-orange transition-colors"
                 required
               />

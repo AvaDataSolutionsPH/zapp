@@ -299,6 +299,10 @@ export const VALUE_LABELS: Record<string, string> = {
   pending: 'Pending',
   approved: 'Approved',
   disapproved: 'Disapproved',
+  // Delivery cadence — so the history reads "Daily delivery", not "daily".
+  daily: 'Daily delivery',
+  odd: 'Odd (1, 3, 5…)',
+  even: 'Even (2, 4, 6…)',
 };
 
 /**

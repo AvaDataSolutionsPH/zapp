@@ -97,19 +97,22 @@ create trigger applications_assign_number
   before insert on public.applications
   for each row execute function public.applications_assign_number();
 
--- Backfill existing rows in submission order so the numbering reads
--- chronologically. Onboarding rows KEEP their ZAPP-YYYYMMDD-#### number: it was
--- printed into a PDF the applicant already holds, and rewriting it would leave
--- them quoting a number the system no longer knows.
-with ordered as (
-  select id, row_number() over (order by submitted_at, id) as rn
-    from public.applications
-   where application_number is null or application_number = ''
-)
+-- Backfill the rows that have no number yet.
+--
+-- ⚠️ The numbers are UNIQUE but NOT guaranteed to follow submission order:
+-- `nextval` is evaluated per updated row in whatever order the planner chooses,
+-- so the ORDER BY below does not control which row gets which value. (Observed
+-- on the live backfill: five rows came out 10001, 10002, 10005, 10003, 10004.)
+-- That is fine for a searchable reference — uniqueness is the requirement, and
+-- `submitted_at` remains the source of truth for chronology. Enforcing order
+-- would need a per-row UPDATE loop; not worth it for a one-time backfill.
+--
+-- Onboarding rows KEEP their ZAPP-YYYYMMDD-#### number: it was printed into a
+-- PDF the applicant already holds, and rewriting it would leave them quoting a
+-- number the system no longer knows.
 update public.applications a
    set application_number = (nextval('public.application_number_seq'))::text
-  from ordered o
- where a.id = o.id;
+ where a.application_number is null or a.application_number = '';
 
 NOTIFY pgrst, 'reload schema';
 

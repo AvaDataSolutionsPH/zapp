@@ -166,6 +166,30 @@ export const canSetStatus = (role: UserRole | undefined): boolean =>
  * labelled SPD applications "Direct" while the system enrolled them as
  * distributor-channel — the list and the outcome disagreed.
  */
+/**
+ * Did this application come from the self-service `/onboarding` wizard?
+ *
+ * ⚠️ THE ONE PLACE THAT DECIDES THIS. It drives approval behaviour: an
+ * onboarding partner already created their own login in Step 1, so approval
+ * must NOT mint a Shop Code login and must NOT demand a Shop Code. A `/apply`
+ * applicant has neither, so approval mints both.
+ *
+ * It used to be `!!applicationNumber`, which made the reference number
+ * load-bearing — and the boss then asked for a number on EVERY application
+ * (migration 036). Under the old rule that single change would have made the
+ * system treat every applicant as an onboarding partner and silently stop
+ * creating franchisee logins.
+ *
+ * The `applicationNumber` fallback stays for rows written before 036 shipped:
+ * the Netlify deployment is far behind and may still be inserting rows without
+ * `applicationSource`. Those rows only carry a number if they really were
+ * onboarding, so the old rule is still correct FOR THEM.
+ */
+export const isOnboardingApplication = (app: Application): boolean =>
+  app.applicationSource
+    ? app.applicationSource === 'onboarding'
+    : !!app.applicationNumber;
+
 export const applicationType = (referralType: ReferralType): 'Distributor' | 'Direct' =>
   referralType === 'distributor' || referralType === 'sub_partner_distributor'
     ? 'Distributor'

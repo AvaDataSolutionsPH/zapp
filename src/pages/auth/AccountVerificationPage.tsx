@@ -128,19 +128,29 @@ export default function AccountVerificationPage() {
               <label className="mb-1.5 block text-sm font-medium text-gray-700">
                 Government-issued ID <span className="text-red-500">*</span>
               </label>
-              <FileUpload accept="image/*" maxSizeMB={10} camera onChange={setGovId} />
+              {/* cameraOnly: a verification document must be photographed now,
+                  not picked from the device's gallery. */}
+              <FileUpload accept="image/*" maxSizeMB={10} camera cameraOnly onChange={setGovId} />
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700">
                 Proof of Billing <span className="text-red-500">*</span>
               </label>
-              <FileUpload accept="image/*" maxSizeMB={10} camera onChange={setProof} />
+              <FileUpload accept="image/*" maxSizeMB={10} camera cameraOnly onChange={setProof} />
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700">
                 Selfie Verification <span className="text-red-500">*</span>
               </label>
-              <FileUpload accept="image/*" maxSizeMB={10} camera onChange={setSelfie} />
+              {/* Front camera — a selfie taken with the rear lens is guesswork. */}
+              <FileUpload
+                accept="image/*"
+                maxSizeMB={10}
+                camera
+                cameraOnly
+                facingMode="user"
+                onChange={setSelfie}
+              />
               <p className="mt-1 text-xs text-gray-500">
                 Take a selfie while holding your Government ID.
               </p>

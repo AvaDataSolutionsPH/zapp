@@ -15,6 +15,7 @@ export type { Tab } from './Tabs';
 export { ToastProvider, useToast } from './Toast';
 export type { ToastItem } from './Toast';
 export { FileUpload } from './FileUpload';
+export { CameraCapture } from './CameraCapture';
 export type { UploadedFile } from './FileUpload';
 export { Stat } from './Stat';
 export { SearchInput } from './SearchInput';

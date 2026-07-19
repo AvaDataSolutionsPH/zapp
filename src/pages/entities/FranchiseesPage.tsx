@@ -49,6 +49,12 @@ export default function FranchiseesPage() {
   const [plantFilter, setPlantFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  // Franchisees and Stores list the SAME rows; only the columns and the filter
+  // set differed. The boss asked for parity, so Province / Area / Delivery are
+  // mirrored from StoresPage here.
+  const [provinceFilter, setProvinceFilter] = useState('');
+  const [areaFilter, setAreaFilter] = useState('');
+  const [deliveryFilter, setDeliveryFilter] = useState('');
   const [distributorFilter, setDistributorFilter] = useState('');
   const [page, setPage] = useState(1);
 
@@ -71,6 +77,9 @@ export default function FranchiseesPage() {
       }
     }
     if (statusFilter) result = result.filter((s) => s.status === statusFilter);
+    if (provinceFilter) result = result.filter((s) => s.province === provinceFilter);
+    if (areaFilter) result = result.filter((s) => s.area === areaFilter);
+    if (deliveryFilter) result = result.filter((s) => s.deliveryStatus === deliveryFilter);
     if (distributorFilter) result = result.filter((s) => s.distributorId === distributorFilter);
     if (search) {
       const q = search.toLowerCase();
@@ -82,7 +91,10 @@ export default function FranchiseesPage() {
     }
     result.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     return result;
-  }, [stores, plantFilter, typeFilter, statusFilter, distributorFilter, search, isPD]);
+  }, [
+    stores, plantFilter, typeFilter, statusFilter, provinceFilter, areaFilter,
+    deliveryFilter, distributorFilter, search, isPD,
+  ]);
 
   const paged = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
@@ -110,6 +122,24 @@ export default function FranchiseesPage() {
     { value: 'inactive', label: 'Inactive' },
     { value: 'pending', label: 'Pending' },
     { value: 'blocked', label: 'Blocked' },
+  ];
+  // Derived from the rows actually in scope, so a filter never offers a value
+  // that would return nothing.
+  const provinceOptions: SelectOption[] = [
+    { value: '', label: 'All Provinces' },
+    ...[...new Set(stores.map((s) => s.province).filter(Boolean))].sort()
+      .map((p) => ({ value: p, label: p })),
+  ];
+  const areaOptions: SelectOption[] = [
+    { value: '', label: 'All Areas' },
+    ...[...new Set(stores.map((s) => s.area).filter(Boolean))].sort()
+      .map((a) => ({ value: a, label: a })),
+  ];
+  const deliveryOptions: SelectOption[] = [
+    { value: '', label: 'All Delivery' },
+    { value: 'active', label: 'Active' },
+    { value: 'warning', label: 'Warning' },
+    { value: 'hold', label: 'Hold' },
   ];
   const distOptions: SelectOption[] = [
     { value: '', label: 'All Distributors' },
@@ -274,6 +304,9 @@ export default function FranchiseesPage() {
             <Select options={plantOptions} value={plantFilter} onChange={(e) => { setPlantFilter(e.target.value); setPage(1); }} />
             <Select options={typeOptions} value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }} />
             <Select options={statusOptions} value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }} />
+            <Select options={provinceOptions} value={provinceFilter} onChange={(e) => { setProvinceFilter(e.target.value); setPage(1); }} />
+            <Select options={areaOptions} value={areaFilter} onChange={(e) => { setAreaFilter(e.target.value); setPage(1); }} />
+            <Select options={deliveryOptions} value={deliveryFilter} onChange={(e) => { setDeliveryFilter(e.target.value); setPage(1); }} />
             {/* Distributor filter is meaningless for a PD (only its own) — hidden. */}
             {!isPD && (
               <Select options={distOptions} value={distributorFilter} onChange={(e) => { setDistributorFilter(e.target.value); setPage(1); }} />

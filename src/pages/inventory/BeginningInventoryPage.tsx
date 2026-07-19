@@ -385,9 +385,15 @@ export default function BeginningInventoryPage() {
         </div>
         <Card>
           <CardContent>
+            {/* Beginning Inventory hangs off a DELIVERY — there is nothing to
+                scan a DR against until one exists and is marked `delivered`.
+                The old copy ("No Delivered Items") stated the condition without
+                naming the cause, so a franchisee with a brand-new store read it
+                as a missing upload button and reported the page as broken. Say
+                who has to act. */}
             <EmptyState
-              title="No Delivered Items"
-              description="There are no deliveries with 'delivered' status to process yet."
+              title="Wala pang delivery"
+              description="Ang Beginning Inventory ay nakakabit sa isang delivery — kaya walang mai-upload na Delivery Receipt hangga't wala pang naipapadala sa inyong store. Kapag nakagawa na ang inyong Distributor / Plant ng delivery at namarkahan itong 'delivered', dito na lalabas ang DR upload."
             />
           </CardContent>
         </Card>

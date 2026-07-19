@@ -31,7 +31,12 @@ import {
 import { useToast } from '@/components/ui/Toast';
 import { ensureHttpUrl } from '@/lib/externalUrl';
 import { resolveLocation } from '@/lib/phRegions';
-import { canSetStatus, effectiveAreaSupervisorId, ROLE_LABELS } from '@/lib/applicationMonitoring';
+import {
+  canSetStatus,
+  effectiveAreaSupervisorId,
+  isOnboardingApplication,
+  ROLE_LABELS,
+} from '@/lib/applicationMonitoring';
 import { useStorageUrl } from '@/lib/useStorageUrl';
 import MonitoringFieldsCard from './MonitoringFieldsCard';
 import DocumentsSection from './DocumentsSection';
@@ -113,7 +118,7 @@ export default function ApplicationDetailPage() {
   // Self-service Partner Onboarding applications (marked by an applicationNumber)
   // get "Verify & Activate" (creates the partner login + store) / "Request Info"
   // / "Reject". Legacy /apply applications keep plain Approve / Decline.
-  const isOnboarding = !!application.applicationNumber;
+  const isOnboarding = isOnboardingApplication(application);
   // Two gates: the application must still be open, AND the role must own Status.
   // Admin / OS / PD / AS own it — see canSetStatus in lib/applicationMonitoring
   // for why each is on the list (and why SD is not).

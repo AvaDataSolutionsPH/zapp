@@ -35,6 +35,7 @@ import {
 import { Button, Card, CardContent, Input, FileUpload } from '@/components/ui';
 import type { UploadedFile } from '@/components/ui';
 import { useStore } from '@/store/useStore';
+import { reserveApplicationNumber } from '@/services/dbWrite';
 import StorePinPicker from './StorePinPicker';
 import LegalDocModal from '@/components/legal/LegalDocModal';
 import { LEGAL_DOCS, type LegalDocKey } from '@/data/legalContent';
@@ -100,7 +101,16 @@ const CONFIRMS = [
 
 type CheckState = Record<'consignment' | 'privacy' | 'terms' | 'certification', boolean>;
 
-function makeApplicationNumber(): string {
+/**
+ * Fallback reference number, used only if the DB sequence is unreachable.
+ *
+ * The real number comes from `reserveApplicationNumber()` (migration 036) so
+ * every application shares one searchable series from 10001. This local form is
+ * random and could collide; it exists so a network hiccup cannot stop a
+ * submission, since the number is printed into the applicant's PDF copy and
+ * therefore has to exist BEFORE the insert.
+ */
+function makeFallbackApplicationNumber(): string {
   const d = new Date();
   const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
   const rand = Math.floor(1000 + Math.random() * 9000);
@@ -252,7 +262,8 @@ export default function PartnerOnboardingPage() {
       const fullName = [form.firstName, form.middleName, form.lastName, form.suffix]
         .map((s) => s.trim()).filter(Boolean).join(' ');
       const referralType: ReferralType = resolvedChannel?.type ?? 'zapp_internal';
-      const applicationNumber = makeApplicationNumber();
+      const applicationNumber =
+        (await reserveApplicationNumber()) ?? makeFallbackApplicationNumber();
       const metadata = await metadataPromise;
 
       // System-generated PDF copy — uploaded as a durable record AND offered to
@@ -324,6 +335,11 @@ export default function PartnerOnboardingPage() {
         certifiedAt: now,
         agreementVersion: LEGAL_VERSION,
         applicationNumber,
+        // ⚠️ THIS is what marks the application as self-service, not the number
+        // — every application carries a number since 036. Approval reads it to
+        // decide NOT to mint a Shop Code login, because this applicant already
+        // created their own in Step 1.
+        applicationSource: 'onboarding',
         idScannedName: form.idScannedName.trim() || undefined,
         idNumber: form.idNumber.trim() || undefined,
         submittedIp: metadata.submittedIp,

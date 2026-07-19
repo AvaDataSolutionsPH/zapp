@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, type DragEvent, type ChangeEvent } from 'react';
 import { UploadCloud, X, FileText, Image as ImageIcon, Camera } from 'lucide-react';
 import clsx from 'clsx';
+import { CameraCapture } from './CameraCapture';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -19,11 +20,21 @@ interface FileUploadProps {
   maxSizeMB?: number;
   onChange?: (files: UploadedFile[]) => void;
   className?: string;
-  // When true, shows a "Use Camera" button alongside the drop zone.
-  // On mobile the camera input opens the rear camera directly
-  // (capture="environment") so franchisees can shoot the DR / crate
-  // photo in-app; on desktop it falls back to the file picker.
+  // When true, shows a "Use Camera" button that opens a real in-app camera
+  // (getUserMedia) on desktop AND phone. This replaced `capture="environment"`,
+  // which phones honour but desktop browsers ignore — pressing it on a laptop
+  // just opened the file dialog.
   camera?: boolean;
+  // Photo must be TAKEN, not chosen: hides the drop zone entirely. Use for
+  // identity/verification shots, where picking an existing image defeats the
+  // purpose.
+  //
+  // The file picker is still revealed IF the camera cannot start (no hardware,
+  // denied permission, insecure context) — otherwise those users would have no
+  // way to submit at all.
+  cameraOnly?: boolean;
+  /** 'user' for selfies; defaults to the rear camera. */
+  facingMode?: 'environment' | 'user';
 }
 
 let fileIdCounter = 0;
@@ -39,11 +50,24 @@ export function FileUpload({
   onChange,
   className,
   camera = false,
+  cameraOnly = false,
+  facingMode = 'environment',
 }: FileUploadProps) {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  // Flipped once the camera has proven unavailable, which is the only condition
+  // that re-opens the file picker in cameraOnly mode.
+  const [cameraUnavailable, setCameraUnavailable] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  // A secure context is a hard requirement of getUserMedia; localhost counts.
+  const cameraSupported =
+    typeof navigator !== 'undefined' &&
+    !!navigator.mediaDevices?.getUserMedia &&
+    (window.isSecureContext || location.hostname === 'localhost');
+
+  const showDropZone = !cameraOnly || cameraUnavailable || !cameraSupported;
 
   const simulateProgress = useCallback((entry: UploadedFile, allFiles: UploadedFile[]) => {
     let prog = 0;
@@ -121,7 +145,8 @@ export function FileUpload({
 
   return (
     <div className={clsx('flex flex-col gap-3', className)}>
-      {/* Drop zone */}
+      {/* Drop zone — hidden in cameraOnly mode unless the camera cannot run. */}
+      {showDropZone && (
       <div
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
@@ -148,17 +173,39 @@ export function FileUpload({
           {accept ? `Accepted: ${accept}` : 'Any file type'} &middot; Max {maxSizeMB}MB
         </p>
       </div>
+      )}
 
-      {/* Camera capture — opt-in. On phones this opens the rear camera
-          directly; on desktop it behaves like a normal file picker. */}
-      {camera && (
+      {/* Say WHY the picker is showing when the photo was meant to be taken —
+          otherwise this silently looks like the camera requirement was
+          optional all along. */}
+      {cameraOnly && showDropZone && (
+        <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          Hindi mabuksan ang camera sa device na ito, kaya pwede kang mag-upload
+          ng litrato. Mas mainam pa ring kumuha ng bagong litrato ngayon.
+        </p>
+      )}
+
+      {/* Opens the real camera. Not `capture="environment"` — desktop browsers
+          ignore that attribute and open the file dialog instead, which is
+          exactly the bug this replaced. */}
+      {camera && cameraSupported && !cameraUnavailable && (
         <button
           type="button"
-          onClick={() => cameraInputRef.current?.click()}
+          onClick={() => setCameraOpen(true)}
           className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:border-zapp-orange/60 hover:bg-orange-50/40 transition-colors cursor-pointer"
         >
-          <Camera size={16} className="text-zapp-orange" /> Use Camera
+          <Camera size={16} className="text-zapp-orange" /> Kunan ng Litrato
         </button>
+      )}
+
+      {camera && (
+        <CameraCapture
+          open={cameraOpen}
+          facingMode={facingMode}
+          onClose={() => setCameraOpen(false)}
+          onCapture={(file) => addFiles([file])}
+          onUnavailable={() => setCameraUnavailable(true)}
+        />
       )}
 
       <input
@@ -171,17 +218,6 @@ export function FileUpload({
         tabIndex={-1}
       />
 
-      {camera && (
-        <input
-          ref={cameraInputRef}
-          type="file"
-          accept={accept ?? 'image/*'}
-          capture="environment"
-          onChange={onInputChange}
-          className="sr-only"
-          tabIndex={-1}
-        />
-      )}
 
       {/* File list */}
       {files.length > 0 && (

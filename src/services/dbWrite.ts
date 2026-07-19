@@ -239,6 +239,7 @@ const mapApplicationToDB = (a: Application) => ({
   certified_at: a.certifiedAt ?? null,
   agreement_version: a.agreementVersion ?? null,
   application_number: a.applicationNumber ?? null,
+  application_source: a.applicationSource ?? null,
   // Phase 3 — ID OCR autofill (editable).
   id_scanned_name: a.idScannedName ?? null,
   id_number: a.idNumber ?? null,
@@ -305,6 +306,26 @@ export async function updateApplication(app: Application): Promise<void> {
     .update(mapApplicationToDB(app) as never)
     .eq('id', app.id);
   if (error) throw error;
+}
+
+/**
+ * Reserve the next application reference number (migration 036).
+ *
+ * A sequence rather than max()+1 in the client: /apply is public, so two people
+ * submitting at the same moment would otherwise be handed the same number.
+ *
+ * Best-effort by design — returns null instead of throwing. The BEFORE INSERT
+ * trigger assigns a number regardless, so the only cost of a failure here is
+ * that the applicant does not see their number until the next hydration. That
+ * must never be a reason to reject their application.
+ */
+export async function reserveApplicationNumber(): Promise<string | null> {
+  const { data, error } = await supabase.rpc('next_application_number');
+  if (error) {
+    console.warn('[dbWrite] could not reserve an application number:', error.message);
+    return null;
+  }
+  return typeof data === 'string' ? data : null;
 }
 
 /**

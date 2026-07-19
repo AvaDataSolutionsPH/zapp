@@ -53,7 +53,12 @@ import {
   notifications as mockNotifications,
   specialOrders as mockSpecialOrders,
 } from '@/data/mockData';
-import { diffMonitoringFields, effectiveAreaSupervisorId, marketSourceSummary } from '@/lib/applicationMonitoring';
+import {
+  diffMonitoringFields,
+  effectiveAreaSupervisorId,
+  isOnboardingApplication,
+  marketSourceSummary,
+} from '@/lib/applicationMonitoring';
 import {
   allDocumentsVerified,
   documentStatus,
@@ -100,6 +105,7 @@ import {
   updateUser,
   appendApplicationAudit,
   updateApplicationFields,
+  reserveApplicationNumber,
   updateApplicationChanges,
   activateStoreByShopCode,
 } from '@/services/dbWrite';
@@ -728,11 +734,21 @@ export const useStore = create<AppStore>((set, get) => {
   ) => {
     await delay(500);
     const now = new Date().toISOString();
+    // Reserve the searchable reference number up front so the applicant and the
+    // optimistic row both show it immediately. Best-effort: 036's BEFORE INSERT
+    // trigger assigns one anyway, so a failure here costs a cosmetic "—" until
+    // the next hydration and must never block a submission.
+    const reservedNumber = app.applicationNumber ?? (await reserveApplicationNumber());
     const newApp: Application = {
       ...app,
       id: `app-${uid()}`,
       status: 'pending',
       submittedAt: now,
+      applicationNumber: reservedNumber ?? undefined,
+      // Defaults to the public form: only the /onboarding wizard passes
+      // 'onboarding', and that flag — NOT the number — decides whether approval
+      // mints a Shop Code login. See isOnboardingApplication.
+      applicationSource: app.applicationSource ?? 'apply',
       // Location is derived from the province by a PURE static map, so it works
       // on the anonymous /apply path (which never hydrates). The Area Supervisor
       // is deliberately NOT resolved here: that needs the admin master list, and
@@ -790,7 +806,9 @@ export const useStore = create<AppStore>((set, get) => {
     // the Shop Code as the username. An /onboarding applicant already created
     // their own login (own email, own password) at Step 1 of the wizard and
     // keeps it — generating a second account for them would orphan the first.
-    const isOnboarding = !!targetApp.applicationNumber;
+    // NOT `!!applicationNumber` — every application carries a number since 036.
+    // See isOnboardingApplication for why that distinction is load-bearing.
+    const isOnboarding = isOnboardingApplication(targetApp);
     const shopLoginEmail = isOnboarding ? null : shopCodeToEmail(targetApp.shopCode);
     const willGenerateLogin = action === 'approved' && !!shopLoginEmail;
 

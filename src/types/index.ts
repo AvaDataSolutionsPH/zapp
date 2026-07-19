@@ -345,7 +345,23 @@ export interface Application {
   acceptedTermsAt?: string;
   certifiedAt?: string;
   agreementVersion?: string;
+  /**
+   * Searchable reference, assigned by the DB from 10001 up (migration 036).
+   * EVERY application has one.
+   *
+   * ⚠️ This used to double as the "is this an onboarding application?" flag —
+   * see `applicationSource`. Never reintroduce that: numbering everything would
+   * make the system treat every applicant as a self-service partner and stop
+   * minting franchisee logins entirely.
+   */
   applicationNumber?: string;
+  /**
+   * Which intake produced this application — the explicit discriminator that
+   * replaced the `!!applicationNumber` heuristic. Read it through
+   * `isOnboardingApplication()`, which still falls back to the old rule for
+   * rows written by an older bundle.
+   */
+  applicationSource?: 'apply' | 'onboarding';
   // Phase 3 — best-effort ID OCR autofill (prefilled at capture, editable by the
   // applicant; the reviewer cross-checks against the uploaded ID image).
   idScannedName?: string;

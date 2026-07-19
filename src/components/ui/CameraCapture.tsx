@@ -57,6 +57,14 @@ export function CameraCapture({
   const [shot, setShot] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
 
+  // ⚠️ Held in a ref, NOT read directly in `start`. Callers pass an inline
+  // arrow, so a direct dependency gives `start` a new identity every parent
+  // render; the open/start effect then re-runs on every render, tearing the
+  // stream down and calling setShot(null) — which wiped the photo the instant
+  // it was taken and left the camera restarting in a loop.
+  const onUnavailableRef = useRef(onUnavailable);
+  onUnavailableRef.current = onUnavailable;
+
   // Releasing the track is not optional — an unreleased camera keeps the
   // recording indicator lit and blocks other apps from opening the device.
   const stop = useCallback(() => {
@@ -90,11 +98,11 @@ export function CameraCapture({
           : 'Walang magamit na camera sa device na ito.',
       );
       stop();
-      onUnavailable?.();
+      onUnavailableRef.current?.();
     } finally {
       setStarting(false);
     }
-  }, [facingMode, stop, onUnavailable]);
+  }, [facingMode, stop]);
 
   useEffect(() => {
     if (open) {

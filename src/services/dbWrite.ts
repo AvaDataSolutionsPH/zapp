@@ -308,6 +308,86 @@ export async function updateApplication(app: Application): Promise<void> {
 }
 
 /**
+ * Update ONLY the named columns of an application. Takes snake_case DB keys —
+ * it is a targeted patch, not a mapped entity write.
+ *
+ * Use this instead of `updateApplication` whenever the caller changes a couple
+ * of known columns. `updateApplication` re-sends EVERY column from the caller's
+ * in-memory copy, so any column that changed in the DB since that copy was
+ * hydrated is silently reverted. That is not theoretical: a franchisee hit it in
+ * production. `recordLogin` appends a `first_login` entry AFTER hydration, so
+ * their slice is stale seconds after signing in; submitting verification
+ * documents then re-sent the pre-login audit_log and migration 025's
+ * append-only trigger rejected the whole write with a bare error. The documents
+ * uploaded to Storage, nothing saved, and it looked like the upload had failed.
+ *
+ * Pair this with `appendApplicationAudit` for the history entry.
+ */
+export async function updateApplicationFields(
+  applicationId: string,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  const { error } = await supabase
+    .from('applications')
+    .update(patch as never)
+    .eq('id', applicationId);
+  if (error) throw error;
+}
+
+/**
+ * Persist only what actually CHANGED between two versions of an application.
+ *
+ * Diffing happens on the mapped DB rows, so callers pass plain TS objects and
+ * never need to know column names. `audit_log` is always excluded — history is
+ * appended through `appendApplicationAudit`, never rewritten wholesale.
+ *
+ * Returns the columns it wrote, which is useful in a log when a save looks like
+ * it did nothing.
+ */
+/**
+ * Open a franchisee's store the moment their account activates.
+ *
+ * Targets the row by shop_code instead of taking a Store object, because the
+ * caller (an Area Supervisor verifying documents) may not have the store in
+ * memory at all — RLS decides what they hydrated, and their scope was empty
+ * until migration 035. Relying on the client slice meant the update silently
+ * never ran.
+ *
+ * Still subject to RLS: a caller who cannot update the row matches zero rows
+ * and gets no error, which is why 035 has to land for an AS to activate.
+ */
+export async function activateStoreByShopCode(shopCode: string): Promise<void> {
+  const { error } = await supabase
+    .from('stores')
+    .update({ status: 'active' } as never)
+    .eq('shop_code', shopCode)
+    .neq('status', 'active');
+  if (error) throw error;
+}
+
+export async function updateApplicationChanges(
+  before: Application,
+  after: Application,
+): Promise<string[]> {
+  const mappedBefore = mapApplicationToDB(before) as Record<string, unknown>;
+  const mappedAfter = mapApplicationToDB(after) as Record<string, unknown>;
+
+  const patch: Record<string, unknown> = {};
+  for (const column of Object.keys(mappedAfter)) {
+    if (column === 'audit_log' || column === 'id') continue;
+    // JSON compare so JSONB columns (items, market_source, …) are compared by
+    // value rather than by reference.
+    if (JSON.stringify(mappedAfter[column]) !== JSON.stringify(mappedBefore[column])) {
+      patch[column] = mappedAfter[column];
+    }
+  }
+
+  const columns = Object.keys(patch);
+  if (columns.length) await updateApplicationFields(after.id, patch);
+  return columns;
+}
+
+/**
  * Append ONE entry to an application's Transaction History (migration 028).
  *
  * Not `updateApplication` with a longer array: that sends the caller's whole

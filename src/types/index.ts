@@ -51,9 +51,18 @@ export type RtcStatus = 'pending' | 'approved' | 'disapproved';
 
 export type ReferralType = 'distributor' | 'zapp_internal' | 'sub_partner_distributor';
 
-// Franchisee delivery cadence — deliveries land only on odd- or even-numbered
-// days of the month (set by the PD at onboarding).
-export type DeliverySchedule = 'odd' | 'even';
+// Franchisee delivery cadence. `daily` ships every day; `odd`/`even` ship only
+// on odd- or even-numbered days of the month. Set at onboarding and editable
+// afterwards by the PD / AS / OS on the application.
+// ⚠️ `daily` needs migration 034 — 010's CHECK constraint allowed only odd|even.
+export type DeliverySchedule = 'daily' | 'odd' | 'even';
+
+/** Display text for each cadence. */
+export const DELIVERY_SCHEDULE_LABELS: Record<DeliverySchedule, string> = {
+  daily: 'Daily delivery',
+  odd: 'Odd (1, 3, 5…)',
+  even: 'Even (2, 4, 6…)',
+};
 
 export type DeliveryStatus = 'scheduled' | 'in_transit' | 'delivered' | 'reconciled';
 

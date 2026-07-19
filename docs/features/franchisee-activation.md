@@ -103,6 +103,29 @@ to `account_status`.
 
 ## Gotchas
 
+- **⚠️ NEVER persist an application with `updateApplication` (whole row) from a
+  flow that also appends history.** The caller's slice goes stale constantly
+  (`hydrateFromDB` re-runs on every SIGNED_IN / TOKEN_REFRESHED, and
+  `recordLogin` appends `first_login` AFTER hydration), so a whole-row write
+  re-sends an outdated `audit_log`. For a FRANCHISEE that hits 025's append-only
+  trigger and the whole write is rejected — in production this failed twice:
+  the documents uploaded to Storage but nothing saved, and it read as a broken
+  upload. For STAFF, who are exempt from the trigger, it is worse: the entries
+  are silently DELETED with no error. Use `updateApplicationFields` /
+  `updateApplicationChanges` for the columns and `appendApplicationAudit` for
+  each entry. `submitAccountVerification`, `reviewDocument` and
+  `updateApplicationMonitoring` all do this now.
+- **Activation opens the STORE too.** Approval creates the store as `pending`;
+  verifying the last document flips both the account and the store to `active`
+  (`activateStoreByShopCode`). It is keyed on shop code, NOT on the in-memory
+  store — the verifier may not have the store hydrated at all, and keying off
+  the slice meant the write silently never ran.
+- **⚠️ Migration 035 is required for an Area Supervisor to activate.**
+  `stores_update` gates on `app_store_scope()`, which scoped an area_manager by
+  `users.area_ids` — ids that never match `stores.area_supervisor_id` (the same
+  fault 029 fixed for applications). An out-of-scope UPDATE matches zero rows
+  and raises NO error, so the account activated while the store stayed pending.
+
 - **⚠️ The Edge Function must be deployed separately.** `supabase functions
   deploy reset-password`. Until then, Reset Password shows "Hindi maabot ang
   reset-password service" — everything else works.

@@ -36,6 +36,7 @@ export type MonitoringField =
   | 'ads'
   | 'rtc'
   | 'shopCode'
+  | 'deliverySchedule'
   | 'assignedPlantId'
   | 'remarksPdSd'
   | 'remarksAs'
@@ -50,14 +51,36 @@ export const ALL_MONITORING_FIELDS: MonitoringField[] = [
   'ads',
   'rtc',
   'shopCode',
+  'deliverySchedule',
   'assignedPlantId',
   'remarksPdSd',
   'remarksAs',
   'remarksOs',
 ];
 
-// Straight from the module's Role-Based Access Control table.
-const PD_SD_FIELDS: MonitoringField[] = [
+// Straight from the module's Role-Based Access Control table, except that the
+// boss later granted the PD the evaluation fields as well ("yung pwede makagalaw
+// nyang daily delivery, comparable, RTC, ADS, at shop code lagyan mo din ng
+// access si PD na pwede mag type"). The PD recruits and knows the site, so it
+// fills these in the same pass as the rest of the application.
+const PD_FIELDS: MonitoringField[] = [
+  'googleMapsPictureUrl',
+  'googleMapsLink',
+  'latLng',
+  'marketSource',
+  'comparable',
+  'ads',
+  'rtc',
+  'shopCode',
+  'deliverySchedule',
+  'assignedPlantId',
+  'remarksPdSd',
+];
+
+// The SPD keeps the ORIGINAL narrower set. It is view-only elsewhere in the
+// system (003's app_is_viewonly), so widening it here would contradict its role
+// — and the boss's request named the PD only.
+const SD_FIELDS: MonitoringField[] = [
   'googleMapsPictureUrl',
   'googleMapsLink',
   'latLng',
@@ -73,6 +96,7 @@ const AS_FIELDS: MonitoringField[] = [
   'ads',
   'rtc',
   'shopCode',
+  'deliverySchedule',
   'assignedPlantId',
   'remarksAs',
 ];
@@ -83,14 +107,15 @@ const OS_FIELDS: MonitoringField[] = [
   'ads',
   'rtc',
   'shopCode',
+  'deliverySchedule',
   'assignedPlantId',
   'remarksOs',
 ];
 
 const BY_ROLE: Partial<Record<UserRole, MonitoringField[]>> = {
   owner: ALL_MONITORING_FIELDS, // Admin — full access
-  partner_distributor: PD_SD_FIELDS,
-  sub_partner_distributor: PD_SD_FIELDS,
+  partner_distributor: PD_FIELDS,
+  sub_partner_distributor: SD_FIELDS,
   area_manager: AS_FIELDS,
   operations_manager: OS_FIELDS,
 };
@@ -293,6 +318,7 @@ const FIELD_LABELS: Record<string, string> = {
   ads: 'ADS',
   rtc: 'RTC',
   shopCode: 'Shop Code',
+  deliverySchedule: 'Delivery Schedule',
   assignedPlantId: 'Plant',
   remarksPdSd: 'Remarks (PD/SD)',
   remarksAs: 'Remarks (Area Supervisor)',

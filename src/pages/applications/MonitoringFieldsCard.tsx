@@ -33,13 +33,24 @@ import {
   MARKET_SOURCE_OPTIONS,
   marketSourceSummary,
 } from '@/lib/applicationMonitoring';
-import type { Application, RtcStatus } from '@/types';
+import type { Application, DeliverySchedule, RtcStatus } from '@/types';
+import { DELIVERY_SCHEDULE_LABELS } from '@/types';
 
 const RTC_OPTIONS: SelectOption[] = [
   { value: '', label: '—' },
   { value: 'pending', label: 'Pending' },
   { value: 'approved', label: 'Approved' },
   { value: 'disapproved', label: 'Disapproved' },
+];
+
+// Built from the labels map so the dropdown, the read-only view and the
+// Transaction History can never disagree on what a cadence is called.
+const DELIVERY_SCHEDULE_OPTIONS: SelectOption[] = [
+  { value: '', label: '—' },
+  ...(Object.keys(DELIVERY_SCHEDULE_LABELS) as DeliverySchedule[]).map((v) => ({
+    value: v,
+    label: DELIVERY_SCHEDULE_LABELS[v],
+  })),
 ];
 
 // Value → display text is shared with the Transaction History diff so the log
@@ -86,6 +97,9 @@ export default function MonitoringFieldsCard({ application }: { application: App
   const [ads, setAds] = useState(application.ads ?? '');
   const [rtc, setRtc] = useState(application.rtc ?? '');
   const [shopCode, setShopCode] = useState(application.shopCode ?? '');
+  const [deliverySchedule, setDeliverySchedule] = useState<DeliverySchedule | ''>(
+    application.deliverySchedule ?? '',
+  );
   const [plantId, setPlantId] = useState(application.assignedPlantId ?? '');
   const [remarksPdSd, setRemarksPdSd] = useState(application.remarksPdSd ?? '');
   const [remarksAs, setRemarksAs] = useState(application.remarksAs ?? '');
@@ -114,6 +128,7 @@ export default function MonitoringFieldsCard({ application }: { application: App
       ads !== (application.ads ?? '') ||
       rtc !== (application.rtc ?? '') ||
       shopCode !== (application.shopCode ?? '') ||
+      deliverySchedule !== (application.deliverySchedule ?? '') ||
       plantId !== (application.assignedPlantId ?? '') ||
       remarksPdSd !== (application.remarksPdSd ?? '') ||
       remarksAs !== (application.remarksAs ?? '') ||
@@ -121,7 +136,8 @@ export default function MonitoringFieldsCard({ application }: { application: App
       mapsPicture.length > 0,
     [
       application, googleMapsLink, lat, lng, marketSource, marketSourceOther, comparable,
-      ads, rtc, shopCode, plantId, remarksPdSd, remarksAs, remarksOs, mapsPicture,
+      ads, rtc, shopCode, deliverySchedule, plantId, remarksPdSd, remarksAs, remarksOs,
+      mapsPicture,
     ],
   );
 
@@ -135,6 +151,7 @@ export default function MonitoringFieldsCard({ application }: { application: App
     setAds(application.ads ?? '');
     setRtc(application.rtc ?? '');
     setShopCode(application.shopCode ?? '');
+    setDeliverySchedule(application.deliverySchedule ?? '');
     setPlantId(application.assignedPlantId ?? '');
     setRemarksPdSd(application.remarksPdSd ?? '');
     setRemarksAs(application.remarksAs ?? '');
@@ -181,6 +198,7 @@ export default function MonitoringFieldsCard({ application }: { application: App
       if (can('ads')) patch.ads = ads.trim() || undefined;
       if (can('rtc')) patch.rtc = (rtc || undefined) as RtcStatus | undefined;
       if (can('shopCode')) patch.shopCode = shopCode.trim() || undefined;
+      if (can('deliverySchedule')) patch.deliverySchedule = deliverySchedule || undefined;
       if (can('assignedPlantId') && plantId) patch.assignedPlantId = plantId;
       if (can('remarksPdSd')) patch.remarksPdSd = remarksPdSd.trim() || undefined;
       if (can('remarksAs')) patch.remarksAs = remarksAs.trim() || undefined;
@@ -379,6 +397,24 @@ export default function MonitoringFieldsCard({ application }: { application: App
             />
           ) : (
             <ReadOnly label="Shop Code" value={application.shopCode} />
+          )}
+
+          {can('deliverySchedule') ? (
+            <Select
+              label="Delivery Schedule"
+              options={DELIVERY_SCHEDULE_OPTIONS}
+              value={deliverySchedule}
+              onChange={(e) => setDeliverySchedule(e.target.value as DeliverySchedule | '')}
+            />
+          ) : (
+            <ReadOnly
+              label="Delivery Schedule"
+              value={
+                application.deliverySchedule
+                  ? DELIVERY_SCHEDULE_LABELS[application.deliverySchedule]
+                  : undefined
+              }
+            />
           )}
 
           {/* ── Remarks — one per department, each owned solely by it. ── */}

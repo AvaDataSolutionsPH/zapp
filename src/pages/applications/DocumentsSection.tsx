@@ -133,6 +133,27 @@ export default function DocumentsSection({ application }: { application: Applica
   const canVerify = canVerifyDocuments(currentUser?.role);
   const allVerified = allDocumentsVerified(application);
   const pendingDocs = unverifiedDocuments(application);
+  const verifiedCount = DOCUMENT_KEYS.length - pendingDocs.length;
+  // "Verify all" only makes sense once there is something to look at in every
+  // slot — it must never be a way to wave through missing documents.
+  const allUploaded = DOCUMENT_KEYS.every((k) => !!documentUrl(application, k));
+
+  const handleVerifyAll = async () => {
+    setBusy(true);
+    try {
+      // Sequential, not Promise.all: each call re-reads the store to decide
+      // whether THIS is the document that activates the account, and they would
+      // race on that decision if fired together.
+      for (const key of pendingDocs) {
+        await reviewDocument(application.id, key, 'verified');
+      }
+      addToast('success', 'Na-verify lahat ng dokumento — aktibo na ang account.');
+    } catch (err) {
+      addToast('error', err instanceof Error ? err.message : 'Could not verify.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const handleVerify = async (key: ApplicationDocumentKey) => {
     setBusy(true);
@@ -189,12 +210,37 @@ export default function DocumentsSection({ application }: { application: Applica
         </div>
 
         {/* Say exactly what is still blocking activation, rather than leaving
-            the verifier to compare four badges. */}
+            the verifier to compare four badges.
+
+            This block is deliberately loud. The per-document Verify button IS
+            the activation trigger, but a reviewer looking at four uploaded
+            documents asked "ano dapat mag trigger dito para ma-approve? wala na
+            ibang button" — they were hunting for a single Approve control that
+            does not exist. So: state the count, name what is left, and offer the
+            one-click path when every document is at least uploaded. */}
         {canVerify && !allVerified && application.accountUserId && (
-          <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            The account activates once all documents are verified. Still pending:{' '}
-            <strong>{pendingDocs.map((k) => DOCUMENT_LABELS[k]).join(', ')}</strong>.
-          </p>
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3">
+            <p className="text-sm font-semibold text-amber-900">
+              {verifiedCount}/{DOCUMENT_KEYS.length} na-verify — hindi pa aktibo ang account.
+            </p>
+            <p className="mt-1 text-xs text-amber-800">
+              I-click ang <strong>Verify</strong> sa bawat dokumento. Awtomatikong mag-a-activate
+              ang account (at magbubukas ang store) kapag na-verify na lahat. Natitira:{' '}
+              <strong>{pendingDocs.map((k) => DOCUMENT_LABELS[k]).join(', ')}</strong>.
+            </p>
+            {allUploaded && (
+              <Button
+                className="mt-3"
+                size="sm"
+                variant="primary"
+                loading={busy}
+                iconLeft={<ShieldCheck size={15} />}
+                onClick={handleVerifyAll}
+              >
+                I-verify lahat at i-activate
+              </Button>
+            )}
+          </div>
         )}
       </CardContent>
 

@@ -99,6 +99,9 @@ import {
   insertUser,
   updateUser,
   appendApplicationAudit,
+  updateApplicationFields,
+  updateApplicationChanges,
+  activateStoreByShopCode,
 } from '@/services/dbWrite';
 import { signUpIsolated, generateTempPassword } from '@/lib/authSignup';
 import { resolveLoginEmailCandidates, shopCodeToEmail } from '@/lib/shopCodeAuth';
@@ -1060,7 +1063,12 @@ export const useStore = create<AppStore>((set, get) => {
     if (get().dataSource !== 'db') return;
 
     try {
-      await updateApplication(updated);
+      // Changed columns only, then the history entries one by one. A whole-row
+      // write would re-send this staff member's copy of audit_log, and staff are
+      // EXEMPT from 025's append-only trigger — so a stale slice silently
+      // deletes entries that other people added, with no error anywhere.
+      await updateApplicationChanges(target, updated);
+      for (const entry of entries) await appendApplicationAudit(id, entry);
     } catch (err) {
       console.error('[useStore] updateApplicationMonitoring: UPDATE failed, rolling back:', err);
       set({ applications: prevApplications });
@@ -1225,7 +1233,25 @@ export const useStore = create<AppStore>((set, get) => {
       // Documents first: if this fails the account must STAY unlocked so the
       // franchisee can retry, rather than sit in pending_verification with
       // nothing for staff to review.
-      if (updatedApp) await updateApplication(updatedApp);
+      //
+      // Columns + audit are written SEPARATELY, never as a whole row. The
+      // franchisee's slice goes stale within seconds of signing in (recordLogin
+      // appends `first_login` AFTER hydration), so the old whole-row write
+      // re-sent an audit_log missing that entry and 025's append-only trigger
+      // rejected it — the documents uploaded to Storage but nothing saved, and
+      // it read as a failed upload. It failed twice in production this way.
+      if (updatedApp) {
+        await updateApplicationFields(updatedApp.id, {
+          gov_id_url: govIdUrl,
+          proof_of_billing_url: proofOfBillingUrl,
+          selfie_url: selfieUrl,
+          accepted_privacy_at: now,
+        });
+        await appendApplicationAudit(
+          updatedApp.id,
+          updatedApp.auditLog[updatedApp.auditLog.length - 1],
+        );
+      }
       await updateUser(updatedUser);
     } catch (err) {
       console.error('[useStore] submitAccountVerification failed, rolling back:', err);
@@ -1287,6 +1313,21 @@ export const useStore = create<AppStore>((set, get) => {
         ? { ...accountUser, accountStatus: 'active' }
         : undefined;
 
+    // The store was created as `pending` at approval and nothing ever flipped
+    // it, so an activated franchisee never appeared as an operating store.
+    // Matched on shopCode: it is the franchisee's unique identifier and the
+    // approval copies it onto the store. (A store row carries no applicationId
+    // — worth adding if another join is ever needed.)
+    const prevStores = get().stores;
+    const shopCode = target.shopCode?.trim();
+    const linkedStore = shouldActivate && shopCode
+      ? prevStores.find((s) => s.shopCode?.trim().toLowerCase() === shopCode.toLowerCase())
+      : undefined;
+    const activatedStore: Store | undefined =
+      linkedStore && linkedStore.status !== 'active'
+        ? { ...linkedStore, status: 'active' }
+        : undefined;
+
     const prevApplications = applications;
     const prevUsers = demoUsers;
 
@@ -1295,18 +1336,39 @@ export const useStore = create<AppStore>((set, get) => {
       demoUsers: activatedUser
         ? demoUsers.map((u) => (u.id === activatedUser.id ? activatedUser : u))
         : demoUsers,
+      stores: activatedStore
+        ? prevStores.map((s) => (s.id === activatedStore.id ? activatedStore : s))
+        : prevStores,
     });
 
     if (get().dataSource !== 'db') return;
 
     try {
-      await updateApplication(updatedApp);
+      // Targeted column + audit append, never a whole row. Staff are EXEMPT from
+      // 025's append-only trigger, so a stale slice here does not error — it
+      // silently DELETES history entries, which is worse than the franchisee's
+      // loud failure because nobody finds out.
+      await updateApplicationFields(applicationId, {
+        document_reviews: updatedApp.documentReviews,
+      });
+      await appendApplicationAudit(
+        applicationId,
+        updatedApp.auditLog[updatedApp.auditLog.length - 1],
+      );
       // Only after the review is durable — activating first would grant access
       // on the strength of a review that might not have saved.
       if (activatedUser) await updateUser(activatedUser);
+      // The store opens for business at the same moment the account does.
+      // Approval creates it as `pending`; without this it stayed pending
+      // forever and the franchisee never showed up as an operating store.
+      //
+      // Targeted by shop code rather than by the store object: the verifier may
+      // not hold the store in memory (RLS decides what they hydrated), so
+      // keying off the slice meant the write simply never happened.
+      if (shouldActivate && shopCode) await activateStoreByShopCode(shopCode);
     } catch (err) {
       console.error('[useStore] reviewDocument failed, rolling back:', err);
-      set({ applications: prevApplications, demoUsers: prevUsers });
+      set({ applications: prevApplications, demoUsers: prevUsers, stores: prevStores });
       throw err;
     }
   },

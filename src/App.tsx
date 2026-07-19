@@ -71,6 +71,7 @@ import GeoHeatmapPage from '@/pages/analytics/GeoHeatmapPage'
 
 // Admin
 import ReferralCodesPage from '@/pages/admin/ReferralCodesPage'
+import SkuCatalogPage from '@/pages/admin/SkuCatalogPage'
 import SettingsPage from '@/pages/admin/SettingsPage'
 
 function App() {
@@ -193,6 +194,7 @@ function App() {
 
         {/* Admin */}
         <Route path="/referral-codes" element={<ReferralCodesPage />} />
+        <Route path="/donut-catalog" element={<SkuCatalogPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>
 

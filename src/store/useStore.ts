@@ -96,6 +96,8 @@ import {
   insertDistributor,
   // Aliased — the Zustand actions share these names.
   updateDistributor as updateDistributorDB,
+  insertSku,
+  updateSku as updateSkuDB,
   insertPlant,
   updatePlant as updatePlantDB,
   insertSubPartnerDistributor,
@@ -280,6 +282,18 @@ interface AppStore {
    * in the future"). All three are admin-only writes (003 ref_write), optimistic
    * + rollback like every other mutation.
    */
+  /**
+   * Donut catalog maintenance (owner / operations_manager). Exists so prices
+   * and product names never need a developer — 003's `ref_write` already
+   * allowed admins to write `skus`; only these helpers were missing.
+   *
+   * ⚠️ Editing a price does NOT rewrite history: deliveries, inventories and
+   * special orders copy `drPrice`/`srpPrice` into each line at the moment they
+   * are created, so past billing keeps the price that was in force then. New
+   * transactions pick up the new price.
+   */
+  addSku: (sku: SKU) => Promise<void>;
+  updateSku: (id: string, updates: Partial<SKU>) => Promise<void>;
   addPlant: (input: Omit<Plant, 'id'>) => Promise<void>;
   updatePlant: (id: string, updates: Partial<Plant>) => Promise<void>;
   updateDistributor: (id: string, updates: Partial<Distributor>) => Promise<void>;
@@ -1135,6 +1149,45 @@ export const useStore = create<AppStore>((set, get) => {
   // Boss: "lagyan mo ng edit option... para if may mali madali ma edit in the
   // future." plants / distributors / area_supervisors are reference tables, so
   // 003's ref_write (app_is_admin) already gates these — no new policy needed.
+
+  addSku: async (sku) => {
+    const prev = get().skus;
+    if (prev.some((s) => s.id === sku.id)) {
+      throw new Error('Ginagamit na ang product code na ito.');
+    }
+    set({ skus: [...prev, sku] });
+
+    if (get().dataSource !== 'db') return;
+    try {
+      await insertSku(sku);
+    } catch (err) {
+      console.error('[useStore] addSku failed, rolling back:', err);
+      set({ skus: prev });
+      throw err;
+    }
+  },
+
+  updateSku: async (id, updates) => {
+    const prev = get().skus;
+    const target = prev.find((s) => s.id === id);
+    if (!target) throw new Error('Product not found.');
+
+    // The code is the join key for every historical line item; changing it
+    // would orphan them. Callers cannot set it, and the form keeps it
+    // read-only after creation.
+    const { id: _ignored, ...safe } = updates;
+    const updated: SKU = { ...target, ...safe };
+    set({ skus: prev.map((s) => (s.id === id ? updated : s)) });
+
+    if (get().dataSource !== 'db') return;
+    try {
+      await updateSkuDB(updated);
+    } catch (err) {
+      console.error('[useStore] updateSku failed, rolling back:', err);
+      set({ skus: prev });
+      throw err;
+    }
+  },
 
   addPlant: async (input) => {
     const plant: Plant = { ...input, id: `plant-${uid()}` };

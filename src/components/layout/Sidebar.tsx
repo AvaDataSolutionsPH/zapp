@@ -17,6 +17,7 @@ import {
   Trophy,
   Map,
   QrCode,
+  Croissant,
   Settings,
   BookOpen,
   Boxes,
@@ -298,6 +299,15 @@ const navSections: NavSection[] = [
         path: '/referral-codes',
         icon: QrCode,
         allowedRoles: ['owner'],
+      },
+      {
+        // Prices and product names are business data, not code — the ops
+        // manager maintains them without a developer. Same roles the RLS
+        // already allows to write reference tables (003's ref_write).
+        label: 'Donut Catalog',
+        path: '/donut-catalog',
+        icon: Croissant,
+        allowedRoles: ['owner', 'operations_manager'],
       },
       {
         label: 'Settings',

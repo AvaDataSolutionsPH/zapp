@@ -27,6 +27,7 @@ import type {
   Distributor,
   SubPartnerDistributor,
   AreaSupervisor,
+  SKU,
   User,
   BillingRevision,
 } from '@/types';
@@ -621,6 +622,39 @@ const mapPlantToDB = (p: Plant) => ({
   region: p.region,
   code: p.code,
 });
+
+// ── SKUs (donut catalog) ──────────────────────────────────────
+//
+// `skus` is a REFERENCE table: 003's `ref_write` already restricts writes to
+// app_is_admin() (owner + operations_manager), so no migration was needed to
+// open this up — only the client helpers were missing.
+//
+// ⚠️ `id` is the DR/SAP product code and is referenced by every delivery,
+// inventory, forecast and special-order line ever written. `updateSku` keys on
+// it and never changes it; the form makes it read-only after creation. Changing
+// a code would orphan every historical record that quotes it.
+
+const mapSkuToDB = (s: SKU) => ({
+  id: s.id,
+  name: s.name,
+  category: s.category,
+  dr_price: s.drPrice,
+  srp_price: s.srpPrice,
+  unit: s.unit,
+});
+
+export async function insertSku(s: SKU): Promise<void> {
+  const { error } = await supabase.from('skus').insert(mapSkuToDB(s) as never);
+  if (error) throw error;
+}
+
+export async function updateSku(s: SKU): Promise<void> {
+  const { error } = await supabase
+    .from('skus')
+    .update(mapSkuToDB(s) as never)
+    .eq('id', s.id);
+  if (error) throw error;
+}
 
 export async function insertPlant(p: Plant): Promise<void> {
   const { error } = await supabase.from('plants').insert(mapPlantToDB(p) as never);

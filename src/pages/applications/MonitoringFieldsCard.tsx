@@ -110,6 +110,15 @@ export default function MonitoringFieldsCard({ application }: { application: App
   const [saving, setSaving] = useState(false);
 
   const can = (f: Parameters<typeof canEditField>[1]) => canEditField(role, f);
+
+  // ⚠️ The Shop Code IS the franchisee's username: approval turns it into the
+  // synthetic login address stored in auth.users. Editing it afterwards would
+  // NOT rename that login — the Shop Code → email mapping would simply stop
+  // finding their row and they would be locked out with "invalid credentials",
+  // with nothing on screen suggesting why. So it is frozen the moment a login
+  // exists, for every role including Admin.
+  const loginExists = !!application.accountUserId;
+  const canEditShopCode = can('shopCode') && !loginExists;
   const plantOptions: SelectOption[] = [
     { value: '', label: 'Select Plant' },
     ...plants.map((p) => ({ value: p.id, label: p.name })),
@@ -197,7 +206,7 @@ export default function MonitoringFieldsCard({ application }: { application: App
       if (can('comparable')) patch.comparable = comparable.trim() || undefined;
       if (can('ads')) patch.ads = ads.trim() || undefined;
       if (can('rtc')) patch.rtc = (rtc || undefined) as RtcStatus | undefined;
-      if (can('shopCode')) patch.shopCode = shopCode.trim() || undefined;
+      if (canEditShopCode) patch.shopCode = shopCode.trim() || undefined;
       if (can('deliverySchedule')) patch.deliverySchedule = deliverySchedule || undefined;
       if (can('assignedPlantId') && plantId) patch.assignedPlantId = plantId;
       if (can('remarksPdSd')) patch.remarksPdSd = remarksPdSd.trim() || undefined;
@@ -388,7 +397,7 @@ export default function MonitoringFieldsCard({ application }: { application: App
             <ReadOnly label="RTC" value={application.rtc && LABELS[application.rtc]} />
           )}
 
-          {can('shopCode') ? (
+          {canEditShopCode ? (
             <Input
               label="Shop Code"
               placeholder="MD shop code"
@@ -396,7 +405,15 @@ export default function MonitoringFieldsCard({ application }: { application: App
               onChange={(e) => setShopCode(e.target.value)}
             />
           ) : (
-            <ReadOnly label="Shop Code" value={application.shopCode} />
+            <div>
+              <ReadOnly label="Shop Code" value={application.shopCode} />
+              {loginExists && can('shopCode') && (
+                <p className="mt-1 text-xs text-gray-500">
+                  Ito na ang <strong>username</strong> ng franchisee, kaya hindi na ito
+                  mababago. Kung mali ito, kailangang gumawa ng bagong login.
+                </p>
+              )}
+            </div>
           )}
 
           {can('deliverySchedule') ? (

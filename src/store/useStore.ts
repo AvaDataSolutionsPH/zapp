@@ -1045,6 +1045,21 @@ export const useStore = create<AppStore>((set, get) => {
     const target = prevApplications.find((a) => a.id === id);
     if (!target) throw new Error('Application not found.');
 
+    // ⚠️ The Shop Code becomes the franchisee's login username at approval —
+    // it is frozen into auth.users as <shopcode>@shop.zappdonuts.com. Changing
+    // it here would NOT rename that login: the Shop Code → email mapping would
+    // stop finding their row and they would be locked out with a bare "invalid
+    // credentials". The form hides the field once a login exists; this rejects
+    // it outright, because a client-side gate is a courtesy, not a guarantee.
+    if (patch.shopCode !== undefined && target.accountUserId) {
+      if (patch.shopCode !== target.shopCode) {
+        throw new Error(
+          'Hindi na mababago ang Shop Code — ito na ang username ng franchisee.',
+        );
+      }
+      delete patch.shopCode;
+    }
+
     // The pure diff can't know domain lookups — hand it the plant name, and
     // render the Market Source array as its readable labels (the "Other" text
     // is logged separately via its own field).

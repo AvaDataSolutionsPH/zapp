@@ -150,10 +150,18 @@ export default function DeliveriesPage() {
   ]);
 
   // Stores the signed-in user may create a delivery for (role-scoped).
-  const creatableStores = useMemo(
-    () => getStoresForCurrentUser().filter((s) => s.status === 'active'),
-    [getStoresForCurrentUser],
-  );
+  //
+  // ⚠️ Depends on `stores`, NOT on the getter. Zustand hands back the SAME
+  // function identity forever, so memoising on it computed this list once at
+  // mount — before hydrateFromDB replaced the mock slice — and never again. The
+  // dropdown then offered mock stores (store-01, store-02…) that do not exist
+  // in the database: picking one built a delivery whose store_id violated the
+  // FK, so the write was rejected and rolled back and the delivery simply
+  // vanished, with nothing on screen saying why.
+  // Derived inline, like BeginningInventoryPage: the list is small, and the
+  // no-selector useStore() subscription already re-renders this component
+  // whenever the stores slice changes.
+  const creatableStores = getStoresForCurrentUser().filter((s) => s.status === 'active');
 
   const createStoreOptions: SelectOption[] = [
     { value: '', label: 'Select Store' },

@@ -181,6 +181,27 @@ export default function BillingPage() {
   // the billing user handles DR-based billing, so hide that banner for them.
   const isBillingUser = currentUser?.role === 'billing_user';
 
+  // Who the 85%/15% remittance split actually concerns. Per boss: "visible lang
+  // sa PD, SPD, at franchisee under PD's. The rest hindi nila need makita yan."
+  //
+  // franchisee_direct is deliberately EXCLUDED: a direct franchisee has no
+  // distributor, so there is nobody for them to remit 85% to — the formula
+  // describes a relationship they are not in. That is the literal reading of
+  // "franchisee under PD's" and it matches the business.
+  //
+  // ⚠️ Banner ONLY. The same figures still appear in the table (Profit 15% /
+  // Remit to PD 85%) and in the SRP Remittance stat, exactly as when this was
+  // hidden from the billing user. The boss marked the banner both times; the
+  // columns were an explicit keep.
+  const seesRemittanceFormula =
+    currentUser?.role === 'partner_distributor' ||
+    currentUser?.role === 'sub_partner_distributor' ||
+    currentUser?.role === 'franchisee_distributor';
+
+  // Unchanged rule, just named: the DR formula is for the people who bill on it,
+  // not the store paying it, and the billing user asked for no formula chrome.
+  const showDrFormula = !isFranchisee && !isBillingUser;
+
   // Owner / ops / billing_user see every distributor, so they can filter the
   // billing list by PD (and jump to the consolidated per-PD statement export).
   const canFilterDistributor =
@@ -950,13 +971,21 @@ export default function BillingPage() {
         </div>
       </div>
 
-      {/* Formula Banners — DR-based shown to everyone except franchisees;
-          SRP-based (store remittance) shown to everyone except the billing user.
-          The billing user sees NEITHER (per boss: they only need the raw DR
-          prices, no formula chrome), so the whole block is hidden for them. */}
-      {!isBillingUser && (
-        <div className={`grid grid-cols-1 gap-3 ${!isFranchisee ? 'lg:grid-cols-2' : ''}`}>
-          {!isFranchisee && (
+      {/* Formula Banners.
+            • DR-based       — everyone except franchisees and the billing user.
+            • SRP remittance — only the roles the 85%/15% split concerns
+                               (PD, SPD, franchisee under a PD).
+          Each is computed independently, then the wrapper renders only if at
+          least one survives — otherwise a franchisee_direct (who now sees
+          neither) would get an empty grid holding a gap. Two columns only when
+          both are actually shown, so a lone banner is never half-width. */}
+      {(showDrFormula || seesRemittanceFormula) && (
+        <div
+          className={`grid grid-cols-1 gap-3 ${
+            showDrFormula && seesRemittanceFormula ? 'lg:grid-cols-2' : ''
+          }`}
+        >
+          {showDrFormula && (
             <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 flex items-center gap-3">
               <Receipt size={18} className="text-zapp-orange shrink-0" />
               <div>
@@ -967,7 +996,7 @@ export default function BillingPage() {
               </div>
             </div>
           )}
-          {!isBillingUser && (
+          {seesRemittanceFormula && (
             <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3 flex items-center gap-3">
               <DollarSign size={18} className="text-indigo-600 shrink-0" />
               <div>

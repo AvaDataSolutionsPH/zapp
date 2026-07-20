@@ -98,6 +98,8 @@ import {
   updateDistributor as updateDistributorDB,
   insertSku,
   updateSku as updateSkuDB,
+  insertPackagingItem,
+  updatePackagingItem as updatePackagingItemDB,
   insertPlant,
   updatePlant as updatePlantDB,
   insertSubPartnerDistributor,
@@ -294,6 +296,13 @@ interface AppStore {
    */
   addSku: (sku: SKU) => Promise<void>;
   updateSku: (id: string, updates: Partial<SKU>) => Promise<void>;
+  /**
+   * Packaging catalog maintenance. Same contract as the SKU actions: prices are
+   * copied into each packaging order when it is placed, so editing one never
+   * restates an order already billed.
+   */
+  addPackagingItem: (item: PackagingItem) => Promise<void>;
+  updatePackagingItem: (id: string, updates: Partial<PackagingItem>) => Promise<void>;
   addPlant: (input: Omit<Plant, 'id'>) => Promise<void>;
   updatePlant: (id: string, updates: Partial<Plant>) => Promise<void>;
   updateDistributor: (id: string, updates: Partial<Distributor>) => Promise<void>;
@@ -1185,6 +1194,44 @@ export const useStore = create<AppStore>((set, get) => {
     } catch (err) {
       console.error('[useStore] updateSku failed, rolling back:', err);
       set({ skus: prev });
+      throw err;
+    }
+  },
+
+  addPackagingItem: async (item) => {
+    const prev = get().packagingCatalog;
+    if (prev.some((p) => p.id === item.id)) {
+      throw new Error('Ginagamit na ang item code na ito.');
+    }
+    set({ packagingCatalog: [...prev, item] });
+
+    if (get().dataSource !== 'db') return;
+    try {
+      await insertPackagingItem(item);
+    } catch (err) {
+      console.error('[useStore] addPackagingItem failed, rolling back:', err);
+      set({ packagingCatalog: prev });
+      throw err;
+    }
+  },
+
+  updatePackagingItem: async (id, updates) => {
+    const prev = get().packagingCatalog;
+    const target = prev.find((p) => p.id === id);
+    if (!target) throw new Error('Packaging item not found.');
+
+    // The code joins every historical packaging_orders line; changing it would
+    // orphan them. Stripped here as well as hidden in the form.
+    const { id: _ignored, ...safe } = updates;
+    const updated: PackagingItem = { ...target, ...safe };
+    set({ packagingCatalog: prev.map((p) => (p.id === id ? updated : p)) });
+
+    if (get().dataSource !== 'db') return;
+    try {
+      await updatePackagingItemDB(updated);
+    } catch (err) {
+      console.error('[useStore] updatePackagingItem failed, rolling back:', err);
+      set({ packagingCatalog: prev });
       throw err;
     }
   },

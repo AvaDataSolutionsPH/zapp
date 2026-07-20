@@ -28,6 +28,7 @@ import type {
   SubPartnerDistributor,
   AreaSupervisor,
   SKU,
+  PackagingItem,
   User,
   BillingRevision,
 } from '@/types';
@@ -653,6 +654,39 @@ export async function updateSku(s: SKU): Promise<void> {
     .from('skus')
     .update(mapSkuToDB(s) as never)
     .eq('id', s.id);
+  if (error) throw error;
+}
+
+// ── Packaging catalog ─────────────────────────────────────────
+//
+// Same shape as the SKU helpers: `packaging_catalog` is a reference table, so
+// 003's `ref_write` covers owner + operations_manager and migration 037 adds
+// the Area Supervisor.
+//
+// ⚠️ `id` is referenced by every packaging_orders line ever written, so
+// `updatePackagingItem` keys on it and never changes it.
+
+const mapPackagingItemToDB = (p: PackagingItem) => ({
+  id: p.id,
+  name: p.name,
+  description: p.description,
+  price: p.price,
+  image_url: p.imageUrl ?? null,
+  category: p.category,
+});
+
+export async function insertPackagingItem(p: PackagingItem): Promise<void> {
+  const { error } = await supabase
+    .from('packaging_catalog')
+    .insert(mapPackagingItemToDB(p) as never);
+  if (error) throw error;
+}
+
+export async function updatePackagingItem(p: PackagingItem): Promise<void> {
+  const { error } = await supabase
+    .from('packaging_catalog')
+    .update(mapPackagingItemToDB(p) as never)
+    .eq('id', p.id);
   if (error) throw error;
 }
 

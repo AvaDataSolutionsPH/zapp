@@ -310,6 +310,12 @@ const navSections: NavSection[] = [
         allowedRoles: ['owner', 'operations_manager'],
       },
       {
+        label: 'Packaging Catalog',
+        path: '/packaging-catalog',
+        icon: Package,
+        allowedRoles: ['owner', 'operations_manager'],
+      },
+      {
         label: 'Settings',
         path: '/settings',
         icon: Settings,

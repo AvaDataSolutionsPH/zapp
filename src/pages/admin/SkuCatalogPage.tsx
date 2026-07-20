@@ -5,9 +5,9 @@
 // Admin maintenance for the `skus` table so product names and prices never
 // need a developer.
 //
-// No migration was required: 003's `ref_write` already restricts reference
-// tables to app_is_admin() (owner + operations_manager). Only the client
-// helpers and this screen were missing.
+// Editable by Owner / Operations Supervisor — see `canEditCatalog`. No
+// migration was needed: 003's `ref_write` already restricts reference tables to
+// app_is_admin(), which is exactly those two roles.
 //
 // ⚠️ TWO THINGS THIS SCREEN MUST KEEP TRUE
 //
@@ -32,6 +32,7 @@ import { Card, CardContent, Button, Input, Modal, Table } from '@/components/ui'
 import type { TableColumn } from '@/components/ui/Table';
 import { useToast } from '@/components/ui/Toast';
 import { useStore } from '@/store/useStore';
+import { canEditCatalog } from '@/lib/catalogPermissions';
 import type { SKU } from '@/types';
 
 const peso = (n: number) =>
@@ -60,7 +61,8 @@ export default function SkuCatalogPage() {
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [saving, setSaving] = useState(false);
 
-  const canEdit = currentUser?.role === 'owner' || currentUser?.role === 'operations_manager';
+  // Owner / OS — mirrors 003's ref_write, which is the real gate.
+  const canEdit = canEditCatalog(currentUser?.role);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();

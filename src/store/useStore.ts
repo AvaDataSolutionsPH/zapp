@@ -2558,8 +2558,13 @@ export const useStore = create<AppStore>((set, get) => {
       case 'forecaster':
         return stores.filter((s) => s.plantId === currentUser.plantId);
 
+      // A Partner Distributor sees its whole network. A FRANCHISEE never does —
+      // it owns ONE store, and `distributorId` on its profile only records which
+      // PD it remits to, not a visibility grant. Grouping the two here let a
+      // distributor-channel franchisee see (and submit orders / inventory for)
+      // every OTHER store under the same PD. Both franchisee roles are scoped to
+      // their own store; the only difference between them is the login channel.
       case 'partner_distributor':
-      case 'franchisee_distributor':
         return stores.filter((s) => s.distributorId === currentUser.distributorId);
 
       case 'sub_partner_distributor':
@@ -2574,6 +2579,7 @@ export const useStore = create<AppStore>((set, get) => {
             currentUser.areaIds?.includes(s.areaSupervisorId),
         );
 
+      case 'franchisee_distributor':
       case 'franchisee_direct':
         return stores.filter(
           (s) => currentUser.assignedStoreIds?.includes(s.id),
@@ -2643,8 +2649,10 @@ export const useStore = create<AppStore>((set, get) => {
       case 'plant_manager':
         return billingRecords.filter((b) => b.plantId === currentUser.plantId);
 
+      // Only the Partner Distributor sees network-wide billing. A franchisee —
+      // distributor-channel or direct — sees ONLY its own store's bills; see the
+      // note in getStoresForCurrentUser.
       case 'partner_distributor':
-      case 'franchisee_distributor':
         return billingRecords.filter(
           (b) => b.distributorId === currentUser.distributorId,
         );
@@ -2659,6 +2667,7 @@ export const useStore = create<AppStore>((set, get) => {
         return billingRecords.filter((b) => storeIds.includes(b.storeId));
       }
 
+      case 'franchisee_distributor':
       case 'franchisee_direct': {
         const storeIds = currentUser.assignedStoreIds ?? [];
         return billingRecords.filter((b) => storeIds.includes(b.storeId));

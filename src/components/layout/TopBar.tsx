@@ -28,7 +28,6 @@ const routeTitles: Record<string, string> = {
   '/deliveries': 'Deliveries',
   '/beginning-inventory': 'Beginning Inventory',
   '/ending-inventory': 'Ending Inventory',
-  '/ai-validation': 'AI Validation',
   '/billing': 'Billing',
   '/payments': 'Payments',
   '/packaging': 'Packaging',

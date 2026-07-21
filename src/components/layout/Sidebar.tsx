@@ -8,7 +8,6 @@ import {
   Package,
   ClipboardList,
   ClipboardCheck,
-  Brain,
   CreditCard,
   DollarSign,
   ShoppingBag,
@@ -173,12 +172,6 @@ const navSections: NavSection[] = [
           'franchisee_distributor',
           'franchisee_direct',
         ],
-      },
-      {
-        label: 'AI Validation',
-        path: '/ai-validation',
-        icon: Brain,
-        allowedRoles: ['owner', 'operations_manager', 'plant_manager'],
       },
       {
         label: 'Inventory Reviews',

@@ -635,6 +635,9 @@ const mapPlantToDB = (p: Plant) => ({
 // it and never changes it; the form makes it read-only after creation. Changing
 // a code would orphan every historical record that quotes it.
 
+// `sort_order` is intentionally NOT written here. It is set only by
+// `updateSkuOrder`, so an ordinary name/price/code edit does not touch it and
+// therefore does not require migration 039 — only the reorder action does.
 const mapSkuToDB = (s: SKU) => ({
   id: s.id,
   name: s.name,
@@ -649,11 +652,28 @@ export async function insertSku(s: SKU): Promise<void> {
   if (error) throw error;
 }
 
-export async function updateSku(s: SKU): Promise<void> {
+/**
+ * Update a SKU. `matchId` is the row's CURRENT primary key; pass it whenever the
+ * product code (`s.id`) itself is being changed, so the WHERE clause still finds
+ * the row while the SET rewrites its id. There is no FK on `skus.id`, so a
+ * primary-key change is DB-legal — past JSONB line items keep the old code as a
+ * snapshot (not retroactive, like prices). Defaults to `s.id` for the common
+ * case where the code is unchanged.
+ */
+export async function updateSku(s: SKU, matchId: string = s.id): Promise<void> {
   const { error } = await supabase
     .from('skus')
     .update(mapSkuToDB(s) as never)
-    .eq('id', s.id);
+    .eq('id', matchId);
+  if (error) throw error;
+}
+
+/** Persist only a SKU's display order (migration 039). */
+export async function updateSkuOrder(id: string, sortOrder: number): Promise<void> {
+  const { error } = await supabase
+    .from('skus')
+    .update({ sort_order: sortOrder } as never)
+    .eq('id', id);
   if (error) throw error;
 }
 

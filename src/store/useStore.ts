@@ -98,6 +98,7 @@ import {
   updateDistributor as updateDistributorDB,
   insertSku,
   updateSku as updateSkuDB,
+  updateSkuOrder,
   insertPackagingItem,
   updatePackagingItem as updatePackagingItemDB,
   insertPlant,
@@ -296,6 +297,8 @@ interface AppStore {
    */
   addSku: (sku: SKU) => Promise<void>;
   updateSku: (id: string, updates: Partial<SKU>) => Promise<void>;
+  /** Move a donut up/down in the catalog display order (persists sortOrder). */
+  reorderSku: (id: string, direction: 'up' | 'down') => Promise<void>;
   /**
    * Packaging catalog maintenance. Same contract as the SKU actions: prices are
    * copied into each packaging order when it is placed, so editing one never
@@ -1181,18 +1184,65 @@ export const useStore = create<AppStore>((set, get) => {
     const target = prev.find((s) => s.id === id);
     if (!target) throw new Error('Product not found.');
 
-    // The code is the join key for every historical line item; changing it
-    // would orphan them. Callers cannot set it, and the form keeps it
-    // read-only after creation.
-    const { id: _ignored, ...safe } = updates;
-    const updated: SKU = { ...target, ...safe };
+    // The code MAY now change (boss request). It has no FK, so the DB accepts a
+    // primary-key change; past JSONB line items keep the old code as a snapshot
+    // (not retroactive, like prices). Guard the one thing that would corrupt the
+    // catalog: colliding with another product's code.
+    const nextId = updates.id?.trim() || target.id;
+    if (nextId !== target.id && prev.some((s) => s.id === nextId)) {
+      throw new Error('Ginagamit na ang product code na ito.');
+    }
+
+    const updated: SKU = { ...target, ...updates, id: nextId };
     set({ skus: prev.map((s) => (s.id === id ? updated : s)) });
 
     if (get().dataSource !== 'db') return;
     try {
-      await updateSkuDB(updated);
+      // Pass the OLD id so the WHERE clause finds the row even when the code
+      // itself changed.
+      await updateSkuDB(updated, id);
     } catch (err) {
       console.error('[useStore] updateSku failed, rolling back:', err);
+      set({ skus: prev });
+      throw err;
+    }
+  },
+
+  reorderSku: async (id, direction) => {
+    const prev = get().skus;
+    // Work on a copy sorted by the current display order so "up"/"down" mean
+    // what they look like on screen, regardless of the slice's array order.
+    const ordered = [...prev].sort(
+      (a, b) => (a.sortOrder ?? 9999) - (b.sortOrder ?? 9999),
+    );
+    const i = ordered.findIndex((s) => s.id === id);
+    if (i < 0) return;
+    const j = direction === 'up' ? i - 1 : i + 1;
+    if (j < 0 || j >= ordered.length) return; // already at the edge
+
+    // Swap the two rows' sortOrder. Normalise to the array index * 10 so the
+    // values stay clean even if the seed backfill left gaps.
+    const a = ordered[i];
+    const b = ordered[j];
+    const aOrder = (j + 1) * 10;
+    const bOrder = (i + 1) * 10;
+    const updatedA: SKU = { ...a, sortOrder: aOrder };
+    const updatedB: SKU = { ...b, sortOrder: bOrder };
+
+    set({
+      skus: prev.map((s) =>
+        s.id === a.id ? updatedA : s.id === b.id ? updatedB : s,
+      ),
+    });
+
+    if (get().dataSource !== 'db') return;
+    try {
+      await Promise.all([
+        updateSkuOrder(updatedA.id, aOrder),
+        updateSkuOrder(updatedB.id, bOrder),
+      ]);
+    } catch (err) {
+      console.error('[useStore] reorderSku failed, rolling back:', err);
       set({ skus: prev });
       throw err;
     }

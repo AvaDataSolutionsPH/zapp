@@ -17,17 +17,22 @@
 //    a retroactive change would silently restate statements already sent to
 //    franchisees — but it surprises people, so the page says it plainly.
 //
-// 2. The product code is immutable once created. It is the join key quoted by
-//    every historical delivery, inventory, forecast and special-order line, and
-//    it is what the DR scanner matches against. Changing it would orphan all of
-//    them. New products let you type it; existing ones show it read-only.
+// 2. The product code is editable (boss request), but it is the join key quoted
+//    by every historical delivery/inventory/forecast/special-order line and what
+//    the DR scanner matches on. There is no FK, so a change is DB-legal; past
+//    JSONB snapshots keep the OLD code (not retroactive, like prices). The form
+//    warns on a change and the store blocks a collision with another code.
+//
+// 3. Rows are shown in the catalog display order (sortOrder, migration 039) so
+//    they match the Delivery Receipt sequence. Up/Down arrows persist it, and
+//    fetchSkus orders by it so every donut list downstream follows.
 //
 // There is deliberately NO delete. Removing a product would orphan the history
 // that references it. A discontinued item is better handled by an `active` flag
 // (a schema change) than by deletion.
 
 import { useMemo, useState } from 'react';
-import { Croissant, Plus, Pencil, Search, Info } from 'lucide-react';
+import { Croissant, Plus, Pencil, Search, Info, ChevronUp, ChevronDown } from 'lucide-react';
 import { Card, CardContent, Button, Input, Modal, Table } from '@/components/ui';
 import type { TableColumn } from '@/components/ui/Table';
 import { useToast } from '@/components/ui/Toast';
@@ -50,7 +55,7 @@ interface FormState {
 const EMPTY: FormState = { id: '', name: '', category: '', drPrice: '', srpPrice: '', unit: 'pc' };
 
 export default function SkuCatalogPage() {
-  const { skus, addSku, updateSku, currentUser } = useStore();
+  const { skus, addSku, updateSku, reorderSku, currentUser } = useStore();
   const { addToast } = useToast();
 
   const [search, setSearch] = useState('');
@@ -64,16 +69,35 @@ export default function SkuCatalogPage() {
   // Owner / OS — mirrors 003's ref_write, which is the real gate.
   const canEdit = canEditCatalog(currentUser?.role);
 
+  // Always shown in display order (sortOrder), so the catalog matches the DR
+  // sequence and Up/Down move a row relative to what is on screen.
+  const ordered = useMemo(
+    () => [...skus].sort((a, b) => (a.sortOrder ?? 9999) - (b.sortOrder ?? 9999)),
+    [skus],
+  );
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return skus;
-    return skus.filter(
+    if (!q) return ordered;
+    return ordered.filter(
       (s) =>
         s.name.toLowerCase().includes(q) ||
         s.category.toLowerCase().includes(q) ||
         s.id.toLowerCase().includes(q),
     );
-  }, [skus, search]);
+  }, [ordered, search]);
+
+  // Reordering is disabled while a search is active: Up/Down would move a row
+  // past hidden neighbours, which is not what the arrows appear to promise.
+  const canReorder = canEdit && !search.trim();
+
+  const handleReorder = async (id: string, direction: 'up' | 'down') => {
+    try {
+      await reorderSku(id, direction);
+    } catch {
+      addToast('error', 'Hindi na-save ang bagong ayos.');
+    }
+  };
 
   const openCreate = () => {
     setForm(EMPTY);
@@ -104,8 +128,13 @@ export default function SkuCatalogPage() {
 
   const validate = (): boolean => {
     const e: Partial<Record<keyof FormState, string>> = {};
-    if (creating && !form.id.trim()) e.id = 'Product code is required.';
-    if (creating && skus.some((s) => s.id === form.id.trim())) e.id = 'This code is already used.';
+    const code = form.id.trim();
+    if (!code) e.id = 'Product code is required.';
+    // A code must be unique. On edit, the row's own current code is allowed
+    // (it is not a collision with itself).
+    else if (skus.some((s) => s.id === code && s.id !== editing?.id)) {
+      e.id = 'This code is already used.';
+    }
     if (!form.name.trim()) e.name = 'Name is required.';
     if (!form.category.trim()) e.category = 'Category is required.';
     const dr = Number(form.drPrice);
@@ -127,18 +156,22 @@ export default function SkuCatalogPage() {
     setSaving(true);
     try {
       const payload: SKU = {
-        id: (creating ? form.id.trim() : editing!.id),
+        // Editable now, on create AND edit (boss request).
+        id: form.id.trim(),
         name: form.name.trim(),
         category: form.category.trim(),
         drPrice: Number(form.drPrice),
         srpPrice: Number(form.srpPrice),
         unit: form.unit.trim(),
+        // Preserve the row's place in the display order.
+        sortOrder: editing?.sortOrder,
       };
       if (creating) {
         await addSku(payload);
         addToast('success', `${payload.name} added to the catalog.`);
       } else {
-        await updateSku(payload.id, payload);
+        // First arg is the OLD code so the row is found even if the code changed.
+        await updateSku(editing!.id, payload);
         addToast('success', `${payload.name} updated. New prices apply to new transactions only.`);
       }
       close();
@@ -150,6 +183,39 @@ export default function SkuCatalogPage() {
   };
 
   const columns: TableColumn<SKU>[] = [
+    ...(canReorder
+      ? [
+          {
+            key: 'reorder',
+            header: 'Order',
+            render: (row: SKU) => {
+              const idx = filtered.findIndex((s) => s.id === row.id);
+              return (
+                <div className="flex flex-col">
+                  <button
+                    type="button"
+                    aria-label="Itaas"
+                    disabled={idx <= 0}
+                    onClick={() => handleReorder(row.id, 'up')}
+                    className="cursor-pointer border-none bg-transparent p-0.5 text-gray-400 hover:text-zapp-orange disabled:cursor-not-allowed disabled:opacity-30"
+                  >
+                    <ChevronUp size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Ibaba"
+                    disabled={idx >= filtered.length - 1}
+                    onClick={() => handleReorder(row.id, 'down')}
+                    className="cursor-pointer border-none bg-transparent p-0.5 text-gray-400 hover:text-zapp-orange disabled:cursor-not-allowed disabled:opacity-30"
+                  >
+                    <ChevronDown size={16} />
+                  </button>
+                </div>
+              );
+            },
+          } as TableColumn<SKU>,
+        ]
+      : []),
     {
       key: 'id',
       header: 'Product Code',
@@ -263,13 +329,16 @@ export default function SkuCatalogPage() {
             value={form.id}
             onChange={(e) => setForm({ ...form, id: e.target.value })}
             error={errors.id}
-            disabled={!creating}
-            helperText={
-              creating
-                ? 'The code printed on the Delivery Receipt. The DR scanner matches on this.'
-                : 'The product code cannot be changed — every past delivery and inventory record refers to it.'
-            }
+            helperText="The code printed on the Delivery Receipt. The DR scanner matches on this."
           />
+          {!creating && form.id.trim() !== editing?.id && (
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <strong>Heads up:</strong> you are changing the product code. Deliveries and
+              inventory recorded under the old code <strong>{editing?.id}</strong> keep that old
+              code (they are not rewritten), and future DR scans must use the new code. Only change
+              it to match the real Delivery Receipt.
+            </p>
+          )}
           <Input
             label="Product Name"
             placeholder="e.g. Choco Butternut"

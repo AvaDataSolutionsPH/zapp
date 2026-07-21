@@ -420,6 +420,12 @@ export interface SKU {
   drPrice: number;
   srpPrice: number;
   unit: string;
+  /**
+   * Display order for the catalog and every donut list read from it, set to
+   * match the Delivery Receipt (migration 039). Optional for back-compat; rows
+   * without one sort last.
+   */
+  sortOrder?: number;
 }
 
 export interface InventoryItem {

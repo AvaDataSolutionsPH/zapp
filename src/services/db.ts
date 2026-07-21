@@ -74,7 +74,16 @@ async function fetchAll<T>(table: string): Promise<T[]> {
 // ── Per-entity fetchers ───────────────────────────────────────
 
 export const fetchPlants = (): Promise<Plant[]> => fetchAll<Plant>('plants');
-export const fetchSkus = (): Promise<SKU[]> => fetchAll<SKU>('skus');
+// Ordered by the catalog's display order (sortOrder, migration 039) so every
+// list that maps over `skus` reads in the same DR sequence. Sorted in JS, NOT
+// with `.order('sort_order')`, on purpose: if 039 has not been applied yet the
+// column does not exist and a server-side order would make the whole skus fetch
+// throw, failing hydration. Here a missing sortOrder just sorts last and nothing
+// breaks — the deploy is not coupled to the migration for reads.
+export const fetchSkus = async (): Promise<SKU[]> => {
+  const rows = await fetchAll<SKU>('skus');
+  return rows.sort((a, b) => (a.sortOrder ?? 9999) - (b.sortOrder ?? 9999));
+};
 export const fetchPackagingCatalog = (): Promise<PackagingItem[]> =>
   fetchAll<PackagingItem>('packaging_catalog');
 

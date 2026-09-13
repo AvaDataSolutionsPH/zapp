@@ -158,6 +158,27 @@ const billingPlantScope = (user: User): string[] | null => {
   return ids.length > 0 ? ids : null;
 };
 
+/**
+ * Plants a FORECASTER covers. Boss: "Forecaster is multiple plants. Same sa
+ * billing multiple plants din hawak nila. Plant manager per plant lang yan."
+ *
+ * Deliberately NOT the same helper as `billingPlantScope`: this one falls back
+ * to the legacy single `plantId` before treating the scope as company-wide, so
+ * a forecaster account created before multi-plant shipped keeps seeing exactly
+ * the one plant it was assigned instead of silently widening to everything.
+ * Billing has no such fallback because its seeded account has no plant at all
+ * and is meant to be company-wide (migration 031).
+ *
+ * ⚠️ Mirrors `app_plant_scope()` in migration 041 EXACTLY. RLS runs FIRST, so
+ * if the client were more generous than the DB the extra rows would simply
+ * never arrive — the 029 failure mode.
+ */
+const forecasterPlantScope = (user: User): string[] | null => {
+  const ids = user.plantIds ?? [];
+  if (ids.length > 0) return ids;
+  return user.plantId ? [user.plantId] : null;
+};
+
 const uid = (): string =>
   `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -169,11 +190,18 @@ export type NewAccountRole =
   // above, these have NO entity record and NO referral code — they are a login
   // + role only, because they refer no applicants and own no channel.
   | 'operations_manager'
-  | 'billing_user';
+  | 'billing_user'
+  // Forecaster holds SEVERAL plants ("Forecaster is multiple plants"); Plant
+  // Manager holds exactly one ("plant manager per plant lang yan"). Neither
+  // could be created from the UI before — they existed as roles with no
+  // creation path, so a lost one needed raw SQL.
+  | 'forecaster'
+  | 'plant_manager';
 
 /** True for the HQ staff roles that get a login but no entity/referral code. */
 const isStaffRole = (r: NewAccountRole): boolean =>
-  r === 'operations_manager' || r === 'billing_user';
+  r === 'operations_manager' || r === 'billing_user' ||
+  r === 'forecaster' || r === 'plant_manager';
 
 /**
  * One-time credentials for a login generated on approval. Returned to the
@@ -1784,7 +1812,7 @@ export const useStore = create<AppStore>((set, get) => {
     // broader isAdmin (which also covers operations_manager; an ops manager
     // minting more ops managers is an escalation path we don't want).
     if (isStaffRole(input.role) && currentUser.role !== 'owner') {
-      throw new Error('Only the Admin (Owner) can create Operations Manager or Billing accounts.');
+      throw new Error('Only the Admin (Owner) can create HQ staff accounts (Operations Manager, Billing, Forecaster, Plant Manager).');
     }
 
     const email = input.email.trim().toLowerCase();
@@ -1810,12 +1838,20 @@ export const useStore = create<AppStore>((set, get) => {
         id: userId,
         name,
         email,
-        role: input.role === 'billing_user' ? 'billing_user' : 'operations_manager',
+        // input.role verbatim. This used to be a binary
+        // `billing_user ? … : 'operations_manager'`, which silently saved any
+        // other staff role as Operations Manager — a privilege ESCALATION, not
+        // a cosmetic bug, now that Forecaster and Plant Manager go through here.
+        role: input.role,
         avatar,
-        // Operations Manager covers every plant, so it stores none. Billing is
-        // per-plant and may hold several; an empty list still means "all"
-        // (see migration 031) so a billing account is never born blank.
-        plantIds: input.role === 'billing_user' ? (input.plantIds ?? []) : undefined,
+        // Operations Manager covers every plant, so it stores none. Billing and
+        // Forecaster are per-plant and may hold SEVERAL; an empty list still
+        // means "all" (migration 031 + 041), so neither is ever born blank.
+        plantIds: input.role === 'billing_user' || input.role === 'forecaster'
+          ? (input.plantIds ?? [])
+          : undefined,
+        // Plant Manager holds exactly one — "plant manager per plant lang yan".
+        plantId: input.role === 'plant_manager' ? plantId : undefined,
       };
     } else if (input.role === 'partner_distributor') {
       const distId = `dist-${uid()}`;
@@ -2631,9 +2667,14 @@ export const useStore = create<AppStore>((set, get) => {
         return scope ? stores.filter((s) => scope.includes(s.plantId)) : stores;
       }
 
+      // Plant Manager stays ONE plant — "plant manager per plant lang yan".
       case 'plant_manager':
-      case 'forecaster':
         return stores.filter((s) => s.plantId === currentUser.plantId);
+
+      case 'forecaster': {
+        const scope = forecasterPlantScope(currentUser);
+        return scope ? stores.filter((s) => scope.includes(s.plantId)) : stores;
+      }
 
       // A Partner Distributor sees its whole network. A FRANCHISEE never does —
       // it owns ONE store, and `distributorId` on its profile only records which
@@ -2682,8 +2723,12 @@ export const useStore = create<AppStore>((set, get) => {
       }
 
       case 'plant_manager':
-      case 'forecaster':
         return deliveries.filter((d) => d.plantId === currentUser.plantId);
+
+      case 'forecaster': {
+        const scope = forecasterPlantScope(currentUser);
+        return scope ? deliveries.filter((d) => scope.includes(d.plantId)) : deliveries;
+      }
 
       case 'partner_distributor':
       case 'franchisee_distributor':
@@ -2750,8 +2795,10 @@ export const useStore = create<AppStore>((set, get) => {
         return billingRecords.filter((b) => storeIds.includes(b.storeId));
       }
 
-      case 'forecaster':
-        return billingRecords.filter((b) => b.plantId === currentUser.plantId);
+      case 'forecaster': {
+        const scope = forecasterPlantScope(currentUser);
+        return scope ? billingRecords.filter((b) => scope.includes(b.plantId)) : billingRecords;
+      }
 
       default:
         return [];

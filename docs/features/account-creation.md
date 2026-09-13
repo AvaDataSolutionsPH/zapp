@@ -67,6 +67,36 @@ AS `plant_id = app_plant()`, referral `distributor_id = app_distributor()`, and
 - that PD creates an SPD → **no RLS error**; SPD `parent_distributor_id` = the PD's
   distributor, plant inherited, referral code generated, user profile linked.
 
+## Plants per role (migration 041)
+
+Boss: *"Forecaster is multiple plants. Same sa billing multiple plants din hawak
+nila. Plant manager per plant lang yan."*
+
+| Role | Plants | Picker |
+|---|---|---|
+| Owner / Operations Manager | ALL (never asked) | none |
+| **Billing User** | several | multi-select |
+| **Forecaster** | several | multi-select |
+| **Plant Manager** | exactly one | single Select |
+| PD / Sub-PD / Area Supervisor | one (home plant tag only — scope comes from the distributor / provinces) | single Select |
+
+`forecasterPlantScope` in `src/store/useStore.ts` mirrors `app_plant_scope()` in
+migration 041 **exactly**, because RLS runs first and a client more generous
+than the DB just renders empty lists (the 029 failure mode).
+
+⚠️ The rule is `plant_ids` non-empty → those plants; else `plant_id` → that one
+plant; else ALL. The middle case exists so a forecaster created BEFORE 041 (one
+`plant_id`, empty `plant_ids`) is not silently widened to the whole company —
+it is the one place the "empty means ALL" convention from 031 had to be applied
+with a fallback rather than literally.
+
+**Forecaster and Plant Manager are now creatable here** (Owner only). They were
+roles with no creation path at all — a lost one needed raw SQL. Fixing that also
+uncovered a latent escalation: the staff branch of `createPartnerAccount`
+hardcoded `billing_user ? 'billing_user' : 'operations_manager'`, so any other
+staff role would have been saved as **Operations Manager**. It now writes
+`input.role` verbatim.
+
 ## Gotchas
 - Partial failure: if `signUp` succeeds but a later insert fails, the auth login
   exists without a full profile (login fails safe until fixed). Rare with correct

@@ -38,6 +38,8 @@ const ROLE_LABEL: Record<NewAccountRole, string> = {
   area_manager: 'Area Supervisor',
   operations_manager: 'Operations Manager',
   billing_user: 'Billing User',
+  forecaster: 'Forecaster',
+  plant_manager: 'Plant Manager',
 };
 
 // The dropdown offers 'franchisee' as a shortcut that ROUTES to the full
@@ -79,6 +81,8 @@ export default function NewAccountPage() {
             ? ([
                 { value: 'operations_manager', label: 'Operations Manager' },
                 { value: 'billing_user', label: 'Billing User' },
+                { value: 'forecaster', label: 'Forecaster' },
+                { value: 'plant_manager', label: 'Plant Manager' },
               ] as { value: DropdownRole; label: string }[])
             : []),
         ];
@@ -113,11 +117,16 @@ export default function NewAccountPage() {
   // Operations Manager covers EVERY plant, so it is never asked. Billing is
   // per-plant with a multi-select. Everyone else keeps the single-plant Select.
   const isOps = role === 'operations_manager';
+  // Billing and Forecaster both hold SEVERAL plants (boss: "Forecaster is
+  // multiple plants. Same sa billing multiple plants din hawak nila."), so they
+  // share the multi-select. Plant Manager keeps the single Select — "plant
+  // manager per plant lang yan".
   const isBilling = role === 'billing_user';
+  const isMultiPlant = isBilling || role === 'forecaster';
   // owner/ops pick plant + (for SPD) the parent PD. A PD uses its own scope, so
   // those inputs are hidden for them.
-  const showPlant = isAdmin && !isOps && !isBilling;
-  const showPlantMulti = isBilling;
+  const showPlant = isAdmin && !isOps && !isMultiPlant;
+  const showPlantMulti = isMultiPlant;
   const showParent = isAdmin && role === 'sub_partner_distributor';
 
   const plantCheckOptions = plants.map((p) => ({ value: p.id, label: p.name }));

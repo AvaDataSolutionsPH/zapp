@@ -47,3 +47,4 @@ Copy `_TEMPLATE.md` when adding a feature doc.
 - [ending-inventory-review](ending-inventory-review.md) — reviewer state machine (approve / needs-review / correction)
 - [billing-and-delivery-recompute](billing-and-delivery-recompute.md) — computed billings + auto delivery-status cascade
 - [payment-flow](payment-flow.md) — franchisee → PD/SPD (collect) → billing (verify) payment state machine
+- [db-connection-gate](db-connection-gate.md) — blocks the whole app when hydration fails, so nobody encodes real work into the silent mock fallback

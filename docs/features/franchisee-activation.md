@@ -188,7 +188,17 @@ to `account_status`.
   land later and roll the slice back. This was caught live in E2E by 025's
   append-only trigger. The RPC does `audit_log || entry` in one statement
   against the current row, so staleness cannot cost an entry.
-  **⬜ FOLLOW-UP:** `reviewDocument` and `submitAccountVerification` still send
-  the whole row. Staff are exempt from the append-only trigger, so a stale staff
-  slice can still drop entries with no error at all — the same bug without the
-  seatbelt. Move both onto the RPC.
+  **✅ DONE:** `reviewDocument` and `submitAccountVerification`
+  (`src/store/useStore.ts`) no longer send the whole row. Each now writes its
+  real columns with `updateApplicationFields` (a targeted snake_case patch —
+  `document_reviews` for the review; `gov_id_url` / `proof_of_billing_url` /
+  `selfie_url` / `accepted_privacy_at` for the submission) and appends its ONE
+  new entry with `appendApplicationAudit`. Order matters: `mapApplicationToDB`
+  DOES map `audit_log`, so any `updateApplication` AFTER the RPC would overwrite
+  the freshly appended array with the stale client one — the same bug from the
+  other side. Optimistic update + rollback are unchanged, and the in-memory
+  append still feeds the UI immediately.
+  **⬜ STILL OPEN:** `reviewApplication` (approve / decline) is still a whole-row
+  `updateApplication` carrying an appended `auditLog`, so it keeps the same
+  exposure. It is harder to convert: its compensating rollback deliberately
+  re-sends the PREVIOUS whole row when the store INSERT fails.

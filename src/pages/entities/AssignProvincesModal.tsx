@@ -21,7 +21,7 @@ import { Modal, Button } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import { useStore } from '@/store/useStore';
 import { provincesClaimedByOthers } from '@/lib/applicationMonitoring';
-import { OPERATING_PROVINCES } from '@/lib/phRegions';
+import { OPERATING_PROVINCES, canonicalProvince } from '@/lib/phRegions';
 import type { AreaSupervisor } from '@/types';
 
 interface Props {
@@ -77,7 +77,7 @@ export default function AssignProvincesModal({ supervisor, onClose }: Props) {
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {OPERATING_PROVINCES.map((province) => {
             const checked = selected.includes(province);
-            const claimed = taken.has(province.toLowerCase());
+            const claimed = taken.has(canonicalProvince(province));
             return (
               <label
                 key={province}

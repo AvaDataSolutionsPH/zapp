@@ -25,6 +25,7 @@
 // buttons — instead of a value the batch Save writes. See canSetStatus below.
 
 import type { Application, AreaSupervisor, ReferralType, UserRole } from '@/types';
+import { canonicalProvince } from '@/lib/phRegions';
 
 /** Fields the batch Save can write. `latLng` covers the lat+lng pair. */
 export type MonitoringField =
@@ -206,18 +207,21 @@ export const applicationType = (referralType: ReferralType): 'Distributor' | 'Di
  * behaviour. That fallback is what makes an EMPTY master list safe: until the
  * admin fills it in, assignment works exactly as it did before.
  *
- * Matching is case/whitespace-insensitive because provinces arrive as free text
- * from the PSGC cascade. If two supervisors claim the same province the first
- * wins — the admin UI is the place to resolve that, not a silent tiebreak here.
+ * Matching goes through `canonicalProvince` on BOTH sides because provinces
+ * arrive as free text from the PSGC cascade — which spells NCR "Metro Manila
+ * (NCR)" while the admin master list stores plain "Metro Manila". A raw
+ * trim+lowercase compare silently never matched those. If two supervisors claim
+ * the same province the first wins — the admin UI is the place to resolve that,
+ * not a silent tiebreak here.
  */
 export const resolveAreaSupervisorForProvince = (
   province: string | undefined,
   areaSupervisors: Pick<AreaSupervisor, 'id' | 'assignedProvinces'>[],
 ): string | undefined => {
-  const key = province?.trim().toLowerCase();
+  const key = canonicalProvince(province);
   if (!key) return undefined;
   return areaSupervisors.find((as_) =>
-    (as_.assignedProvinces ?? []).some((p) => p.trim().toLowerCase() === key),
+    (as_.assignedProvinces ?? []).some((p) => canonicalProvince(p) === key),
   )?.id;
 };
 
@@ -238,7 +242,11 @@ export const effectiveAreaSupervisorId = (
   resolveAreaSupervisorForProvince(app.province, areaSupervisors) ??
   app.assignedAreaSupervisorId;
 
-/** Provinces already claimed by ANOTHER supervisor — the UI warns on these. */
+/**
+ * Provinces already claimed by ANOTHER supervisor — the UI warns on these.
+ * Keys are `canonicalProvince` values, so callers must look up with the same
+ * helper (a stored "Metro Manila (NCR)" must still flag plain "Metro Manila").
+ */
 export const provincesClaimedByOthers = (
   selfId: string,
   areaSupervisors: Pick<AreaSupervisor, 'id' | 'assignedProvinces'>[],
@@ -246,7 +254,7 @@ export const provincesClaimedByOthers = (
   const taken = new Set<string>();
   for (const as_ of areaSupervisors) {
     if (as_.id === selfId) continue;
-    for (const p of as_.assignedProvinces ?? []) taken.add(p.trim().toLowerCase());
+    for (const p of as_.assignedProvinces ?? []) taken.add(canonicalProvince(p));
   }
   return taken;
 };

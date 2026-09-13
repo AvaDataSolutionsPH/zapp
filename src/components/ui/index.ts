@@ -24,3 +24,4 @@ export { ConfirmDialog } from './ConfirmDialog';
 export { EmptyState } from './EmptyState';
 export { StatusBadge } from './StatusBadge';
 export { default as LoadingScreen } from './LoadingScreen';
+export { default as DatabaseUnavailableScreen } from './DatabaseUnavailableScreen';

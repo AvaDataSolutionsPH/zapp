@@ -230,6 +230,16 @@ interface AppStore {
   authLoading: boolean;
   /** Where the entity slices currently come from: mock seed or Supabase DB. */
   dataSource: 'mock' | 'db';
+  /**
+   * Outcome of the LAST `hydrateFromDB()` attempt. Deliberately separate from
+   * `dataSource`: that flag answers "should mutations write to the DB" and
+   * gates ~40 write paths, while this one answers "did the fetch succeed" so
+   * `App.tsx` can block the UI instead of silently showing mock data as if it
+   * were real. `'loading'` exists because hydration is fire-and-forget (both
+   * `login` and `restoreSession` set `authLoading: false` first) — without it
+   * the gate would flash on every sign-in.
+   */
+  hydrationStatus: 'idle' | 'loading' | 'ok' | 'failed';
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
   switchRole: (role: UserRole) => void;
@@ -529,6 +539,7 @@ export const useStore = create<AppStore>((set, get) => {
   pendingApplication: null,
   authLoading: true,
   dataSource: 'mock',
+  hydrationStatus: 'idle',
 
   login: async (email: string, password: string): Promise<boolean> => {
     // A franchisee's username is their Shop Code, but Supabase only knows how
@@ -625,6 +636,7 @@ export const useStore = create<AppStore>((set, get) => {
   },
 
   hydrateFromDB: async (): Promise<void> => {
+    set({ hydrationStatus: 'loading' });
     try {
       const data = await hydrateAll();
       // Replace the entity slices with DB data, then recompute the derived
@@ -665,11 +677,17 @@ export const useStore = create<AppStore>((set, get) => {
         billingRevisions: data.billingRevisions,
         billingRecords: nextBillings,
         dataSource: 'db',
+        hydrationStatus: 'ok',
       });
     } catch (err) {
-      // Schema not migrated yet, network failed, or permissive RLS not
-      // applied. Leave the store on the mock slices so the app still works.
+      // Schema not migrated yet, network failed, RLS misconfigured, or the
+      // free-tier project auto-paused. The mock slices stay in place so the
+      // module keeps rendering, but `hydrationStatus: 'failed'` makes App.tsx
+      // block the UI — otherwise the operator would encode a real day of work
+      // into fake data whose writes are skipped (see docs/features/
+      // db-connection-gate.md).
       console.warn('[useStore] hydrateFromDB failed — staying on mock data:', err);
+      set({ hydrationStatus: 'failed' });
     }
   },
 

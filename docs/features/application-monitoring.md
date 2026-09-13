@@ -210,6 +210,35 @@ supervisors collide); a real `users → area_supervisors` FK is the proper fix.
 ⬜ `stores` / `deliveries` area_manager RLS may share the `area_ids` assumption —
 check if AS scoping there is ever exercised.
 
+### Province names are canonicalised before comparing (migration 040)
+The SAME province reaches us under two spellings, so a raw trim+lowercase compare
+silently never matched:
+- `/apply`'s PSGC cascade stores NCR as **"Metro Manila (NCR)"** — `NCR_PROVINCE`
+  in `services/phLocations.ts` injects it that way because NCR is a REGION and the
+  PSGC `/provinces/` endpoint omits it.
+- The Assign-Provinces master list writes **"Metro Manila"**, from
+  `OPERATING_PROVINCES` in `lib/phRegions.ts`.
+
+`canonicalProvince(p)` (`lib/phRegions.ts`) strips ONE trailing parenthetical
+suffix, then trims + lowercases. It is applied on **both sides** of every province
+compare: `resolveAreaSupervisorForProvince` and `provincesClaimedByOthers`
+(`lib/applicationMonitoring.ts`), plus the claimed-set lookup in
+`AssignProvincesModal` (whose keys are now canonical).
+
+**Migration 040 mirrors it in Postgres** — `app_province_key()` (`regexp_replace`
+of a trailing `(...)`, then `lower(btrim(...))`) and a redefined
+`app_area_owns_application()` that compares through it. RLS runs FIRST, so if the
+DB and the client canonicalise differently the row is dropped before the client
+can resolve it — the same failure mode as 029. Keep the two in sync.
+
+> Regression-safe: canonicalisation is a **no-op for every province without a
+> parenthetical** — all of Bicol, every other `OPERATING_PROVINCES` entry — so
+> nothing in live data changes today. It only stops Metro Manila routing from
+> silently failing when the business expands there.
+>
+> `resolveLocation` in `phRegions.ts` was already immune (its map carries explicit
+> `'metro manila'`, `'metro manila (ncr)'` and `'ncr'` keys) and was left alone.
+
 ## Filters (Phase 6)
 **Primary** (always visible): Status · Area (Province) · Area Supervisor · Type ·
 Application Date (From/To) · Search. **Secondary** (behind an *Advanced filters*
@@ -264,6 +293,12 @@ while on page 3 would otherwise land on an empty page.
   impossible. 022 adds `apps_select_spd` + `apps_update_spd` scoped to
   `assigned_sub_partner_distributor_id = app_spd()`, plus an index on that column.
   Additive (new named policies; Postgres ORs them) so 003's behaviour is untouched.
+- **029** — province-aware `area_manager` visibility (`app_area_supervisor_id()` +
+  `app_area_owns_application()`). See "AS scope" above.
+- **040** — `app_province_key()` + a redefined `app_area_owns_application()` so
+  Postgres canonicalises province names the same way `canonicalProvince()` does on
+  the client. **Must be run in Supabase**; pairs with the client change. Policies
+  from 029 are unchanged (same function signature) and are NOT recreated.
 
 > **Rollout order:** run 021 and 022 BEFORE deploying the client — `mapApplicationToDB`
 > sends the new columns on every insert, so deploying first fails every `/apply`

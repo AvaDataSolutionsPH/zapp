@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useStore } from '@/store/useStore'
 import { supabase } from '@/lib/supabase'
-import { LoadingScreen } from '@/components/ui'
+import { LoadingScreen, DatabaseUnavailableScreen } from '@/components/ui'
 
 // Layouts
 import Layout from '@/components/layout/Layout'
@@ -79,6 +79,7 @@ function App() {
   const authLoading = useStore((s) => s.authLoading)
   const currentUser = useStore((s) => s.currentUser)
   const pendingApplication = useStore((s) => s.pendingApplication)
+  const hydrationStatus = useStore((s) => s.hydrationStatus)
   const restoreSession = useStore((s) => s.restoreSession)
 
   // Hydrate currentUser from any persisted Supabase session on first mount, and
@@ -99,6 +100,18 @@ function App() {
 
   if (authLoading) {
     return <LoadingScreen />
+  }
+
+  // Nothing in the app is real until hydration lands: the store boots on the
+  // seeded mock slices, and while it is on them every mutation is skipped
+  // (each one is gated on `dataSource === 'db'`) even though the success toast
+  // still fires. So a signed-in user must never reach the router before the
+  // DB answers. This deliberately replaces the whole router rather than
+  // showing a dismissible banner — same reasoning as the account gate below.
+  // It also removes the pre-existing flash of mock data on sign-in.
+  // See docs/features/db-connection-gate.md.
+  if (isAuthenticated && hydrationStatus !== 'ok') {
+    return hydrationStatus === 'failed' ? <DatabaseUnavailableScreen /> : <LoadingScreen />
   }
 
   // A self-service onboarding applicant (valid login, application pending, not

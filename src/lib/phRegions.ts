@@ -46,6 +46,32 @@ const PROVINCE_TO_LOCATION: Record<string, string> = {
 };
 
 /**
+ * The canonical comparison key for a province name.
+ *
+ * ⚠️ The SAME province arrives under TWO spellings. The `/apply` PSGC cascade
+ * injects NCR as **"Metro Manila (NCR)"** (`NCR_PROVINCE` in
+ * `services/phLocations.ts` — NCR is a region, so the PSGC `/provinces/`
+ * endpoint omits it), while the admin's Assign-Provinces master list writes
+ * **"Metro Manila"** (from `OPERATING_PROVINCES` below). Province matching is an
+ * exact compare, so without this helper assigning "Metro Manila" to an Area
+ * Supervisor could NEVER match a Metro Manila application — the AS would see an
+ * empty queue with no error, exactly the failure migration 029 fixed for the
+ * frozen-id case.
+ *
+ * Strips ONE trailing parenthetical suffix, then trims + lowercases. It is a
+ * pure no-op for every province without a parenthetical — which today is every
+ * single entry of `OPERATING_PROVINCES`, Bicol included. That is what makes
+ * adopting it regression-safe: no live value changes meaning.
+ *
+ * ⚠️ Keep in sync with `app_province_key()` in
+ * `supabase/migrations/040_province_canonical_match.sql` — RLS runs FIRST, so if
+ * Postgres and the client disagree on ownership the row is dropped before the
+ * client ever sees it.
+ */
+export const canonicalProvince = (p: string | undefined): string =>
+  (p ?? '').replace(/\s*\([^()]*\)\s*$/, '').trim().toLowerCase();
+
+/**
  * Location for a province. Returns undefined only for blank input, so a
  * province we don't group yet still records something meaningful.
  */

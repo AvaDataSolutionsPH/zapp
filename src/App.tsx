@@ -22,6 +22,7 @@ import ReferralEntryPage from '@/pages/public/ReferralEntryPage'
 // Auth
 import LoginPage from '@/pages/auth/LoginPage'
 import UnauthorizedPage from '@/pages/auth/UnauthorizedPage'
+import ProfilePage from '@/pages/auth/ProfilePage'
 
 // Dashboard
 import DashboardPage from '@/pages/dashboard/DashboardPage'
@@ -157,6 +158,11 @@ function App() {
             this route the catch-all sent them to the PUBLIC landing page, which
             looks exactly like being signed out. */}
         <Route path="/unauthorized" element={<UnauthorizedPage />} />
+        {/* Every signed-in role — it shows only your OWN account. It is also
+            the only place a Partner Distributor can read their own referral
+            code, since 045 scoped the table and Distributors is not in their
+            sidebar. */}
+        <Route path="/profile" element={<ProfilePage />} />
 
         {/* Applications */}
         <Route path="/applications" element={<ApplicationsPage />} />

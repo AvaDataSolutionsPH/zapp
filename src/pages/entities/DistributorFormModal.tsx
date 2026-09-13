@@ -15,7 +15,7 @@
 
 import { useEffect, useState } from 'react';
 import { Building2 } from 'lucide-react';
-import { Button, Input, Modal, Select } from '@/components/ui';
+import { CheckboxGroup, Button, Input, Modal, Select } from '@/components/ui';
 import type { SelectOption } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import { useStore } from '@/store/useStore';
@@ -45,7 +45,9 @@ export default function DistributorFormModal({
   const [contactPerson, setContactPerson] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [plantId, setPlantId] = useState('');
+  // Multi-plant (042/043). The FIRST ticked plant stays the primary — it is
+  // what plant_id keeps holding, and what applications default to.
+  const [plantIds, setPlantIds] = useState<string[]>([]);
   const [status, setStatus] = useState<DistributorStatus>('active');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -65,7 +67,9 @@ export default function DistributorFormModal({
     setContactPerson(distributor.contactPerson);
     setEmail(distributor.email);
     setPhone(distributor.phone);
-    setPlantId(distributor.plantId);
+    setPlantIds(
+      distributor.plantIds && distributor.plantIds.length > 0 ? distributor.plantIds : [distributor.plantId],
+    );
     setStatus(distributor.status);
     setCodeDraft(distributor.referralCode);
     setLoginDraft(
@@ -80,10 +84,6 @@ export default function DistributorFormModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, distributor]);
 
-  const plantOptions: SelectOption[] = [
-    { value: '', label: 'Select Plant' },
-    ...plants.map((p) => ({ value: p.id, label: p.name })),
-  ];
 
   const validate = (): boolean => {
     const e: Record<string, string> = {};
@@ -92,7 +92,7 @@ export default function DistributorFormModal({
     if (!email.trim()) e.email = 'Kailangan ang email.';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) e.email = 'Hindi tama ang email.';
     if (!phone.trim()) e.phone = 'Kailangan ang phone.';
-    if (!plantId) e.plantId = 'Kailangan ang plant.';
+    if (plantIds.length === 0) e.plantId = 'Kailangan ang plant.';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -146,7 +146,8 @@ export default function DistributorFormModal({
         contactPerson: contactPerson.trim(),
         email: email.trim().toLowerCase(),
         phone: phone.trim(),
-        plantId,
+        plantId: plantIds[0],
+        plantIds,
         status,
       });
       addToast('success', `Na-update ang ${name.trim()}.`);
@@ -194,7 +195,22 @@ export default function DistributorFormModal({
           <Input label="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} error={errors.phone} />
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Select label="Plant" options={plantOptions} value={plantId} onChange={(e) => setPlantId(e.target.value)} error={errors.plantId} />
+        <div>
+          <CheckboxGroup
+            label="Plants (hawak niya)"
+            options={plants.map((p) => ({ value: p.id, label: p.name }))}
+            value={plantIds}
+            onChange={setPlantIds}
+            multiple
+          />
+          {errors.plantId ? (
+            <p className="mt-1 text-xs text-red-600">{errors.plantId}</p>
+          ) : (
+            <p className="mt-1 text-xs text-gray-500">
+              Pwedeng higit sa isa. Ang <strong>unang pipiliin</strong> ang pangunahing plant.
+            </p>
+          )}
+        </div>
           <Select label="Status" options={STATUS_OPTIONS} value={status} onChange={(e) => setStatus(e.target.value as DistributorStatus)} />
         </div>
         {/* Editable ONLY while no application carries the code. The store

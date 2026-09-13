@@ -58,6 +58,7 @@ import {
   effectiveAreaSupervisorId,
   isOnboardingApplication,
   marketSourceSummary,
+  areaSupervisorIdForUser,
 } from '@/lib/applicationMonitoring';
 import {
   allDocumentsVerified,
@@ -2716,12 +2717,21 @@ export const useStore = create<AppStore>((set, get) => {
           (s) => s.subPartnerDistributorId === currentUser.subPartnerDistributorId,
         );
 
-      case 'area_manager':
+      // ⚠️ Mirrors app_store_scope()'s THREE conditions (035). The middle one —
+      // the supervisor's OWN area_supervisors row id — used to be missing here,
+      // so RLS returned the stores and the client filtered them straight back
+      // out. A supervisor created via /accounts/new has `areaIds: []` and no
+      // `assignedStoreIds`, so BOTH remaining checks were false and they saw
+      // ZERO stores, with no error anywhere.
+      case 'area_manager': {
+        const myAsId = areaSupervisorIdForUser(currentUser, get().areaSupervisors);
         return stores.filter(
           (s) =>
             currentUser.assignedStoreIds?.includes(s.id) ||
+            (myAsId !== undefined && s.areaSupervisorId === myAsId) ||
             currentUser.areaIds?.includes(s.areaSupervisorId),
         );
+      }
 
       case 'franchisee_distributor':
       case 'franchisee_direct':
@@ -2765,9 +2775,12 @@ export const useStore = create<AppStore>((set, get) => {
         return deliveries.filter((d) => storeIds.includes(d.storeId));
       }
 
+      // Derived from the scoped STORES, not `assignedStoreIds` — that column is
+      // empty for every supervisor created through /accounts/new, which made
+      // this list permanently blank.
       case 'area_manager': {
-        const storeIds = currentUser.assignedStoreIds ?? [];
-        return deliveries.filter((d) => storeIds.includes(d.storeId));
+        const storeIds = new Set(get().getStoresForCurrentUser().map((s) => s.id));
+        return deliveries.filter((d) => storeIds.has(d.storeId));
       }
 
       case 'franchisee_direct': {
@@ -2810,9 +2823,11 @@ export const useStore = create<AppStore>((set, get) => {
         return billingRecords.filter((b) => storeIds.has(b.storeId));
       }
 
+      // Same fix as deliveries: scope from the stores the supervisor actually
+      // owns, not the empty `assignedStoreIds`.
       case 'area_manager': {
-        const storeIds = currentUser.assignedStoreIds ?? [];
-        return billingRecords.filter((b) => storeIds.includes(b.storeId));
+        const storeIds = new Set(get().getStoresForCurrentUser().map((s) => s.id));
+        return billingRecords.filter((b) => storeIds.has(b.storeId));
       }
 
       case 'franchisee_distributor':
@@ -2849,16 +2864,14 @@ export const useStore = create<AppStore>((set, get) => {
         return endingInventories.filter((ei) => scopedStoreIds.has(ei.storeId));
       }
 
+      // An AS reviews DIRECT franchisees only — that rule is unchanged. What
+      // changed is HOW its stores are found: through the same scope as
+      // everywhere else, so a supervisor with empty areaIds/assignedStoreIds is
+      // no longer handed an empty queue.
       case 'area_manager': {
+        const scoped = get().getStoresForCurrentUser();
         const scopedStoreIds = new Set(
-          stores
-            .filter(
-              (s) =>
-                s.franchiseType === 'direct' &&
-                (currentUser.assignedStoreIds?.includes(s.id) ||
-                  currentUser.areaIds?.includes(s.areaSupervisorId)),
-            )
-            .map((s) => s.id),
+          scoped.filter((s) => s.franchiseType === 'direct').map((s) => s.id),
         );
         return endingInventories.filter((ei) => scopedStoreIds.has(ei.storeId));
       }

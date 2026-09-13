@@ -226,6 +226,31 @@ export const resolveAreaSupervisorForProvince = (
 };
 
 /**
+ * The `area_supervisors` row belonging to a signed-in Area Supervisor.
+ *
+ * ⚠️ Matched by id OR name because the two live in DIFFERENT id spaces: a user
+ * is `user-09` while their supervisor record is `am-01`. This mirrors
+ * `app_area_supervisor_id()` in migration 029 EXACTLY — RLS resolves the caller
+ * this way, so any client that resolves it differently disagrees with the
+ * database about what the supervisor owns.
+ *
+ * ⚠️ Do NOT scope a supervisor by `users.area_ids` alone. That column holds
+ * AREA ids (`area-albay-centro`), while `stores.area_supervisor_id` holds an
+ * `area_supervisors` row id (`am-01`) — the two never intersect, which is the
+ * bug migration 035 fixed in SQL. A supervisor created through
+ * `/accounts/new` has `area_ids: []` and no `assignedStoreIds`, so a client
+ * relying on those sees NOTHING while RLS happily returns the rows.
+ *
+ * The name match is fragile if two supervisors share a name — a real
+ * `users -> area_supervisors` FK is the proper fix, tracked in CLAUDE.md.
+ */
+export const areaSupervisorIdForUser = (
+  user: { id: string; name: string },
+  areaSupervisors: Pick<AreaSupervisor, 'id' | 'name'>[],
+): string | undefined =>
+  areaSupervisors.find((as_) => as_.id === user.id || as_.name === user.name)?.id;
+
+/**
  * The AS actually responsible for an application.
  *
  * The province master list WINS over whatever the referral code carried: the

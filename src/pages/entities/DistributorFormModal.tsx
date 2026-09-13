@@ -141,7 +141,18 @@ export default function DistributorFormModal({
         <Input label="Distributor Name" value={name} onChange={(e) => setName(e.target.value)} error={errors.name} />
         <Input label="Contact Person" value={contactPerson} onChange={(e) => setContactPerson(e.target.value)} error={errors.contactPerson} />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} />
+          {/* ⚠️ This is distributors.email — the COMPANY contact address. The
+              LOGIN lives in users.email and is NOT touched here. Editing this
+              does not change how they sign in, and without this label the two
+              silently drift apart. */}
+          <Input
+            label="Email (contact ng kumpanya)"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            error={errors.email}
+            helperText="Hindi ito ang login. Ang email na ipinang-login niya ay hindi mapapalitan dito."
+          />
           <Input label="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} error={errors.phone} />
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

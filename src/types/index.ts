@@ -189,7 +189,13 @@ export interface Distributor {
   contactPerson: string;
   email: string;
   phone: string;
+  /** Primary/home plant. Stays required — it is the default plant for every
+   *  application arriving through this distributor's referral code. */
   plantId: string;
+  /** Every plant this distributor serves (migration 042). Empty/undefined means
+   *  "only plantId" — NOT "all plants", unlike the billing/forecaster
+   *  convention: a distributor must never widen its scope by accident. */
+  plantIds?: string[];
   referralCode: string;
   assignedAreaIds: string[];
   status: DistributorStatus;

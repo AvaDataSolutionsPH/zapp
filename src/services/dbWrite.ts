@@ -550,6 +550,8 @@ const mapDistributorToDB = (d: Distributor) => ({
   email: d.email,
   phone: d.phone,
   plant_id: d.plantId,
+  // migration 042 — every plant served; null means "only plant_id".
+  plant_ids: d.plantIds ?? null,
   referral_code: d.referralCode,
   assigned_area_ids: d.assignedAreaIds,
   status: d.status,

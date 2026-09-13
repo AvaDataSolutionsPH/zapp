@@ -84,7 +84,17 @@ function SavedMapsPicture({ storageRef }: { storageRef: string }) {
 }
 
 export default function MonitoringFieldsCard({ application }: { application: Application }) {
-  const { currentUser, plants, updateApplicationMonitoring } = useStore();
+  const { currentUser, plants, distributors, updateApplicationMonitoring } = useStore();
+
+  // A distributor may serve SEVERAL plants (migration 042). When it does, the
+  // plant stamped on this application came from the referral code's PRIMARY
+  // plant — a default, not a decision. `applications.assigned_plant_id` is NOT
+  // NULL so a wrong one never errors: the store is simply created on the wrong
+  // plant and quietly skews deliveries, forecasting and plant-manager scope.
+  // Say so here, where the plant can still be changed.
+  const appDistributor = distributors.find((d) => d.id === application.assignedDistributorId);
+  const distributorPlantCount = (appDistributor?.plantIds ?? []).length;
+  const distributorServesManyPlants = distributorPlantCount > 1;
   const { addToast } = useToast();
   const role = currentUser?.role;
 
@@ -344,12 +354,21 @@ export default function MonitoringFieldsCard({ application }: { application: App
           )}
 
           {can('assignedPlantId') ? (
-            <Select
-              label="Plant"
-              options={plantOptions}
-              value={plantId}
-              onChange={(e) => setPlantId(e.target.value)}
-            />
+            <div>
+              <Select
+                label="Plant"
+                options={plantOptions}
+                value={plantId}
+                onChange={(e) => setPlantId(e.target.value)}
+              />
+              {distributorServesManyPlants && (
+                <p className="mt-1 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  ⚠️ Ang distributor na ito ay may <strong>{distributorPlantCount} plants</strong>.
+                  Ang nakalagay dito ay <strong>default lang</strong> galing sa referral code —
+                  pakisiguro na tama ang plant na magse-serve sa tindahang ito bago i-approve.
+                </p>
+              )}
+            </div>
           ) : (
             <ReadOnly label="Plant" value={plantName} />
           )}

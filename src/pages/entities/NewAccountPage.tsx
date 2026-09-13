@@ -122,7 +122,11 @@ export default function NewAccountPage() {
   // share the multi-select. Plant Manager keeps the single Select — "plant
   // manager per plant lang yan".
   const isBilling = role === 'billing_user';
-  const isMultiPlant = isBilling || role === 'forecaster';
+  // A Partner Distributor may serve SEVERAL plants (migration 042) — the boss's
+  // own PD holds five. Without this his referral code would stamp ONE plant on
+  // every applicant, wrong ~4 times out of 5, silently (assigned_plant_id is
+  // NOT NULL so it never errors). First pick = primary/home plant.
+  const isMultiPlant = isBilling || role === 'forecaster' || role === 'partner_distributor';
   // owner/ops pick plant + (for SPD) the parent PD. A PD uses its own scope, so
   // those inputs are hidden for them.
   const showPlant = isAdmin && !isOps && !isMultiPlant;
@@ -332,7 +336,16 @@ export default function NewAccountPage() {
                           <p className="mt-1 text-xs text-red-600">{errors.plantIds}</p>
                         ) : (
                           <p className="mt-1 text-xs text-gray-500">
-                            Pwedeng higit sa isa — makikita niya ang datos ng lahat ng plant na napili.
+                            {role === 'partner_distributor' ? (
+                              <>
+                                Pwedeng higit sa isa. Ang <strong>unang pipiliin mo</strong> ang
+                                magiging pangunahing plant — ito ang default na nakalagay sa bawat
+                                application na dadaan sa referral code niya. Mababago pa rin ito
+                                bawat application bago i-approve.
+                              </>
+                            ) : (
+                              <>Pwedeng higit sa isa — makikita niya ang datos ng lahat ng plant na napili.</>
+                            )}
                           </p>
                         )}
                       </div>

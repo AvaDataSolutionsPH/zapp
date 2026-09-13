@@ -1855,16 +1855,28 @@ export const useStore = create<AppStore>((set, get) => {
       };
     } else if (input.role === 'partner_distributor') {
       const distId = `dist-${uid()}`;
+      // A PD may serve SEVERAL plants (migration 042). The FIRST selected plant
+      // is the primary: it satisfies distributors.plant_id / referral_codes.
+      // plant_id (both NOT NULL) and remains the default plant stamped on every
+      // application that arrives through this PD's referral code. The full list
+      // is what the approval screen offers so the reviewer picks instead of
+      // inheriting a guess.
+      const servedPlants = (input.plantIds ?? []).filter(Boolean);
+      const primaryPlant = servedPlants[0] ?? plantId;
       entity = {
-        id: distId, name, contactPerson: name, email, phone, plantId,
+        id: distId, name, contactPerson: name, email, phone,
+        plantId: primaryPlant,
+        plantIds: servedPlants.length > 0 ? servedPlants : undefined,
         referralCode, assignedAreaIds: [], status: 'active',
       };
       refCode = {
         id: `ref-${uid()}`, code: referralCode, type: 'distributor',
-        distributorId: distId, plantId, status: 'active', createdAt: now, usageCount: 0,
+        distributorId: distId, plantId: primaryPlant, status: 'active',
+        createdAt: now, usageCount: 0,
       };
       userProfile = {
-        id: userId, name, email, role: 'partner_distributor', avatar, plantId,
+        id: userId, name, email, role: 'partner_distributor', avatar,
+        plantId: primaryPlant, plantIds: servedPlants.length > 0 ? servedPlants : undefined,
         distributorId: distId,
       };
     } else if (input.role === 'sub_partner_distributor') {

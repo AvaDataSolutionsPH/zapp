@@ -21,6 +21,7 @@ import ReferralEntryPage from '@/pages/public/ReferralEntryPage'
 
 // Auth
 import LoginPage from '@/pages/auth/LoginPage'
+import UnauthorizedPage from '@/pages/auth/UnauthorizedPage'
 
 // Dashboard
 import DashboardPage from '@/pages/dashboard/DashboardPage'
@@ -152,6 +153,10 @@ function App() {
       {/* Protected ERP routes */}
       <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route path="/dashboard" element={<DashboardPage />} />
+        {/* ProtectedRoute redirects here when a role is not allowed. Without
+            this route the catch-all sent them to the PUBLIC landing page, which
+            looks exactly like being signed out. */}
+        <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
         {/* Applications */}
         <Route path="/applications" element={<ApplicationsPage />} />

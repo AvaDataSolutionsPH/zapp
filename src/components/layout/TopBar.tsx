@@ -292,16 +292,14 @@ export function TopBar() {
 
             {userMenuOpen && (
               <div className="absolute right-0 mt-1.5 w-48 bg-white rounded-xl shadow-lg border border-gray-200 py-1.5 z-50">
-                <button
-                  onClick={() => {
-                    navigate('/settings');
-                    setUserMenuOpen(false);
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer bg-transparent border-none"
-                >
-                  <User size={16} />
-                  Profile
-                </button>
+                {/* "Profile" used to navigate to /settings. That was wrong twice
+                    over: Settings is not a profile, and once it became
+                    owner-only every other role clicking Profile was bounced to
+                    /unauthorized — which did not exist, so they landed on the
+                    PUBLIC marketing page and looked logged out. There is no
+                    profile screen in this app, so the dead item is gone rather
+                    than pointed somewhere else misleading. Change Password
+                    below is the account action that actually exists. */}
                 {/* Every role can change its own password — the franchisee to
                     get off the temporary one, everyone else on principle. */}
                 <button

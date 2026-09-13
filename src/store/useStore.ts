@@ -61,6 +61,11 @@ import {
   areaSupervisorIdForUser,
 } from '@/lib/applicationMonitoring';
 import {
+  codeFromName,
+  normalizeReferralCode,
+  validateReferralCode,
+} from '@/lib/referralCode';
+import {
   allDocumentsVerified,
   documentStatus,
   DOCUMENT_LABELS,
@@ -114,6 +119,9 @@ import {
   reserveApplicationNumber,
   updateApplicationChanges,
   activateStoreByShopCode,
+  isReferralCodeTaken,
+  countApplicationsUsingReferralCode,
+  renameReferralCode,
 } from '@/services/dbWrite';
 import { signUpIsolated, generateTempPassword } from '@/lib/authSignup';
 import { resolveLoginEmailCandidates, shopCodeToEmail } from '@/lib/shopCodeAuth';
@@ -230,17 +238,16 @@ export interface NewAccountInput {
    * Ignored for every other role; Operations Manager covers all plants.
    */
   plantIds?: string[];
+  /**
+   * Optional CUSTOM channel code (PD / Sub-Partner only). Blank = generated
+   * from the name. Boss asked for this because these get dictated over the
+   * phone — "MARX-BICOL" survives that, "MARX-CERILLANO-1SR" does not.
+   */
+  referralCode?: string;
 }
 
-/** Derive a channel/referral code from a display name (e.g. "Juan Cruz" → "JUAN-CRUZ-4F2"). */
-const codeFromName = (name: string): string => {
-  const slug = name
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 16) || 'PARTNER';
-  return `${slug}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
-};
+// codeFromName / normalizeReferralCode now live in src/lib/referralCode.ts so
+// the form, the store and the rename path all share one definition.
 
 // ── Store Interface ─────────────────────────────────────────────────
 
@@ -348,6 +355,13 @@ interface AppStore {
   addPlant: (input: Omit<Plant, 'id'>) => Promise<void>;
   updatePlant: (id: string, updates: Partial<Plant>) => Promise<void>;
   updateDistributor: (id: string, updates: Partial<Distributor>) => Promise<void>;
+  /**
+   * Rename a distributor's channel code — allowed ONLY while no application has
+   * been filed under it. Applications store the code as TEXT, not as a link, so
+   * renaming a code that is in use detaches those applications from their
+   * distributor with no error at all. Throws with a readable reason instead.
+   */
+  changeReferralCode: (distributorId: string, newCode: string) => Promise<string>;
   updateAreaSupervisorDetails: (id: string, updates: Partial<AreaSupervisor>) => Promise<void>;
   /**
    * First-login account verification. The franchisee submits their documents +
@@ -1398,6 +1412,52 @@ export const useStore = create<AppStore>((set, get) => {
     }
   },
 
+
+  changeReferralCode: async (distributorId, newCode) => {
+    const problem = validateReferralCode(newCode);
+    if (problem) throw new Error(problem);
+    const code = normalizeReferralCode(newCode);
+
+    const dist = get().distributors.find((d) => d.id === distributorId);
+    if (!dist) throw new Error('Distributor not found.');
+    if (code === dist.referralCode) return code;
+
+    const codeRow = get().referralCodes.find((r) => r.code === dist.referralCode);
+    if (!codeRow) throw new Error('Wala sa listahan ang kasalukuyang referral code.');
+
+    if (get().dataSource === 'db') {
+      // usage_count is NOT the test — nothing in the app increments it, so it
+      // reads 0 for every code. Applications carrying the string are the link
+      // that would actually break.
+      const used = await countApplicationsUsingReferralCode(dist.referralCode);
+      if (used > 0) {
+        throw new Error(
+          `Hindi na mapapalitan — may ${used} application na naipasa gamit ang "${dist.referralCode}". Mawawala ang koneksyon nila sa distributor kapag pinalitan.`,
+        );
+      }
+      if (await isReferralCodeTaken(code, codeRow.id)) {
+        throw new Error(`Ginagamit na ang code na "${code}". Pumili ng iba.`);
+      }
+    }
+
+    const prevDists = get().distributors;
+    const prevCodes = get().referralCodes;
+    set({
+      distributors: prevDists.map((d) => (d.id === distributorId ? { ...d, referralCode: code } : d)),
+      referralCodes: prevCodes.map((r) => (r.id === codeRow.id ? { ...r, code } : r)),
+    });
+
+    if (get().dataSource !== 'db') return code;
+    try {
+      await renameReferralCode({ codeRowId: codeRow.id, newCode: code, distributorId });
+      return code;
+    } catch (err) {
+      console.error('[useStore] changeReferralCode failed, rolling back:', err);
+      set({ distributors: prevDists, referralCodes: prevCodes });
+      throw err;
+    }
+  },
+
   // Separate from updateAreaSupervisorProvinces so the province master list
   // (which drives application routing) stays a deliberate, single-purpose
   // action rather than something a general edit can clobber by accident.
@@ -1831,7 +1891,21 @@ export const useStore = create<AppStore>((set, get) => {
     const now = new Date().toISOString();
     const tempPassword = generateTempPassword();
     const userId = `user-${uid()}`;
-    const referralCode = codeFromName(name);
+    // A custom code must be validated and proven free BEFORE the auth user is
+    // created — otherwise a duplicate leaves an orphan login behind with no
+    // profile, which is the one failure this flow cannot roll back.
+    const customCode = input.referralCode?.trim();
+    let referralCode: string;
+    if (customCode) {
+      const problem = validateReferralCode(customCode);
+      if (problem) throw new Error(problem);
+      referralCode = normalizeReferralCode(customCode);
+      if (get().dataSource === 'db' && (await isReferralCodeTaken(referralCode))) {
+        throw new Error(`Ginagamit na ang code na "${referralCode}". Pumili ng iba.`);
+      }
+    } else {
+      referralCode = codeFromName(name);
+    }
     // Non-empty avatar (matches the mock users' ui-avatars style) so the <img>
     // doesn't get an empty src.
     const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=F59E0B&color=fff`;

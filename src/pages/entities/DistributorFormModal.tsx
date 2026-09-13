@@ -19,6 +19,7 @@ import { Button, Input, Modal, Select } from '@/components/ui';
 import type { SelectOption } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import { useStore } from '@/store/useStore';
+import { validateReferralCode } from '@/lib/referralCode';
 import type { Distributor, DistributorStatus } from '@/types';
 import { errorMessage } from '@/lib/errorMessage';
 
@@ -36,7 +37,7 @@ export default function DistributorFormModal({
   distributor: Distributor | null;
   onClose: () => void;
 }) {
-  const { plants, updateDistributor } = useStore();
+  const { plants, updateDistributor, changeReferralCode } = useStore();
   const { addToast } = useToast();
 
   const [name, setName] = useState('');
@@ -47,6 +48,11 @@ export default function DistributorFormModal({
   const [status, setStatus] = useState<DistributorStatus>('active');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  // The code is editable only while unused. The store does the real check
+  // (counting applications that carry the string) and refuses with a reason,
+  // so this is a separate, explicit action rather than part of the batch save.
+  const [codeDraft, setCodeDraft] = useState('');
+  const [savingCode, setSavingCode] = useState(false);
 
   useEffect(() => {
     if (!open || !distributor) return;
@@ -56,6 +62,7 @@ export default function DistributorFormModal({
     setPhone(distributor.phone);
     setPlantId(distributor.plantId);
     setStatus(distributor.status);
+    setCodeDraft(distributor.referralCode);
     setErrors({});
   }, [open, distributor]);
 
@@ -74,6 +81,22 @@ export default function DistributorFormModal({
     if (!plantId) e.plantId = 'Kailangan ang plant.';
     setErrors(e);
     return Object.keys(e).length === 0;
+  };
+
+  const applyCodeChange = async () => {
+    if (!distributor) return;
+    const problem = validateReferralCode(codeDraft);
+    if (problem) { addToast('error', problem); return; }
+    setSavingCode(true);
+    try {
+      const saved = await changeReferralCode(distributor.id, codeDraft);
+      setCodeDraft(saved);
+      addToast('success', `Referral code is now ${saved}.`);
+    } catch (err) {
+      addToast('error', errorMessage(err, 'Hindi na-palitan ang referral code.'));
+    } finally {
+      setSavingCode(false);
+    }
   };
 
   const handleSave = async () => {
@@ -125,10 +148,33 @@ export default function DistributorFormModal({
           <Select label="Plant" options={plantOptions} value={plantId} onChange={(e) => setPlantId(e.target.value)} error={errors.plantId} />
           <Select label="Status" options={STATUS_OPTIONS} value={status} onChange={(e) => setStatus(e.target.value as DistributorStatus)} />
         </div>
-        {/* Changing the code would orphan every application already filed under it. */}
-        <div className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
-          Referral Code: <span className="font-mono font-medium">{distributor?.referralCode}</span> — hindi
-          mababago (nakakabit na ito sa mga naisumiteng application).
+        {/* Editable ONLY while no application carries the code. The store
+            counts them and refuses with a readable reason — applications store
+            the code as TEXT, so renaming one that is in use would detach them
+            from this distributor with no error at all. */}
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            <div className="flex-1">
+              <Input
+                label="Referral Code"
+                value={codeDraft}
+                onChange={(e) => setCodeDraft(e.target.value)}
+                helperText="Ito ang ita-type ng mga franchisee niya sa /apply."
+              />
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => void applyCodeChange()}
+              disabled={savingCode || !codeDraft.trim() || codeDraft.trim() === distributor?.referralCode}
+            >
+              {savingCode ? 'Pinapalitan…' : 'Palitan ang Code'}
+            </Button>
+          </div>
+          <p className="mt-2 text-xs text-amber-800">
+            ⚠️ Mapapalitan lang ito habang <strong>wala pang nag-a-apply</strong> gamit ito. Kapag
+            may naipasang application, permanente na — mawawala ang koneksyon nila sa distributor
+            kapag pinalitan.
+          </p>
         </div>
       </div>
     </Modal>

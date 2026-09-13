@@ -843,3 +843,71 @@ export async function updateNotification(n: Notification): Promise<void> {
   if (error) throw error;
   assertRowChanged(data, 'notifications');
 }
+
+// ── Referral / channel codes ──────────────────────────────────
+//
+// A code is safe to rename ONLY while nothing points at it. `usage_count` is
+// NOT the answer — nothing in the app ever increments it, so it reads 0 for
+// every code ever created. The real test is whether any application carries the
+// string, because that is the link that would break.
+
+/** Is this code already taken by ANOTHER code row? */
+export async function isReferralCodeTaken(code: string, exceptId?: string): Promise<boolean> {
+  let q = supabase.from('referral_codes').select('id').eq('code', code);
+  if (exceptId) q = q.neq('id', exceptId);
+  const { data, error } = await q.limit(1);
+  if (error) throw error;
+  return (data ?? []).length > 0;
+}
+
+/** How many applications were filed under this code. 0 = safe to rename. */
+export async function countApplicationsUsingReferralCode(code: string): Promise<number> {
+  const { count, error } = await supabase
+    .from('applications')
+    .select('*', { count: 'exact', head: true })
+    .eq('referral_code', code);
+  if (error) throw error;
+  return count ?? 0;
+}
+
+/**
+ * Rename a code in BOTH places it is stored.
+ *
+ * `referral_codes.code` is the record; `distributors.referral_code` /
+ * `sub_partner_distributors.referral_code` are denormalised copies shown in the
+ * UI. Updating one without the other leaves them silently disagreeing — the
+ * table would show one code while `/apply` accepted a different one.
+ */
+export async function renameReferralCode(input: {
+  codeRowId: string;
+  newCode: string;
+  distributorId?: string;
+  subPartnerDistributorId?: string;
+}): Promise<void> {
+  const { data, error } = await supabase
+    .from('referral_codes')
+    .update({ code: input.newCode } as never)
+    .eq('id', input.codeRowId)
+    .select('id');
+  if (error) throw error;
+  assertRowChanged(data, 'referral_codes');
+
+  if (input.distributorId) {
+    const { data: d, error: e } = await supabase
+      .from('distributors')
+      .update({ referral_code: input.newCode } as never)
+      .eq('id', input.distributorId)
+      .select('id');
+    if (e) throw e;
+    assertRowChanged(d, 'distributors');
+  }
+  if (input.subPartnerDistributorId) {
+    const { data: s, error: e } = await supabase
+      .from('sub_partner_distributors')
+      .update({ referral_code: input.newCode } as never)
+      .eq('id', input.subPartnerDistributorId)
+      .select('id');
+    if (e) throw e;
+    assertRowChanged(s, 'sub_partner_distributors');
+  }
+}

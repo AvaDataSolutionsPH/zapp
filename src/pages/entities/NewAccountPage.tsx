@@ -22,6 +22,7 @@ import { useToast } from '@/components/ui/Toast';
 import { useStore } from '@/store/useStore';
 import type { NewAccountRole } from '@/store/useStore';
 import { errorMessage } from '@/lib/errorMessage';
+import { normalizeReferralCode, validateReferralCode } from '@/lib/referralCode';
 
 interface CreatedAccount {
   name: string;
@@ -100,6 +101,9 @@ export default function NewAccountPage() {
   // rather than the single-plant Select the other roles use.
   const [plantIds, setPlantIds] = useState<string[]>([]);
   const [parentDistributorId, setParentDistributorId] = useState('');
+  // Optional custom channel code. Blank = generated from the name. Only PD and
+  // Sub-Partner own a code; an Area Supervisor refers nobody.
+  const [customCode, setCustomCode] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState<CreatedAccount | null>(null);
@@ -138,6 +142,7 @@ export default function NewAccountPage() {
   const showPlant = isAdmin && !isOps && !isMultiPlant;
   const showPlantMulti = isMultiPlant;
   const showParent = isAdmin && role === 'sub_partner_distributor';
+  const showReferralCode = role === 'partner_distributor' || role === 'sub_partner_distributor';
 
   const plantCheckOptions = plants.map((p) => ({ value: p.id, label: p.name }));
 
@@ -152,6 +157,11 @@ export default function NewAccountPage() {
     // point. (Legacy billing users with none still read company-wide.)
     if (showPlantMulti && plantIds.length === 0) e.plantIds = 'Pumili ng kahit isang plant.';
     if (showParent && !parentDistributorId) e.parentDistributorId = 'Parent Distributor is required.';
+    // Only validate when they actually typed one — blank means "generate it".
+    if (showReferralCode && customCode.trim()) {
+      const problem = validateReferralCode(customCode);
+      if (problem) e.customCode = problem;
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -170,6 +180,7 @@ export default function NewAccountPage() {
         plantId,
         parentDistributorId: parentDistributorId || undefined,
         plantIds: showPlantMulti ? plantIds : undefined,
+        referralCode: showReferralCode && customCode.trim() ? customCode.trim() : undefined,
       });
       setCreated({
         name: name.trim(), email: res.email, tempPassword: res.tempPassword, role,
@@ -198,6 +209,7 @@ export default function NewAccountPage() {
 
   const resetForm = () => {
     setCreated(null);
+    setCustomCode('');
     setName(''); setEmail(''); setPhone(''); setPlantId(''); setParentDistributorId('');
     setErrors({});
   };
@@ -319,6 +331,16 @@ export default function NewAccountPage() {
                     <Input label="Phone" placeholder="09171234567" value={phone}
                       onChange={(e) => setPhone(e.target.value)} error={errors.phone} iconLeft={<Phone size={16} />} />
 
+                    {showReferralCode && (
+                      <Input
+                        label="Referral Code (optional)"
+                        placeholder={name.trim() ? normalizeReferralCode(name).slice(0, 16) + '-BICOL' : 'hal. MARX-BICOL'}
+                        value={customCode}
+                        onChange={(e) => setCustomCode(e.target.value)}
+                        error={errors.customCode}
+                        helperText="Iwanang blangko para awtomatikong gawin. Ito ang ita-type ng mga franchisee niya sa /apply, kaya piliin ang madaling banggitin sa telepono. ⚠️ Hindi na ito mapapalitan kapag may nag-apply na."
+                      />
+                    )}
                     {showParent && (
                       <Select label="Parent Distributor" options={parentOptions} value={parentDistributorId}
                         onChange={(e) => setParentDistributorId(e.target.value)} error={errors.parentDistributorId} />

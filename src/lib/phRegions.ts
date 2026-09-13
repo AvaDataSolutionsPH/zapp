@@ -108,3 +108,15 @@ export const OPERATING_PROVINCES: string[] = [
   'Batangas',
   'Laguna',
 ];
+
+/**
+ * Every plant an entity serves — `plant_ids` when present, otherwise the single
+ * `plant_id`. Migrations 042/043 added the list ALONGSIDE the primary, so a row
+ * created before them (or a genuinely single-plant one) still reads correctly.
+ *
+ * ⚠️ Rendering `plant_id` alone was a real bug: a Partner Distributor assigned
+ * five plants showed only one, and the plant FILTER matched only the primary,
+ * so filtering by a plant he genuinely serves hid him entirely.
+ */
+export const plantsServed = (entity: { plantId: string; plantIds?: string[] }): string[] =>
+  entity.plantIds && entity.plantIds.length > 0 ? entity.plantIds : [entity.plantId];

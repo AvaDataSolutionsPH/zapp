@@ -7,6 +7,7 @@ import {
   Store as StoreIcon,
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
+import { plantsServed } from '@/lib/phRegions';
 import {
   Card,
   CardHeader,
@@ -48,7 +49,9 @@ export default function DistributorsPage() {
 
   const filtered = useMemo(() => {
     let result = [...enriched];
-    if (plantFilter) result = result.filter((d) => d.plantId === plantFilter);
+    // Match ANY plant served, not just the primary — otherwise filtering by a
+    // plant the partner genuinely covers hides them completely.
+    if (plantFilter) result = result.filter((d) => plantsServed(d).includes(plantFilter));
     if (search) {
       const q = search.toLowerCase();
       result = result.filter(
@@ -100,7 +103,7 @@ export default function DistributorsPage() {
     {
       key: 'plantId',
       header: 'Plant',
-      render: (row) => plantName(row.plantId),
+      render: (row) => plantsServed(row).map(plantName).join(', '),
     },
     {
       key: 'referralCode',
@@ -222,7 +225,7 @@ export default function DistributorsPage() {
               </div>
               <div>
                 <p className="text-gray-500">Plant</p>
-                <p className="text-lg font-bold text-gray-900">{plantName(expanded.plantId)}</p>
+                <p className="text-lg font-bold text-gray-900">{plantsServed(expanded).map(plantName).join(', ')}</p>
               </div>
             </div>
             {expanded.stores.length > 0 ? (

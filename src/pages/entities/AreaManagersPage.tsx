@@ -7,6 +7,7 @@ import {
   Pencil,
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
+import { plantsServed } from '@/lib/phRegions';
 import {
   Button,
   Card,
@@ -49,7 +50,9 @@ export default function AreaManagersPage() {
 
   const filtered = useMemo(() => {
     let result = [...enriched];
-    if (plantFilter) result = result.filter((am) => am.plantId === plantFilter);
+    // Match ANY plant served, not just the primary — otherwise filtering by a
+    // plant the partner genuinely covers hides them completely.
+    if (plantFilter) result = result.filter((am) => plantsServed(am).includes(plantFilter));
     if (search) {
       const q = search.toLowerCase();
       result = result.filter(
@@ -158,7 +161,7 @@ export default function AreaManagersPage() {
     {
       key: 'plantId',
       header: 'Plant',
-      render: (row) => plantName(row.plantId),
+      render: (row) => plantsServed(row).map(plantName).join(', '),
     },
     {
       key: 'storeCount',

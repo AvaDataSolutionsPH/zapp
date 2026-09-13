@@ -197,7 +197,21 @@ export function TopBar() {
             )}
           </button>
 
-          {/* Role switcher (demo) */}
+          {/* ── Role switcher — DEVELOPMENT BUILDS ONLY ────────────────────
+              `switchRole` swaps `currentUser` for ANOTHER user's profile while
+              the Supabase session (and therefore the JWT) stays yours. In a
+              demo that is a harmless preview. In production it is an
+              accountability hole: the UI would act as, say, the Partner
+              Distributor while every write still executes with the signed-in
+              account's rights, so rows get created under someone else's ids and
+              audit entries name the wrong real person. It also silently
+              contradicts RLS, which keeps scoping by the real JWT.
+
+              `import.meta.env.DEV` is statically replaced at build time, so the
+              whole block is dropped from the production bundle rather than
+              hidden with CSS. To demo per-role behaviour in production, log in
+              as that user for real. */}
+          {import.meta.env.DEV && (
           <div ref={roleMenuRef} className="relative hidden sm:block">
             <button
               onClick={() => setRoleMenuOpen(!roleMenuOpen)}
@@ -217,7 +231,7 @@ export function TopBar() {
               <div className="absolute right-0 mt-1.5 w-56 bg-white rounded-xl shadow-lg border border-gray-200 py-1.5 z-50">
                 <div className="px-3 py-2 border-b border-gray-100">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-                    Switch Demo Role
+                    Switch Demo Role (dev only)
                   </p>
                 </div>
                 {allRoles.map((role) => (
@@ -246,6 +260,7 @@ export function TopBar() {
               </div>
             )}
           </div>
+          )}
 
           {/* User menu */}
           <div ref={userMenuRef} className="relative">

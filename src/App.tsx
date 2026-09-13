@@ -195,7 +195,18 @@ function App() {
         <Route path="/referral-codes" element={<ReferralCodesPage />} />
         <Route path="/donut-catalog" element={<SkuCatalogPage />} />
         <Route path="/packaging-catalog" element={<PackagingCatalogPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
+        {/* Owner only. The Sidebar already hides it, but hiding a link is not
+            access control — a Partner Distributor could reach this by typing
+            the URL and read every user, distributor and referral code on the
+            User Management tab. */}
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute allowedRoles={['owner']}>
+              <SettingsPage />
+            </ProtectedRoute>
+          }
+        />
       </Route>
 
       {/* Catch all */}

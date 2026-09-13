@@ -9,7 +9,6 @@ import {
   Mail,
   Clock,
   ShieldCheck,
-  RefreshCw,
   CheckCircle,
   Info,
   Lock,
@@ -89,7 +88,6 @@ export default function SettingsPage() {
   const [generalDirty, setGeneralDirty] = useState(false);
 
   // System state
-  const [resetting, setResetting] = useState(false);
 
   // ── Plant lookup ───────────────────────────────────────────────────
 
@@ -189,25 +187,6 @@ export default function SettingsPage() {
     },
   ];
 
-  // ── System Handlers ────────────────────────────────────────────────
-
-  const handleResetData = () => {
-    setResetting(true);
-    setTimeout(() => {
-      window.location.reload();
-    }, 1000);
-  };
-
-  // ── API Status Items ───────────────────────────────────────────────
-
-  const apiServices = [
-    { name: 'Core API', status: 'operational', latency: '12ms' },
-    { name: 'Authentication', status: 'operational', latency: '8ms' },
-    { name: 'Image Upload (S3)', status: 'operational', latency: '45ms' },
-    { name: 'AI Vision Service', status: 'operational', latency: '230ms' },
-    { name: 'Payment Gateway', status: 'operational', latency: '68ms' },
-    { name: 'Notification Service', status: 'operational', latency: '15ms' },
-  ];
 
   // ── Render ─────────────────────────────────────────────────────────
 
@@ -444,71 +423,20 @@ export default function SettingsPage() {
               </CardContent>
             </Card>
 
-            {/* API Status */}
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between w-full">
-                  <div className="flex items-center gap-2">
-                    <Server size={18} className="text-zapp-orange" />
-                    <h3 className="text-base font-semibold text-gray-900">
-                      API Status
-                    </h3>
-                  </div>
-                  <Badge variant="success" dot size="sm">All Systems Operational</Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="divide-y divide-gray-100">
-                  {apiServices.map((svc) => (
-                    <div
-                      key={svc.name}
-                      className="flex items-center justify-between py-3 first:pt-0 last:pb-0"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
-                        <span className="text-sm font-medium text-gray-700">{svc.name}</span>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <span className="text-xs text-gray-400">{svc.latency}</span>
-                        <Badge variant="success" size="sm">Operational</Badge>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+            {/* The "API Status" panel that used to sit here was FABRICATED — a
+                hardcoded list of services with invented latencies, including an
+                "AI Vision Service" that no longer exists in this project at all
+                (Gemini was removed; crate counting is manual). It reported
+                "All Systems Operational" whether or not anything worked, which
+                is worse than showing nothing. Removed rather than wired up:
+                real health checks belong in Supabase's own dashboard. */}
 
             {/* Data Management */}
-            <Card>
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <RefreshCw size={18} className="text-zapp-orange" />
-                  <h3 className="text-base font-semibold text-gray-900">
-                    Data Management
-                  </h3>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between p-4 bg-red-50 border border-red-200 rounded-lg">
-                  <div className="flex-1 mr-4">
-                    <h4 className="text-sm font-medium text-red-800">Reset Mock Data</h4>
-                    <p className="text-xs text-red-600 mt-0.5">
-                      This will reload the application and restore all data to its initial demo state.
-                      Any changes you made during this session will be lost.
-                    </p>
-                  </div>
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    iconLeft={<RefreshCw size={14} />}
-                    onClick={handleResetData}
-                    loading={resetting}
-                  >
-                    Reset Data
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+            {/* "Reset Mock Data" used to sit here. It only called
+                window.location.reload(), but its copy promised to "restore all
+                data to its initial demo state" and warned that changes would be
+                lost — a frightening claim about a button that did nothing. It
+                has no meaning against a live database and is removed. */}
           </div>
         )}
       </Tabs>

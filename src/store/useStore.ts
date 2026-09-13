@@ -374,9 +374,16 @@ interface AppStore {
 
   // Account creation — create a login (+ entity record) for a PD / SPD / Area
   // Supervisor. owner/ops may create any; a PD may create SPD/AS in its scope.
+  /**
+   * `referralCode` is null for HQ staff (Operations Manager / Billing User),
+   * who own no entity record and therefore no channel code. For a PD / SPD /
+   * Area Supervisor it is the code their applicants type on `/apply`, and the
+   * caller MUST surface it — it is generated here and shown nowhere else at
+   * creation time.
+   */
   createPartnerAccount: (
     input: NewAccountInput,
-  ) => Promise<{ email: string; tempPassword: string }>;
+  ) => Promise<{ email: string; tempPassword: string; referralCode: string | null }>;
 
   // Delivery enforcement
   requestStopDelivery: (storeId: string) => void;
@@ -1890,7 +1897,9 @@ export const useStore = create<AppStore>((set, get) => {
       return { ...base, areaSupervisors: [...s.areaSupervisors, entity as AreaSupervisor] };
     });
 
-    return { email, tempPassword };
+    // refCode is null for HQ staff; for a channel partner this is the only
+    // moment the code is available to the caller without a second lookup.
+    return { email, tempPassword, referralCode: refCode?.code ?? null };
   },
 
   // ─── Distributors ──────────────────────────────────────────────

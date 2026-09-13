@@ -28,6 +28,8 @@ interface CreatedAccount {
   email: string;
   tempPassword: string;
   role: NewAccountRole;
+  /** null for HQ staff (Ops / Billing) — they own no channel code. */
+  referralCode: string | null;
 }
 
 const ROLE_LABEL: Record<NewAccountRole, string> = {
@@ -150,7 +152,10 @@ export default function NewAccountPage() {
         parentDistributorId: parentDistributorId || undefined,
         plantIds: showPlantMulti ? plantIds : undefined,
       });
-      setCreated({ name: name.trim(), email: res.email, tempPassword: res.tempPassword, role });
+      setCreated({
+        name: name.trim(), email: res.email, tempPassword: res.tempPassword, role,
+        referralCode: res.referralCode,
+      });
       addToast('success', `Account created for ${name.trim()}.`);
     } catch (err) {
       const msg = errorMessage(err, 'Failed to create account.');
@@ -226,7 +231,19 @@ export default function NewAccountPage() {
                   <div className="mt-3 space-y-1.5 font-mono text-sm">
                     <div><span className="text-gray-500">Email:</span> <span className="font-semibold">{created.email}</span></div>
                     <div><span className="text-gray-500">Password:</span> <span className="font-semibold">{created.tempPassword}</span></div>
+                    {created.referralCode && (
+                      <div>
+                        <span className="text-gray-500">Referral Code:</span>{' '}
+                        <span className="font-semibold">{created.referralCode}</span>
+                      </div>
+                    )}
                   </div>
+                  {created.referralCode && (
+                    <p className="mt-2 text-xs text-amber-800">
+                      Ito ang ilalagay ng mga franchisee niya sa <strong>/apply</strong> para
+                      mapunta sa kanya ang application. Makikita rin ito sa Distributors.
+                    </p>
+                  )}
                   <p className="mt-3 flex items-start gap-1.5 text-xs text-amber-800">
                     <AlertCircle size={13} className="mt-0.5 shrink-0" />
                     Ipapadala/ibibigay mo ito sa kanya (text/chat). Papalitan nila ang password sa unang login.

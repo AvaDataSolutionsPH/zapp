@@ -126,6 +126,7 @@ import {
 import { signUpIsolated, generateTempPassword } from '@/lib/authSignup';
 import { resolveLoginEmailCandidates, shopCodeToEmail } from '@/lib/shopCodeAuth';
 import { resetPasswordForUser } from '@/services/resetPassword';
+import { changeLoginEmailForUser } from '@/services/changeLoginEmail';
 
 // Compute the initial billing list from the seeded mock entities. This replaces
 // the previously hard-coded mockBillingRecords — billings are now derived from
@@ -362,6 +363,14 @@ interface AppStore {
    * distributor with no error at all. Throws with a readable reason instead.
    */
   changeReferralCode: (distributorId: string, newCode: string) => Promise<string>;
+  /**
+   * Repoint an account's SIGN-IN address. Owner only, and it runs server-side
+   * (change-login-email Edge Function) because it must write BOTH auth.users
+   * and public.users — every RLS helper resolves the caller by
+   * `users.email = auth.jwt() email`, so a half-write leaves an account that
+   * authenticates into a blank screen with no error.
+   */
+  changeLoginEmail: (userId: string, newEmail: string) => Promise<string>;
   updateAreaSupervisorDetails: (id: string, updates: Partial<AreaSupervisor>) => Promise<void>;
   /**
    * First-login account verification. The franchisee submits their documents +
@@ -1412,6 +1421,30 @@ export const useStore = create<AppStore>((set, get) => {
     }
   },
 
+
+
+  changeLoginEmail: async (userId, newEmail) => {
+    const { currentUser, demoUsers } = get();
+    if (!currentUser) throw new Error('Not signed in.');
+    const target = demoUsers.find((u) => u.id === userId);
+    if (!target) throw new Error('Account not found.');
+
+    // The function does the writing AND the ownership check — it runs as
+    // service_role, so RLS cannot protect the row and the rule lives in code
+    // there. Nothing local has changed yet, so a refusal needs no rollback.
+    const result = await changeLoginEmailForUser(userId, newEmail);
+
+    // Both layers are already consistent server-side; mirror it locally so the
+    // UI does not show the stale address until the next hydration.
+    set((state) => ({
+      demoUsers: state.demoUsers.map((u) => (u.id === userId ? { ...u, email: result.email } : u)),
+      currentUser:
+        state.currentUser?.id === userId
+          ? { ...state.currentUser, email: result.email }
+          : state.currentUser,
+    }));
+    return result.email;
+  },
 
   changeReferralCode: async (distributorId, newCode) => {
     const problem = validateReferralCode(newCode);

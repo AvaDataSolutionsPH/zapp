@@ -37,7 +37,8 @@ export default function DistributorFormModal({
   distributor: Distributor | null;
   onClose: () => void;
 }) {
-  const { plants, updateDistributor, changeReferralCode } = useStore();
+  const { plants, updateDistributor, changeReferralCode, changeLoginEmail, demoUsers, currentUser } =
+    useStore();
   const { addToast } = useToast();
 
   const [name, setName] = useState('');
@@ -53,6 +54,10 @@ export default function DistributorFormModal({
   // so this is a separate, explicit action rather than part of the batch save.
   const [codeDraft, setCodeDraft] = useState('');
   const [savingCode, setSavingCode] = useState(false);
+  // The LOGIN lives on the user row, not the distributor row. Owner only, and
+  // it goes through an Edge Function because it must write auth.users too.
+  const [loginDraft, setLoginDraft] = useState('');
+  const [savingLogin, setSavingLogin] = useState(false);
 
   useEffect(() => {
     if (!open || !distributor) return;
@@ -63,7 +68,16 @@ export default function DistributorFormModal({
     setPlantId(distributor.plantId);
     setStatus(distributor.status);
     setCodeDraft(distributor.referralCode);
+    setLoginDraft(
+      demoUsers.find((u) => u.distributorId === distributor.id && u.role === 'partner_distributor')
+        ?.email ?? '',
+    );
     setErrors({});
+    // `demoUsers` is deliberately NOT a dependency. This effect seeds the form
+    // ONCE when the modal opens; re-running it whenever the users slice changes
+    // (every hydration, and hydration runs on every TOKEN_REFRESHED) would wipe
+    // a half-typed login email out from under the person typing it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, distributor]);
 
   const plantOptions: SelectOption[] = [
@@ -96,6 +110,30 @@ export default function DistributorFormModal({
       addToast('error', errorMessage(err, 'Hindi na-palitan ang referral code.'));
     } finally {
       setSavingCode(false);
+    }
+  };
+
+  const pdAccount = distributor
+    ? demoUsers.find((u) => u.distributorId === distributor.id && u.role === 'partner_distributor')
+    : undefined;
+  const canChangeLogin = currentUser?.role === 'owner' && !!pdAccount;
+
+  const applyLoginChange = async () => {
+    if (!pdAccount) return;
+    const next = loginDraft.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(next)) {
+      addToast('error', 'Hindi valid ang email address.');
+      return;
+    }
+    setSavingLogin(true);
+    try {
+      const saved = await changeLoginEmail(pdAccount.id, next);
+      setLoginDraft(saved);
+      addToast('success', `Ang login niya ay ${saved} na.`);
+    } catch (err) {
+      addToast('error', errorMessage(err, 'Hindi na-palitan ang login email.'));
+    } finally {
+      setSavingLogin(false);
     }
   };
 
@@ -187,6 +225,38 @@ export default function DistributorFormModal({
             kapag pinalitan.
           </p>
         </div>
+
+        {/* The SIGN-IN address. Separate from the company email above, and from
+            the batch Save — it writes auth.users as well, so it is an explicit
+            action with its own confirmation. */}
+        {canChangeLogin && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <div className="flex-1">
+                <Input
+                  label="Login Email (ito ang ipinapasok niya sa /login)"
+                  type="email"
+                  value={loginDraft}
+                  onChange={(e) => setLoginDraft(e.target.value)}
+                  helperText="Iba ito sa Email ng kumpanya sa itaas."
+                />
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => void applyLoginChange()}
+                disabled={
+                  savingLogin || !loginDraft.trim() || loginDraft.trim().toLowerCase() === pdAccount?.email
+                }
+              >
+                {savingLogin ? 'Pinapalitan…' : 'Palitan ang Login'}
+              </Button>
+            </div>
+            <p className="mt-2 text-xs text-blue-800">
+              ⚠️ Pagkatapos nito, <strong>ang bagong email na ang gagamitin niya sa pag-login</strong>.
+              Hindi magbabago ang password. Sabihan mo siya bago palitan.
+            </p>
+          </div>
+        )}
       </div>
     </Modal>
   );

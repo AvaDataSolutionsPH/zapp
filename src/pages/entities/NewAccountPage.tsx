@@ -122,11 +122,17 @@ export default function NewAccountPage() {
   // share the multi-select. Plant Manager keeps the single Select — "plant
   // manager per plant lang yan".
   const isBilling = role === 'billing_user';
-  // A Partner Distributor may serve SEVERAL plants (migration 042) — the boss's
-  // own PD holds five. Without this his referral code would stamp ONE plant on
-  // every applicant, wrong ~4 times out of 5, silently (assigned_plant_id is
-  // NOT NULL so it never errors). First pick = primary/home plant.
-  const isMultiPlant = isBilling || role === 'forecaster' || role === 'partner_distributor';
+  // EVERY channel role may serve several plants — PD (042), Area Supervisor and
+  // Sub-Partner (043) — because the boss's own partners do. Without it the
+  // referral code stamps ONE plant on every applicant, wrong most of the time
+  // and SILENTLY (assigned_plant_id is NOT NULL, so it never errors). The first
+  // pick is the primary/home plant. Plant Manager stays single on purpose:
+  // "plant manager per plant lang yan".
+  const isChannelRole =
+    role === 'partner_distributor' ||
+    role === 'sub_partner_distributor' ||
+    role === 'area_manager';
+  const isMultiPlant = isBilling || role === 'forecaster' || isChannelRole;
   // owner/ops pick plant + (for SPD) the parent PD. A PD uses its own scope, so
   // those inputs are hidden for them.
   const showPlant = isAdmin && !isOps && !isMultiPlant;
@@ -336,7 +342,7 @@ export default function NewAccountPage() {
                           <p className="mt-1 text-xs text-red-600">{errors.plantIds}</p>
                         ) : (
                           <p className="mt-1 text-xs text-gray-500">
-                            {role === 'partner_distributor' ? (
+                            {isChannelRole ? (
                               <>
                                 Pwedeng higit sa isa. Ang <strong>unang pipiliin mo</strong> ang
                                 magiging pangunahing plant — ito ang default na nakalagay sa bawat

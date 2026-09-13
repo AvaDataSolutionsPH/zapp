@@ -565,6 +565,8 @@ const mapSubPartnerDistributorToDB = (s: SubPartnerDistributor) => ({
   phone: s.phone,
   parent_distributor_id: s.parentDistributorId,
   plant_id: s.plantId,
+  // migration 043 — every plant served; null means "only plant_id".
+  plant_ids: s.plantIds ?? null,
   assigned_store_ids: s.assignedStoreIds,
   status: s.status,
   referral_code: s.referralCode ?? null,
@@ -577,6 +579,8 @@ const mapAreaSupervisorToDB = (a: AreaSupervisor) => ({
   phone: a.phone,
   assigned_areas: a.assignedAreas,
   plant_id: a.plantId,
+  // migration 043 — every plant covered; null means "only plant_id".
+  plant_ids: a.plantIds ?? null,
   assigned_store_ids: a.assignedStoreIds,
   // Province master list (023) — the column is NOT NULL DEFAULT '{}', so coerce
   // undefined to an empty array rather than null.

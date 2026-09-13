@@ -953,9 +953,16 @@ export const useStore = create<AppStore>((set, get) => {
       let resolvedAreaSupId =
         effectiveAreaSupervisorId(updatedApp, state.areaSupervisors) ?? '';
       if (!resolvedAreaSupId) {
+        // Match on EVERY plant the supervisor covers (043), not just the
+        // primary. A supervisor holding five plants was invisible to this
+        // lookup for four of them, so the store silently went to whoever came
+        // first — stores.area_supervisor_id is NOT NULL, so it always picks
+        // SOMEBODY and never errors.
+        const coversPlant = (as: AreaSupervisor): boolean =>
+          as.plantId === updatedApp.assignedPlantId ||
+          (as.plantIds ?? []).includes(updatedApp.assignedPlantId);
         const fallbackAS =
-          state.areaSupervisors.find((as) => as.plantId === updatedApp.assignedPlantId) ??
-          state.areaSupervisors[0];
+          state.areaSupervisors.find(coversPlant) ?? state.areaSupervisors[0];
         resolvedAreaSupId = fallbackAS?.id ?? '';
       }
 
@@ -1828,6 +1835,17 @@ export const useStore = create<AppStore>((set, get) => {
     // doesn't get an empty src.
     const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=F59E0B&color=fff`;
 
+    // EVERY channel role may serve several plants — PD (042), Area Supervisor
+    // and Sub-Partner (043). The FIRST plant ticked is the PRIMARY: it satisfies
+    // the `plant_id NOT NULL` on distributors / sub_partner_distributors /
+    // area_supervisors / referral_codes, and stays the default stamped on every
+    // application arriving through this partner's referral code. The full list
+    // records what they ACTUALLY serve. Plant Manager is excluded on purpose —
+    // "plant manager per plant lang yan".
+    const servedPlants = (input.plantIds ?? []).filter(Boolean);
+    const primaryPlant = servedPlants[0] ?? plantId;
+    const servedOrUndefined = servedPlants.length > 0 ? servedPlants : undefined;
+
     // null for HQ staff — they own no entity record and no channel code.
     let entity: Distributor | SubPartnerDistributor | AreaSupervisor | null = null;
     let userProfile: User;
@@ -1855,18 +1873,10 @@ export const useStore = create<AppStore>((set, get) => {
       };
     } else if (input.role === 'partner_distributor') {
       const distId = `dist-${uid()}`;
-      // A PD may serve SEVERAL plants (migration 042). The FIRST selected plant
-      // is the primary: it satisfies distributors.plant_id / referral_codes.
-      // plant_id (both NOT NULL) and remains the default plant stamped on every
-      // application that arrives through this PD's referral code. The full list
-      // is what the approval screen offers so the reviewer picks instead of
-      // inheriting a guess.
-      const servedPlants = (input.plantIds ?? []).filter(Boolean);
-      const primaryPlant = servedPlants[0] ?? plantId;
       entity = {
         id: distId, name, contactPerson: name, email, phone,
         plantId: primaryPlant,
-        plantIds: servedPlants.length > 0 ? servedPlants : undefined,
+        plantIds: servedOrUndefined,
         referralCode, assignedAreaIds: [], status: 'active',
       };
       refCode = {
@@ -1876,7 +1886,7 @@ export const useStore = create<AppStore>((set, get) => {
       };
       userProfile = {
         id: userId, name, email, role: 'partner_distributor', avatar,
-        plantId: primaryPlant, plantIds: servedPlants.length > 0 ? servedPlants : undefined,
+        plantId: primaryPlant, plantIds: servedOrUndefined,
         distributorId: distId,
       };
     } else if (input.role === 'sub_partner_distributor') {
@@ -1887,24 +1897,28 @@ export const useStore = create<AppStore>((set, get) => {
       const spdId = `spd-${uid()}`;
       entity = {
         id: spdId, name, contactPerson: name, email, phone, parentDistributorId,
-        plantId, assignedStoreIds: [], status: 'active', referralCode,
+        plantId: primaryPlant, plantIds: servedOrUndefined,
+        assignedStoreIds: [], status: 'active', referralCode,
       };
       refCode = {
         id: `ref-${uid()}`, code: referralCode, type: 'sub_partner_distributor',
-        distributorId: parentDistributorId, subPartnerDistributorId: spdId, plantId,
-        status: 'active', createdAt: now, usageCount: 0,
+        distributorId: parentDistributorId, subPartnerDistributorId: spdId,
+        plantId: primaryPlant, status: 'active', createdAt: now, usageCount: 0,
       };
       userProfile = {
-        id: userId, name, email, role: 'sub_partner_distributor', avatar, plantId,
+        id: userId, name, email, role: 'sub_partner_distributor', avatar,
+        plantId: primaryPlant, plantIds: servedOrUndefined,
         distributorId: parentDistributorId, subPartnerDistributorId: spdId,
       };
     } else {
       const asId = `am-${uid()}`;
       entity = {
-        id: asId, name, email, phone, assignedAreas: [], plantId, assignedStoreIds: [],
+        id: asId, name, email, phone, assignedAreas: [],
+        plantId: primaryPlant, plantIds: servedOrUndefined, assignedStoreIds: [],
       };
       userProfile = {
-        id: userId, name, email, role: 'area_manager', avatar, plantId, areaIds: [],
+        id: userId, name, email, role: 'area_manager', avatar,
+        plantId: primaryPlant, plantIds: servedOrUndefined, areaIds: [],
       };
     }
 

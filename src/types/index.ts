@@ -208,7 +208,11 @@ export interface SubPartnerDistributor {
   email: string;
   phone: string;
   parentDistributorId: string;
+  /** Primary/home plant. Stays required. */
   plantId: string;
+  /** Every plant this sub-partner serves (migration 043). Empty/undefined means
+   *  "only plantId" — NOT "all plants". */
+  plantIds?: string[];
   assignedStoreIds: string[];
   status: DistributorStatus;
   // Channel code that routes an onboarding application to this SPD.
@@ -222,7 +226,12 @@ export interface AreaSupervisor {
   phone: string;
   /** Free-text CITY names — display only. Not the province master list. */
   assignedAreas: string[];
+  /** Primary/home plant. Stays required — it is what the approval fallback in
+   *  `reviewApplication` matches on. */
   plantId: string;
+  /** Every plant this supervisor covers (migration 043). Empty/undefined means
+   *  "only plantId" — NOT "all plants" (see the migration for why). */
+  plantIds?: string[];
   assignedStoreIds: string[];
   /**
    * Provinces this AS covers (New Application Monitoring, migration 023).

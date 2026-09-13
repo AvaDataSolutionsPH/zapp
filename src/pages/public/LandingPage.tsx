@@ -19,8 +19,10 @@ import {
   ClipboardCheck,
   UserCheck,
   Truck,
-  MapPin,
-  Factory,
+  // MapPin + Factory are used ONLY by the commented-out "Our Plants" section.
+  // Restore these two imports when that section is restored.
+  // MapPin,
+  // Factory,
   Handshake,
   BarChart3,
   Zap,
@@ -77,7 +79,12 @@ const NAV_LINKS = [
   // section the page does not have. The band itself and its id are kept, so the
   // link can return the moment there is real "why" content to point at.
   { label: 'PARTNERSHIP', href: '#how-it-works' },
-  { label: 'OUR PLANTS', href: '#plants' },
+  // "OUR PLANTS" commented out together with its section below: the plant
+  // names, locations and coverage areas on that page were invented demo data
+  // (they matched src/data/mockData.ts verbatim), so the page was making
+  // specific factual claims to prospective franchisees that nothing backed.
+  // Restore this line when the section is restored with real figures.
+  // { label: 'OUR PLANTS', href: '#plants' },
 ];
 
 // ── Landing Page ──────────────────────────────────────────────
@@ -273,7 +280,12 @@ export default function LandingPage() {
 
         {/* ─── Red stats bar (bottom of hero) ───────────────── */}
         <div className="absolute inset-x-0 bottom-0 z-10 bg-zapp-brand-red">
-          <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 py-5 sm:flex-row sm:px-6 sm:py-6 lg:px-8">
+          {/* justify-center (was justify-between) because the "1000+ Stores
+              Nationwide" counter beside this button is commented out below —
+              with one child left, space-between would strand it on the left. */}
+          <div className="mx-auto flex max-w-7xl flex-col items-center justify-center gap-4 px-4 py-5 sm:flex-row sm:px-6 sm:py-6 lg:px-8">
+            {/* Unverified figure — parked, not deleted. Restore with the real
+                store count (and re-add justify-between above).
             <div className="flex items-center gap-3 sm:gap-4">
               <Store className="size-9 text-white sm:size-11" strokeWidth={1.5} />
               <div>
@@ -286,6 +298,7 @@ export default function LandingPage() {
               </div>
             </div>
             <div className="hidden h-12 w-px bg-white/30 sm:block" />
+            */}
             <button
               onClick={() => navigate('/apply')}
               className="w-full rounded-md bg-zapp-gold px-6 py-3.5 text-sm font-black uppercase tracking-wide text-zapp-brown shadow-lg transition-transform hover:scale-[1.02] sm:w-auto sm:px-10 sm:py-4 sm:text-base"
@@ -307,13 +320,14 @@ export default function LandingPage() {
               The Donut Brand Filipinos Love
             </h2>
             <p className="mt-4 text-lg leading-relaxed text-gray-600">
+              {/* The named facilities — "Daraga (Bicol), Manila (NCR), Cebu
+                  (Visayas)" — and "across the nation" were removed with the
+                  Our Plants section: same invented demo data, same public
+                  factual claim. Put the real locations back here when they are
+                  confirmed. */}
               ZAPP Donuts is a Philippine-based donut franchise built on a
-              multi-plant distribution model. With production facilities in{' '}
-              <strong className="text-zapp-brown">Daraga (Bicol)</strong>,{' '}
-              <strong className="text-zapp-brown">Manila (NCR)</strong>, and{' '}
-              <strong className="text-zapp-brown">Cebu (Visayas)</strong>, we
-              ensure fresh daily deliveries to franchise stores across the
-              nation.
+              multi-plant distribution model, with fresh daily deliveries to
+              partner stores.
             </p>
             <p className="mt-4 text-lg leading-relaxed text-gray-600">
               We partner with franchisees for a seamless, scalable business —
@@ -363,7 +377,11 @@ export default function LandingPage() {
         </div>
       </Section>
 
-      {/* ─── Why ZAPP (value band) ──────────────────────────── */}
+      {/* ─── Why ZAPP (value band) — COMMENTED OUT ──────────────
+          "3 Production Plants / 1000+ Stores Nationwide / 9 Signature
+          Products" were hardcoded demo figures, not read from the database.
+          Uncomment once the real numbers are confirmed. */}
+      {/*
       <div id="why" className="bg-zapp-brown">
         <Section className="py-16 lg:py-20">
           <Reveal stagger className="grid gap-8 text-center sm:grid-cols-3">
@@ -384,6 +402,7 @@ export default function LandingPage() {
           </Reveal>
         </Section>
       </div>
+      */}
 
       {/* ─── How It Works / Partnership ─────────────────────── */}
       <Section id="how-it-works" className="py-20 lg:py-28">
@@ -448,7 +467,19 @@ export default function LandingPage() {
         </Reveal>
       </Section>
 
-      {/* ─── Our Plants ─────────────────────────────────────── */}
+      {/* ─── Our Plants — COMMENTED OUT ─────────────────────────
+          The plant cards were HARDCODED here (not read from the `plants`
+          table) and carried invented names, locations and coverage areas —
+          "Daraga Plant / Tondo, Manila / Mandaue, Cebu", matching
+          src/data/mockData.ts verbatim. Two of those plants have never had a
+          single store. Publishing them told prospective franchisees something
+          untrue, so the section is parked until the real plants are confirmed.
+
+          To restore: uncomment this block AND the OUR PLANTS entry in
+          NAV_LINKS. Better still, read from the `plants` table (editable by
+          the owner in Plants → Edit) so it can never drift from reality
+          again. */}
+      {/*
       <Section id="plants" className="bg-zapp-cream/40 py-20 lg:py-28">
         <Reveal className="text-center">
           <span className="text-sm font-black uppercase tracking-wider text-zapp-red">
@@ -533,6 +564,7 @@ export default function LandingPage() {
           ))}
         </Reveal>
       </Section>
+      */}
 
       {/* ─── CTA Section ────────────────────────────────────── */}
       <div

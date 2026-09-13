@@ -48,7 +48,7 @@ export default function LoginPage() {
       if (success) {
         navigate('/dashboard');
       } else {
-        setError('Invalid email or password. Try a demo account below.');
+        setError('Invalid email or password.');
       }
     } catch {
       setError('Something went wrong. Please try again.');
@@ -166,46 +166,53 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Divider */}
-          <div className="flex items-center gap-3 my-6">
-            <div className="flex-1 h-px bg-gray-200" />
-            <span className="text-xs text-gray-400 font-medium uppercase tracking-wide">
-              Quick Demo Login
-            </span>
-            <div className="flex-1 h-px bg-gray-200" />
-          </div>
+          {/* ── Quick Demo Login — DEVELOPMENT BUILDS ONLY ──────────────
+              These buttons sign in as any of the 9 roles in one click using the
+              shared seed password, on a PUBLIC page — in production that is a
+              one-click Owner login for anyone who opens /login. `import.meta.env.DEV`
+              is statically replaced with `false` at build time, so the whole
+              block (and the roles it maps over) is dropped from the production
+              bundle rather than merely hidden with CSS.
 
-          {/* Demo role buttons */}
-          <div className="grid grid-cols-3 gap-2">
-            {demoRoles.map(({ role, label, color }) => {
-              const user = demoUsers.find((u) => u.role === role);
-              return (
-                <button
-                  key={role}
-                  onClick={() => { void handleDemoLogin(role); }}
-                  disabled={loading}
-                  className="flex flex-col items-center gap-1 p-2.5 rounded-lg border border-gray-200 hover:border-zapp-orange/40 hover:bg-zapp-cream/50 cursor-pointer bg-white transition-all text-center group disabled:opacity-50 disabled:cursor-not-allowed"
-                  title={user?.name ?? label}
-                >
-                  <span
-                    className={`w-6 h-6 rounded-full ${color} flex items-center justify-center text-white text-[10px] font-bold`}
-                  >
-                    {label.charAt(0)}
-                  </span>
-                  <span className="text-[10px] font-medium text-gray-600 group-hover:text-zapp-brown leading-tight">
-                    {label}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+              ⚠️ This removes the SHORTCUT, not the risk: the seeded accounts
+              still exist and still accept the shared password. Changing those
+              passwords is the actual fix. */}
+          {import.meta.env.DEV && (
+            <>
+              <div className="flex items-center gap-3 my-6">
+                <div className="flex-1 h-px bg-gray-200" />
+                <span className="text-xs text-gray-400 font-medium uppercase tracking-wide">
+                  Quick Demo Login (dev only)
+                </span>
+                <div className="flex-1 h-px bg-gray-200" />
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                {demoRoles.map(({ role, label, color }) => {
+                  const user = demoUsers.find((u) => u.role === role);
+                  return (
+                    <button
+                      key={role}
+                      onClick={() => { void handleDemoLogin(role); }}
+                      disabled={loading}
+                      className="flex flex-col items-center gap-1 p-2.5 rounded-lg border border-gray-200 hover:border-zapp-orange/40 hover:bg-zapp-cream/50 cursor-pointer bg-white transition-all text-center group disabled:opacity-50 disabled:cursor-not-allowed"
+                      title={user?.name ?? label}
+                    >
+                      <span
+                        className={`w-6 h-6 rounded-full ${color} flex items-center justify-center text-white text-[10px] font-bold`}
+                      >
+                        {label.charAt(0)}
+                      </span>
+                      <span className="text-[10px] font-medium text-gray-600 group-hover:text-zapp-brown leading-tight">
+                        {label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </div>
-
-        {/* Footer text */}
-        <p className="text-center text-xs text-gray-400 mt-6">
-          Demo credentials: use any demo button above or enter a valid demo
-          email with any password.
-        </p>
       </div>
     </div>
   );

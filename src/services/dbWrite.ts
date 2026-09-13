@@ -302,12 +302,38 @@ export async function insertApplication(app: Application): Promise<void> {
   if (error) throw error;
 }
 
+/**
+ * Throw when an UPDATE changed NOTHING.
+ *
+ * ⚠️ A row-level-security denial is NOT an error. When a policy's USING clause
+ * excludes the row, Postgres updates ZERO rows and PostgREST answers 204 with
+ * `error: null` — so `if (error) throw error` passes, the optimistic UI keeps the
+ * change, the success toast fires, and the edit silently disappears on the next
+ * hydration. Migration 035 documents exactly this: verifying the last document
+ * flipped the account to active while the store stayed 'pending' forever,
+ * because the UPDATE "matched zero rows and reported no error".
+ *
+ * Every update therefore asks for the affected ids back and treats an empty
+ * result as a failure, letting the caller's existing rollback + error toast do
+ * their job. Safe because SELECT is at least as permissive as UPDATE everywhere
+ * in this schema: reference tables are `ref_select USING (true)`, and
+ * store-scoped tables share one scope between their select and write policies.
+ */
+function assertRowChanged(data: unknown, table: string): void {
+  if (Array.isArray(data) && data.length > 0) return;
+  throw new Error(
+    `Walang na-save sa "${table}" — 0 rows updated. Malamang walang permiso ang account mo para sa record na ito, o wala na ito.`,
+  );
+}
+
 export async function updateApplication(app: Application): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('applications')
     .update(mapApplicationToDB(app) as never)
-    .eq('id', app.id);
+    .eq('id', app.id)
+    .select('id');
   if (error) throw error;
+  assertRowChanged(data, 'applications');
 }
 
 /**
@@ -350,11 +376,13 @@ export async function updateApplicationFields(
   applicationId: string,
   patch: Record<string, unknown>,
 ): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('applications')
     .update(patch as never)
-    .eq('id', applicationId);
+    .eq('id', applicationId)
+    .select('id');
   if (error) throw error;
+  assertRowChanged(data, 'applications');
 }
 
 /**
@@ -380,12 +408,14 @@ export async function updateApplicationFields(
  * and gets no error, which is why 035 has to land for an AS to activate.
  */
 export async function activateStoreByShopCode(shopCode: string): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('stores')
     .update({ status: 'active' } as never)
     .eq('shop_code', shopCode)
-    .neq('status', 'active');
+    .neq('status', 'active')
+    .select('id');
   if (error) throw error;
+  assertRowChanged(data, 'stores');
 }
 
 export async function updateApplicationChanges(
@@ -441,11 +471,13 @@ export async function insertDelivery(delivery: Delivery): Promise<void> {
 }
 
 export async function updateDelivery(delivery: Delivery): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('deliveries')
     .update(mapDeliveryToDB(delivery) as never)
-    .eq('id', delivery.id);
+    .eq('id', delivery.id)
+    .select('id');
   if (error) throw error;
+  assertRowChanged(data, 'deliveries');
 }
 
 export async function insertBeginningInventory(bi: BeginningInventory): Promise<void> {
@@ -456,11 +488,13 @@ export async function insertBeginningInventory(bi: BeginningInventory): Promise<
 }
 
 export async function updateBeginningInventory(bi: BeginningInventory): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('beginning_inventories')
     .update(mapBeginningInventoryToDB(bi) as never)
-    .eq('id', bi.id);
+    .eq('id', bi.id)
+    .select('id');
   if (error) throw error;
+  assertRowChanged(data, 'beginning_inventories');
 }
 
 export async function insertEndingInventory(ei: EndingInventory): Promise<void> {
@@ -471,11 +505,13 @@ export async function insertEndingInventory(ei: EndingInventory): Promise<void> 
 }
 
 export async function updateEndingInventory(ei: EndingInventory): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('ending_inventories')
     .update(mapEndingInventoryToDB(ei) as never)
-    .eq('id', ei.id);
+    .eq('id', ei.id)
+    .select('id');
   if (error) throw error;
+  assertRowChanged(data, 'ending_inventories');
 }
 
 export async function insertBillingRevision(rev: BillingRevision): Promise<void> {
@@ -486,11 +522,13 @@ export async function insertBillingRevision(rev: BillingRevision): Promise<void>
 }
 
 export async function updateBillingRevision(rev: BillingRevision): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('billing_revisions')
     .update(mapBillingRevisionToDB(rev) as never)
-    .eq('id', rev.id);
+    .eq('id', rev.id)
+    .select('id');
   if (error) throw error;
+  assertRowChanged(data, 'billing_revisions');
 }
 
 export async function insertPayment(payment: Payment): Promise<void> {
@@ -501,19 +539,23 @@ export async function insertPayment(payment: Payment): Promise<void> {
 }
 
 export async function updatePayment(payment: Payment): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('payments')
     .update(mapPaymentToDB(payment) as never)
-    .eq('id', payment.id);
+    .eq('id', payment.id)
+    .select('id');
   if (error) throw error;
+  assertRowChanged(data, 'payments');
 }
 
 export async function updateStore(store: Store): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('stores')
     .update(mapStoreToDB(store) as never)
-    .eq('id', store.id);
+    .eq('id', store.id)
+    .select('id');
   if (error) throw error;
+  assertRowChanged(data, 'stores');
 }
 
 export async function insertPackagingOrder(po: PackagingOrder): Promise<void> {
@@ -613,11 +655,13 @@ export async function insertDistributor(d: Distributor): Promise<void> {
 }
 
 export async function updateDistributor(d: Distributor): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('distributors')
     .update(mapDistributorToDB(d) as never)
-    .eq('id', d.id);
+    .eq('id', d.id)
+    .select('id');
   if (error) throw error;
+  assertRowChanged(data, 'distributors');
 }
 
 // Plants are reference data — admin-only writes (003 ref_write). Editable so a
@@ -667,20 +711,24 @@ export async function insertSku(s: SKU): Promise<void> {
  * case where the code is unchanged.
  */
 export async function updateSku(s: SKU, matchId: string = s.id): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('skus')
     .update(mapSkuToDB(s) as never)
-    .eq('id', matchId);
+    .eq('id', matchId)
+    .select('id');
   if (error) throw error;
+  assertRowChanged(data, 'skus');
 }
 
 /** Persist only a SKU's display order (migration 039). */
 export async function updateSkuOrder(id: string, sortOrder: number): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('skus')
     .update({ sort_order: sortOrder } as never)
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
   if (error) throw error;
+  assertRowChanged(data, 'skus');
 }
 
 // ── Packaging catalog ─────────────────────────────────────────
@@ -709,11 +757,13 @@ export async function insertPackagingItem(p: PackagingItem): Promise<void> {
 }
 
 export async function updatePackagingItem(p: PackagingItem): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('packaging_catalog')
     .update(mapPackagingItemToDB(p) as never)
-    .eq('id', p.id);
+    .eq('id', p.id)
+    .select('id');
   if (error) throw error;
+  assertRowChanged(data, 'packaging_catalog');
 }
 
 export async function insertPlant(p: Plant): Promise<void> {
@@ -722,11 +772,13 @@ export async function insertPlant(p: Plant): Promise<void> {
 }
 
 export async function updatePlant(p: Plant): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('plants')
     .update(mapPlantToDB(p) as never)
-    .eq('id', p.id);
+    .eq('id', p.id)
+    .select('id');
   if (error) throw error;
+  assertRowChanged(data, 'plants');
 }
 
 export async function insertSubPartnerDistributor(s: SubPartnerDistributor): Promise<void> {
@@ -744,11 +796,13 @@ export async function insertAreaSupervisor(a: AreaSupervisor): Promise<void> {
 }
 
 export async function updateAreaSupervisor(a: AreaSupervisor): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('area_supervisors')
     .update(mapAreaSupervisorToDB(a) as never)
-    .eq('id', a.id);
+    .eq('id', a.id)
+    .select('id');
   if (error) throw error;
+  assertRowChanged(data, 'area_supervisors');
 }
 
 export async function insertUser(u: User): Promise<void> {
@@ -757,11 +811,13 @@ export async function insertUser(u: User): Promise<void> {
 }
 
 export async function updateUser(u: User): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('users')
     .update(mapUserToDB(u) as never)
-    .eq('id', u.id);
+    .eq('id', u.id)
+    .select('id');
   if (error) throw error;
+  assertRowChanged(data, 'users');
 }
 
 export async function insertSpecialOrder(s: SpecialOrder): Promise<void> {
@@ -779,9 +835,11 @@ export async function insertNotification(n: Notification): Promise<void> {
 }
 
 export async function updateNotification(n: Notification): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('notifications')
     .update(mapNotificationToDB(n) as never)
-    .eq('id', n.id);
+    .eq('id', n.id)
+    .select('id');
   if (error) throw error;
+  assertRowChanged(data, 'notifications');
 }

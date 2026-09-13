@@ -14,8 +14,8 @@
 // list, which is display-only.
 
 import { useEffect, useState } from 'react';
-import { ClipboardList, X } from 'lucide-react';
-import { CheckboxGroup, Button, Input, Modal, Badge } from '@/components/ui';
+import { ClipboardList, X, Trash2 } from 'lucide-react';
+import { CheckboxGroup, Button, ConfirmDialog, Input, Modal, Badge } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import { useStore } from '@/store/useStore';
 import type { AreaSupervisor } from '@/types';
@@ -30,7 +30,7 @@ export default function AreaSupervisorFormModal({
   supervisor: AreaSupervisor | null;
   onClose: () => void;
 }) {
-  const { plants, updateAreaSupervisorDetails } = useStore();
+  const { plants, updateAreaSupervisorDetails, deleteAccount, demoUsers, currentUser } = useStore();
   const { addToast } = useToast();
 
   const [name, setName] = useState('');
@@ -43,6 +43,10 @@ export default function AreaSupervisorFormModal({
   const [areaDraft, setAreaDraft] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  // Permanent removal — owner only; the server refuses while any store or
+  // application still points at this supervisor.
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!open || !supervisor) return;
@@ -80,6 +84,31 @@ export default function AreaSupervisorFormModal({
     return Object.keys(e).length === 0;
   };
 
+  // The supervisor's LOGIN. `area_supervisors` and `users` live in different id
+  // spaces (am-01 vs user-09), so match the same way migration 029 does.
+  const supAccount = supervisor
+    ? demoUsers.find(
+        (u) => u.role === 'area_manager' && (u.id === supervisor.id || u.name === supervisor.name),
+      )
+    : undefined;
+  const canDelete = currentUser?.role === 'owner' && !!supAccount;
+
+  const handleDelete = async () => {
+    if (!supAccount) return;
+    setDeleting(true);
+    try {
+      const res = await deleteAccount(supAccount.id);
+      addToast('success', `Nabura si ${res.name}.`);
+      setConfirmingDelete(false);
+      onClose();
+    } catch (err) {
+      // The refusal text IS the useful part ("may 2 store(s) pa…").
+      addToast('error', errorMessage(err, 'Hindi nabura ang account.'));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!supervisor || !validate()) return;
     setSaving(true);
@@ -110,6 +139,17 @@ export default function AreaSupervisorFormModal({
       size="md"
       footer={
         <>
+          {canDelete && (
+            <Button
+              variant="danger"
+              onClick={() => setConfirmingDelete(true)}
+              disabled={saving || deleting}
+              iconLeft={<Trash2 size={15} />}
+              className="mr-auto"
+            >
+              Burahin
+            </Button>
+          )}
           <Button variant="secondary" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
@@ -182,6 +222,20 @@ export default function AreaSupervisorFormModal({
           </p>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmingDelete}
+        onClose={() => setConfirmingDelete(false)}
+        onConfirm={() => void handleDelete()}
+        title={`Burahin si ${supervisor?.name ?? ''}?`}
+        message={
+          'Permanenteng mabubura ang login, ang profile at ang Area Supervisor record niya. ' +
+          'Hindi ito maibabalik. Kung may stores o applications na nakakabit sa kanya, tatanggihan ito.'
+        }
+        confirmLabel="Oo, burahin"
+        danger
+        loading={deleting}
+      />
     </Modal>
   );
 }

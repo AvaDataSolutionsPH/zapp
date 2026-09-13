@@ -14,8 +14,8 @@
 // would orphan every application filed under the old code.
 
 import { useEffect, useState } from 'react';
-import { Building2 } from 'lucide-react';
-import { CheckboxGroup, Button, Input, Modal, Select } from '@/components/ui';
+import { Building2, Trash2 } from 'lucide-react';
+import { CheckboxGroup, Button, ConfirmDialog, Input, Modal, Select } from '@/components/ui';
 import type { SelectOption } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import { useStore } from '@/store/useStore';
@@ -37,7 +37,7 @@ export default function DistributorFormModal({
   distributor: Distributor | null;
   onClose: () => void;
 }) {
-  const { plants, updateDistributor, changeReferralCode, changeLoginEmail, demoUsers, currentUser } =
+  const { plants, updateDistributor, changeReferralCode, changeLoginEmail, deleteAccount, demoUsers, currentUser } =
     useStore();
   const { addToast } = useToast();
 
@@ -58,6 +58,10 @@ export default function DistributorFormModal({
   const [savingCode, setSavingCode] = useState(false);
   // The LOGIN lives on the user row, not the distributor row. Owner only, and
   // it goes through an Edge Function because it must write auth.users too.
+  // Permanent removal — owner only, and the server refuses while anything still
+  // references the account. See supabase/functions/delete-account.
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [loginDraft, setLoginDraft] = useState('');
   const [savingLogin, setSavingLogin] = useState(false);
 
@@ -137,6 +141,25 @@ export default function DistributorFormModal({
     }
   };
 
+
+  const handleDelete = async () => {
+    const acct = pdAccount;
+    if (!acct) return;
+    setDeleting(true);
+    try {
+      const res = await deleteAccount(acct.id);
+      addToast('success', `Nabura si ${res.name}.`);
+      setConfirmingDelete(false);
+      onClose();
+    } catch (err) {
+      // The function's refusals ARE the message ("may 3 store(s) pa…"), so show
+      // them verbatim rather than a generic failure.
+      addToast('error', errorMessage(err, 'Hindi nabura ang account.'));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!distributor || !validate()) return;
     setSaving(true);
@@ -167,6 +190,17 @@ export default function DistributorFormModal({
       size="md"
       footer={
         <>
+          {canChangeLogin && pdAccount && (
+            <Button
+              variant="danger"
+              onClick={() => setConfirmingDelete(true)}
+              disabled={saving || deleting}
+              iconLeft={<Trash2 size={15} />}
+              className="mr-auto"
+            >
+              Burahin
+            </Button>
+          )}
           <Button variant="secondary" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
@@ -274,6 +308,20 @@ export default function DistributorFormModal({
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmingDelete}
+        onClose={() => setConfirmingDelete(false)}
+        onConfirm={() => void handleDelete()}
+        title={`Burahin si ${distributor?.name ?? ''}?`}
+        message={
+          'Permanenteng mabubura ang login, ang profile, ang distributor record at ang referral code niya. ' +
+          'Hindi ito maibabalik. Kung may stores o applications na siya, tatanggihan ito — i-set na lang sa Inactive.'
+        }
+        confirmLabel="Oo, burahin"
+        danger
+        loading={deleting}
+      />
     </Modal>
   );
 }

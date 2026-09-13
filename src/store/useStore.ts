@@ -127,6 +127,7 @@ import { signUpIsolated, generateTempPassword } from '@/lib/authSignup';
 import { resolveLoginEmailCandidates, shopCodeToEmail } from '@/lib/shopCodeAuth';
 import { resetPasswordForUser } from '@/services/resetPassword';
 import { changeLoginEmailForUser } from '@/services/changeLoginEmail';
+import { deleteAccountForUser } from '@/services/deleteAccount';
 
 // Compute the initial billing list from the seeded mock entities. This replaces
 // the previously hard-coded mockBillingRecords — billings are now derived from
@@ -371,6 +372,14 @@ interface AppStore {
    * authenticates into a blank screen with no error.
    */
   changeLoginEmail: (userId: string, newEmail: string) => Promise<string>;
+  /**
+   * Permanently remove an account — profile, entity, channel code and login.
+   * Owner only, server-side (delete-account Edge Function), and REFUSED while
+   * anything still references the account; nothing in this schema cascades, so
+   * deleting a partner with stores would either fail with a raw 23503 or
+   * destroy real records. Deactivate those instead.
+   */
+  deleteAccount: (userId: string) => Promise<{ name: string; email: string }>;
   updateAreaSupervisorDetails: (id: string, updates: Partial<AreaSupervisor>) => Promise<void>;
   /**
    * First-login account verification. The franchisee submits their documents +
@@ -1428,6 +1437,26 @@ export const useStore = create<AppStore>((set, get) => {
   },
 
 
+
+
+  deleteAccount: async (userId) => {
+    const { currentUser } = get();
+    if (!currentUser) throw new Error('Not signed in.');
+
+    // The function does the refusing AND the deleting — it runs as service_role,
+    // so RLS cannot protect the rows and every rule lives there. Nothing local
+    // has changed yet, so a refusal needs no rollback.
+    const result = await deleteAccountForUser(userId);
+
+    // Drop the profile immediately so the row disappears at once, then
+    // re-hydrate for the rest: the entity slices (distributor / sub-partner /
+    // area supervisor) are keyed by their OWN ids, not the user id, and the
+    // function decides which of them actually went — guessing here would risk
+    // removing the wrong row from the UI.
+    set((state) => ({ demoUsers: state.demoUsers.filter((u) => u.id !== userId) }));
+    void get().hydrateFromDB();
+    return result;
+  },
 
   changeLoginEmail: async (userId, newEmail) => {
     const { currentUser, demoUsers } = get();

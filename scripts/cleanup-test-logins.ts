@@ -138,13 +138,22 @@ async function main() {
   };
 
   const spdIds = (spds ?? []).map((d) => d.id);
+
+  // ORDER MATTERS, and it is not the obvious one. `users` carries FKs to both
+  // distributors and sub_partner_distributors (users_sub_partner_distributor_id_fkey),
+  // so the PROFILES must go before the entities they point at — deleting the
+  // entities first fails with 23503. Then sub-PDs before distributors, because
+  // sub_partner_distributors_parent_distributor_id_fkey points upward.
+  //   users -> referral_codes -> sub_partner_distributors -> distributors
+  // area_supervisors is unrelated: users references those through the
+  // `area_ids` text array, which is not a foreign key.
+  await step('public.users profiles', () => sb.from('users').delete().in('email', DELETE_EMAILS));
+
   if (distIds.length) await step('referral_codes (by distributor)', () => sb.from('referral_codes').delete().in('distributor_id', distIds));
   if (spdIds.length) await step('referral_codes (by sub-PD)', () => sb.from('referral_codes').delete().in('sub_partner_distributor_id', spdIds));
   if (spdIds.length) await step('sub_partner_distributors', () => sb.from('sub_partner_distributors').delete().in('id', spdIds));
   if (distIds.length) await step('distributors', () => sb.from('distributors').delete().in('id', distIds));
   if (asIds.length) await step('area_supervisors', () => sb.from('area_supervisors').delete().in('id', asIds));
-
-  await step('public.users profiles', () => sb.from('users').delete().in('email', DELETE_EMAILS));
 
   for (const u of authHits) {
     const { error } = await sb.auth.admin.deleteUser(u.id);

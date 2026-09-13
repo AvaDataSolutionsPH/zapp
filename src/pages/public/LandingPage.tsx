@@ -72,7 +72,10 @@ function Reveal({
 const NAV_LINKS = [
   { label: 'HOME', href: '#home' },
   { label: 'ABOUT US', href: '#about' },
-  { label: 'WHY ZAPP DONUTS?', href: '#why' },
+  // "WHY ZAPP DONUTS?" removed: #why is only the stats band (plants / stores /
+  // products) — a bare row of numbers with no heading, so the label promised a
+  // section the page does not have. The band itself and its id are kept, so the
+  // link can return the moment there is real "why" content to point at.
   { label: 'PARTNERSHIP', href: '#how-it-works' },
   { label: 'OUR PLANTS', href: '#plants' },
 ];

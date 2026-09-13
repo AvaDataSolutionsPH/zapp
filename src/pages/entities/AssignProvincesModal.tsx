@@ -23,6 +23,7 @@ import { useStore } from '@/store/useStore';
 import { provincesClaimedByOthers } from '@/lib/applicationMonitoring';
 import { OPERATING_PROVINCES, canonicalProvince } from '@/lib/phRegions';
 import type { AreaSupervisor } from '@/types';
+import { errorMessage } from '@/lib/errorMessage';
 
 interface Props {
   supervisor: AreaSupervisor | null;
@@ -58,7 +59,7 @@ export default function AssignProvincesModal({ supervisor, onClose }: Props) {
       addToast('success', `Na-update ang saklaw ni ${supervisor.name}.`);
       onClose();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Hindi na-save ang saklaw.';
+      const msg = errorMessage(err, 'Hindi na-save ang saklaw.');
       addToast('error', msg);
     } finally {
       setSaving(false);

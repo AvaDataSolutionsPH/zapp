@@ -20,6 +20,7 @@ import type { SelectOption } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import { useStore } from '@/store/useStore';
 import type { AreaSupervisor } from '@/types';
+import { errorMessage } from '@/lib/errorMessage';
 
 export default function AreaSupervisorFormModal({
   open,
@@ -94,7 +95,7 @@ export default function AreaSupervisorFormModal({
       addToast('success', `Na-update ang ${name.trim()}.`);
       onClose();
     } catch (err) {
-      addToast('error', err instanceof Error ? err.message : 'Hindi na-save.');
+      addToast('error', errorMessage(err, 'Hindi na-save.'));
     } finally {
       setSaving(false);
     }

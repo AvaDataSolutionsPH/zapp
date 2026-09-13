@@ -35,6 +35,7 @@ import {
 } from '@/lib/applicationMonitoring';
 import type { Application, DeliverySchedule, RtcStatus } from '@/types';
 import { DELIVERY_SCHEDULE_LABELS } from '@/types';
+import { errorMessage } from '@/lib/errorMessage';
 
 const RTC_OPTIONS: SelectOption[] = [
   { value: '', label: '—' },
@@ -217,7 +218,7 @@ export default function MonitoringFieldsCard({ application }: { application: App
       setMapsPicture([]);
       addToast('success', 'Na-save ang mga pagbabago.');
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Hindi na-save ang mga pagbabago.';
+      const msg = errorMessage(err, 'Hindi na-save ang mga pagbabago.');
       addToast('error', msg);
     } finally {
       setSaving(false);

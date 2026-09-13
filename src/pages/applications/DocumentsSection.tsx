@@ -29,6 +29,7 @@ import {
   unverifiedDocuments,
 } from '@/lib/documentVerification';
 import type { Application, ApplicationDocumentKey, DocumentStatus } from '@/types';
+import { errorMessage } from '@/lib/errorMessage';
 
 const ICONS: Record<ApplicationDocumentKey, React.ReactNode> = {
   storePhoto: <FileImage size={20} />,
@@ -149,7 +150,7 @@ export default function DocumentsSection({ application }: { application: Applica
       }
       addToast('success', 'Na-verify lahat ng dokumento — aktibo na ang account.');
     } catch (err) {
-      addToast('error', err instanceof Error ? err.message : 'Could not verify.');
+      addToast('error', errorMessage(err, 'Could not verify.'));
     } finally {
       setBusy(false);
     }
@@ -161,7 +162,7 @@ export default function DocumentsSection({ application }: { application: Applica
       await reviewDocument(application.id, key, 'verified');
       addToast('success', `${DOCUMENT_LABELS[key]} verified.`);
     } catch (err) {
-      addToast('error', err instanceof Error ? err.message : 'Could not verify.');
+      addToast('error', errorMessage(err, 'Could not verify.'));
     } finally {
       setBusy(false);
     }
@@ -176,7 +177,7 @@ export default function DocumentsSection({ application }: { application: Applica
       setRejecting(null);
       setRemarks('');
     } catch (err) {
-      addToast('error', err instanceof Error ? err.message : 'Could not reject.');
+      addToast('error', errorMessage(err, 'Could not reject.'));
     } finally {
       setBusy(false);
     }

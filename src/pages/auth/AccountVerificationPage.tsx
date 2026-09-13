@@ -24,6 +24,7 @@ import { useStore } from '@/store/useStore';
 import { uploadFile, buildObjectPath } from '@/services/storage';
 import ChangePasswordModal from '@/components/auth/ChangePasswordModal';
 import { passwordState } from '@/lib/loginCredentials';
+import { errorMessage } from '@/lib/errorMessage';
 
 export default function AccountVerificationPage() {
   const currentUser = useStore((s) => s.currentUser);
@@ -69,7 +70,7 @@ export default function AccountVerificationPage() {
       });
       addToast('success', 'Your documents have been submitted.');
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Could not submit. Please try again.';
+      const msg = errorMessage(err, 'Could not submit. Please try again.');
       addToast('error', msg);
     } finally {
       setSubmitting(false);

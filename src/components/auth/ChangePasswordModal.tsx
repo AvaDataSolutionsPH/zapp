@@ -24,6 +24,7 @@ import { KeyRound, Eye, EyeOff } from 'lucide-react';
 import { Button, Modal } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import { useStore } from '@/store/useStore';
+import { errorMessage } from '@/lib/errorMessage';
 
 /** Supabase's own default floor is 6; 8 is the shortest that isn't trivial. */
 const MIN_LENGTH = 8;
@@ -62,7 +63,7 @@ export default function ChangePasswordModal({
       reset();
       onClose();
     } catch (err) {
-      addToast('error', err instanceof Error ? err.message : 'Could not change your password.');
+      addToast('error', errorMessage(err, 'Could not change your password.'));
     } finally {
       setBusy(false);
     }

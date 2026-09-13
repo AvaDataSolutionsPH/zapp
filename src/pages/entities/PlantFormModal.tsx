@@ -18,6 +18,7 @@ import { Button, Input, Modal } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import { useStore } from '@/store/useStore';
 import type { Plant } from '@/types';
+import { errorMessage } from '@/lib/errorMessage';
 
 export default function PlantFormModal({
   open,
@@ -80,7 +81,7 @@ export default function PlantFormModal({
       }
       onClose();
     } catch (err) {
-      addToast('error', err instanceof Error ? err.message : 'Hindi na-save ang plant.');
+      addToast('error', errorMessage(err, 'Hindi na-save ang plant.'));
     } finally {
       setSaving(false);
     }

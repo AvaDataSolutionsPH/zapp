@@ -29,6 +29,7 @@ import {
   passwordState,
 } from '@/lib/loginCredentials';
 import type { AccountStatus, Application } from '@/types';
+import { errorMessage } from '@/lib/errorMessage';
 
 const STATUS_VARIANT: Record<AccountStatus, 'neutral' | 'warning' | 'success'> = {
   not_activated: 'neutral',
@@ -73,7 +74,7 @@ export default function LoginCredentialsCard({ application }: { application: App
       // readable form.
       setIssued(generated);
     } catch (err) {
-      addToast('error', err instanceof Error ? err.message : 'Hindi na-reset ang password.');
+      addToast('error', errorMessage(err, 'Hindi na-reset ang password.'));
     } finally {
       setBusy(false);
     }

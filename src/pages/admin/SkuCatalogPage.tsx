@@ -39,6 +39,7 @@ import { useToast } from '@/components/ui/Toast';
 import { useStore } from '@/store/useStore';
 import { canEditCatalog } from '@/lib/catalogPermissions';
 import type { SKU } from '@/types';
+import { errorMessage } from '@/lib/errorMessage';
 
 const peso = (n: number) =>
   `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -176,7 +177,7 @@ export default function SkuCatalogPage() {
       }
       close();
     } catch (err) {
-      addToast('error', err instanceof Error ? err.message : 'Could not save.');
+      addToast('error', errorMessage(err, 'Could not save.'));
     } finally {
       setSaving(false);
     }

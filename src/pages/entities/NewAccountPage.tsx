@@ -21,6 +21,7 @@ import type { SelectOption } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import { useStore } from '@/store/useStore';
 import type { NewAccountRole } from '@/store/useStore';
+import { errorMessage } from '@/lib/errorMessage';
 
 interface CreatedAccount {
   name: string;
@@ -152,7 +153,7 @@ export default function NewAccountPage() {
       setCreated({ name: name.trim(), email: res.email, tempPassword: res.tempPassword, role });
       addToast('success', `Account created for ${name.trim()}.`);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to create account.';
+      const msg = errorMessage(err, 'Failed to create account.');
       addToast('error', msg);
     } finally {
       setSubmitting(false);

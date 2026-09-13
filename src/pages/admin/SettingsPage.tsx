@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Settings,
   Users,
@@ -11,7 +12,7 @@ import {
   ShieldCheck,
   CheckCircle,
   Info,
-  Lock,
+  UserPlus,
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import {
@@ -74,6 +75,7 @@ const ROLE_VARIANTS: Record<string, 'success' | 'warning' | 'danger' | 'info' | 
 export default function SettingsPage() {
   const { demoUsers, plants } = useStore();
   const { addToast } = useToast();
+  const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState('general');
 
@@ -316,19 +318,6 @@ export default function SettingsPage() {
         {/* ── User Management Tab ─────────────────────────────────── */}
         {activeTab === 'users' && (
           <div className="space-y-6">
-            {/* Info Banner */}
-            <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <Info size={18} className="text-blue-600 mt-0.5 shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-blue-800">Demo Mode</p>
-                <p className="text-xs text-blue-600 mt-0.5">
-                  User management is in read-only demo mode. The users below are pre-configured
-                  demo accounts. Full user management with invitations and role assignment is
-                  coming in a future release.
-                </p>
-              </div>
-            </div>
-
             {/* Stats */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <Stat
@@ -355,19 +344,13 @@ export default function SettingsPage() {
 
             {/* Actions */}
             <div className="flex justify-end">
-              <div className="relative group">
-                <Button
-                  iconLeft={<Lock size={16} />}
-                  variant="secondary"
-                  disabled
-                >
-                  Add User
-                </Button>
-                <div className="absolute bottom-full right-0 mb-2 px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
-                  Coming soon
-                  <div className="absolute top-full right-4 -mt-1 w-2 h-2 bg-gray-900 transform rotate-45" />
-                </div>
-              </div>
+              <Button
+                iconLeft={<UserPlus size={16} />}
+                variant="secondary"
+                onClick={() => navigate('/accounts/new')}
+              >
+                Add User
+              </Button>
             </div>
 
             {/* Users Table */}

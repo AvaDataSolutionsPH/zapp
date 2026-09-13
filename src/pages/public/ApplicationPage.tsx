@@ -38,13 +38,13 @@ import {
 } from '@/components/ui';
 import type { SelectOption, UploadedFile } from '@/components/ui';
 import { useStore } from '@/store/useStore';
+import { validateReferralCodeLive } from '@/services/referralValidation';
 import StorePinPicker from './StorePinPicker';
 import LegalConsent from '@/components/legal/LegalConsent';
 import { fetchProvinces, fetchCities, fetchBarangays } from '@/services/phLocations';
 import type { PsgcItem } from '@/services/phLocations';
 import { geocodePH } from '@/services/geocode';
 import { compressImage } from '@/lib/imageCompress';
-import { referralService } from '@/services/api';
 import { uploadFile, buildObjectPath, deleteFile, parseStorageRef } from '@/services/storage';
 import type { ReferralCode, Distributor, AreaSupervisor, Plant } from '@/types';
 
@@ -265,7 +265,7 @@ export default function ApplicationPage() {
     setReferralInfo(null);
 
     try {
-      const result = await referralService.validate(code);
+      const result = await validateReferralCodeLive(code);
       if (result.valid && result.referral) {
         setReferralInfo({
           referral: result.referral,

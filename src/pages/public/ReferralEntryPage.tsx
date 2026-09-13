@@ -18,8 +18,8 @@ import {
   Loader2,
 } from 'lucide-react';
 import { Button, Card, CardContent, Input, Badge } from '@/components/ui';
-import { referralService } from '@/services/api';
 import type { ReferralCode, Distributor, AreaSupervisor, Plant } from '@/types';
+import { validateReferralCodeLive } from '@/services/referralValidation';
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -60,7 +60,7 @@ export default function ReferralEntryPage() {
     setReferralInfo(null);
 
     try {
-      const result = await referralService.validate(code.trim());
+      const result = await validateReferralCodeLive(code.trim());
       if (result.valid && result.referral) {
         setReferralInfo({
           referral: result.referral,

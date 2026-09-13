@@ -695,7 +695,13 @@ export const useStore = create<AppStore>((set, get) => {
   },
 
   hydrateFromDB: async (): Promise<void> => {
-    set({ hydrationStatus: 'loading' });
+    // Only the FIRST hydration may put the app in a loading state. App.tsx
+    // re-runs restoreSession() on every SIGNED_IN *and* TOKEN_REFRESHED, so a
+    // routine token refresh calls this again — and downgrading 'ok' back to
+    // 'loading' made the gate blank whatever the user was doing and remount it,
+    // losing half-typed forms. A refresh now re-hydrates silently in the
+    // background; only an outright failure changes what is on screen.
+    if (get().hydrationStatus !== 'ok') set({ hydrationStatus: 'loading' });
     try {
       const data = await hydrateAll();
       // Replace the entity slices with DB data, then recompute the derived

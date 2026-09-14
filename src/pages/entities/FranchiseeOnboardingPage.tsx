@@ -52,6 +52,7 @@ import {
 import type { UploadedFile } from '@/components/ui';
 import { useStore } from '@/store/useStore';
 import StorePinPicker from '@/pages/public/StorePinPicker';
+import LocationCascadeFields from '@/components/forms/LocationCascadeFields';
 import LegalConsent from '@/components/legal/LegalConsent';
 import { compressImage } from '@/lib/imageCompress';
 import { uploadFile, buildObjectPath, deleteFile, parseStorageRef } from '@/services/storage';
@@ -152,6 +153,11 @@ export default function FranchiseeOnboardingPage() {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  // Geocoded map target from the location cascade — the store map follows the
+  // chosen province → city → barangay instead of sitting on the Legazpi
+  // default (which is what made the pin unusable outside Albay).
+  const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
+  const [mapZoom, setMapZoom] = useState<number | null>(null);
 
   const updateForm = useCallback((field: keyof FormData, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -499,14 +505,18 @@ export default function FranchiseeOnboardingPage() {
               />
               {errors.address && <p className="mt-1.5 text-xs text-red-600">{errors.address}</p>}
             </div>
-            <div className="grid gap-4 sm:grid-cols-3">
-              <Input label="Province" placeholder="Albay" value={form.province}
-                onChange={(e) => updateForm('province', e.target.value)} error={errors.province} />
-              <Input label="City / Municipality" placeholder="Legazpi City" value={form.city}
-                onChange={(e) => updateForm('city', e.target.value)} error={errors.city} />
-              <Input label="Barangay" placeholder="Brgy. Centro" value={form.barangay}
-                onChange={(e) => updateForm('barangay', e.target.value)} />
-            </div>
+            <LocationCascadeFields
+              value={{ province: form.province, city: form.city, barangay: form.barangay }}
+              onChange={(patch) => {
+                setForm((prev) => ({ ...prev, ...patch }));
+                setErrors((prev) => ({ ...prev, province: undefined, city: undefined }));
+              }}
+              errors={{ province: errors.province, city: errors.city }}
+              onMapTarget={(center, zoom) => {
+                setMapCenter(center);
+                setMapZoom(zoom);
+              }}
+            />
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700">
                 Store Location on Map <span className="text-red-500">*</span>
@@ -515,6 +525,8 @@ export default function FranchiseeOnboardingPage() {
                 lat={form.lat}
                 lng={form.lng}
                 province={form.province}
+                centerOverride={mapCenter}
+                zoomOverride={mapZoom}
                 onChange={(lat, lng) => {
                   updateForm('lat', lat);
                   updateForm('lng', lng);

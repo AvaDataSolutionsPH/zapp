@@ -7,21 +7,15 @@
 // storing them as strings (unchanged submit path). Tap-to-place +
 // drag-to-adjust only — no geolocation, no external geocoding API.
 
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
-import L from 'leaflet';
-import { AlertTriangle, MapPin } from 'lucide-react';
+import type L from 'leaflet';
+import { AlertTriangle, Crosshair, MapPin } from 'lucide-react';
+import { applyDefaultLeafletIcon } from '@/lib/leafletIcon';
 
-// Fix leaflet's default marker icon under bundlers — same approach as
-// GeoHeatmapPage: delete the private _getIconUrl so it falls back to
-// the CDN URLs below instead of trying to resolve local assets.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-});
+// Marker images come from our own bundle (see the module for why they must
+// NOT come from a CDN).
+applyDefaultLeafletIcon();
 
 // Rough province centroids so the map opens near the applicant's area
 // before they place a pin. Not exhaustive — anything missing falls back
@@ -91,6 +85,16 @@ function Recenter({
   return null;
 }
 
+// Hands the Leaflet map instance up to the parent so the "pin the center"
+// button can read where the map is currently looking.
+function MapHandle({ onReady }: { onReady: (map: L.Map) => void }) {
+  const map = useMap();
+  useEffect(() => {
+    onReady(map);
+  }, [map, onReady]);
+  return null;
+}
+
 export default function StorePinPicker({
   lat,
   lng,
@@ -114,6 +118,19 @@ export default function StorePinPicker({
 
   const pick = (la: number, ln: number) => onChange(round6(la), round6(ln));
 
+  // Tap-to-place alone is fragile: Leaflet DISCARDS a click whose pointer
+  // moved more than 3px (its `clickTolerance`), so a slightly shaky tap on a
+  // touchscreen or trackpad silently does nothing. The crosshair + button
+  // below give a drift-proof alternative — line the map up, then pin it.
+  const mapRef = useRef<L.Map | null>(null);
+  const holdMap = useCallback((m: L.Map) => {
+    mapRef.current = m;
+  }, []);
+  const pinCenter = () => {
+    const c = mapRef.current?.getCenter();
+    if (c) pick(c.lat, c.lng);
+  };
+
   return (
     <div>
       {/* Store-not-house warning */}
@@ -126,10 +143,22 @@ export default function StorePinPicker({
       </div>
 
       <div
-        className={`overflow-hidden rounded-lg border ${
+        className={`relative overflow-hidden rounded-lg border ${
           error ? 'border-red-400' : 'border-gray-300'
         }`}
       >
+        {/* Center crosshair — the aiming point for "I-pin ang gitna". Hidden
+            once a pin exists, so it never competes with the real marker.
+            zIndex sits above Leaflet's tile panes (400) but below its
+            controls (1000); pointer-events off so the map still takes taps. */}
+        {!hasPin && (
+          <div
+            className="pointer-events-none absolute inset-0 flex items-center justify-center"
+            style={{ zIndex: 500 }}
+          >
+            <Crosshair size={34} className="text-zapp-orange drop-shadow" strokeWidth={1.5} />
+          </div>
+        )}
         <MapContainer
           center={center}
           zoom={zoom}
@@ -141,6 +170,7 @@ export default function StorePinPicker({
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
           <ClickCapture onPick={pick} />
+          <MapHandle onReady={holdMap} />
           <Recenter lat={center[0]} lng={center[1]} zoom={zoom} active={!hasPin} />
           {pinPos && (
             <Marker
@@ -158,16 +188,28 @@ export default function StorePinPicker({
         </MapContainer>
       </div>
 
-      {/* Coordinate read-out */}
-      <div className="mt-2 flex items-center gap-2 text-sm">
-        <MapPin size={16} className={hasPin ? 'text-zapp-orange' : 'text-gray-400'} />
-        {hasPin ? (
-          <span className="text-gray-700">
-            Naka-pin sa <span className="font-mono font-medium">{lat}, {lng}</span>
-          </span>
-        ) : (
-          <span className="text-gray-400">Wala pang pin — i-tap ang mapa sa lokasyon ng tindahan.</span>
-        )}
+      {/* Coordinate read-out + drift-proof alternative to tapping */}
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+        <div className="flex items-center gap-2">
+          <MapPin size={16} className={hasPin ? 'text-zapp-orange' : 'text-gray-400'} />
+          {hasPin ? (
+            <span className="text-gray-700">
+              Naka-pin sa <span className="font-mono font-medium">{lat}, {lng}</span>
+            </span>
+          ) : (
+            <span className="text-gray-400">
+              Wala pang pin — i-tap ang mapa, o igitna ito sa tindahan at pindutin ang button.
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={pinCenter}
+          className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-zapp-orange px-3 py-1.5 text-xs font-medium text-zapp-orange transition-colors hover:bg-zapp-orange/10"
+        >
+          <Crosshair size={14} />
+          I-pin ang gitna ng mapa
+        </button>
       </div>
 
       {error && <p className="mt-1.5 text-xs text-red-600">{error}</p>}

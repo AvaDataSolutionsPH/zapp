@@ -27,8 +27,11 @@ Conditions**. Both flows coexist.
    lets the system tell **PD vs SPD vs direct** and works with REAL data after a
    reset. `resolveChannel` branches on `referral.type`.
 1. **Applicant** — full name, PH mobile, email.
-2. **Store** — name, address, province/city/barangay (free text — internal staff
-   know the location), + required **map pin** (`StorePinPicker`).
+2. **Store** — name, address, **PSGC Province → City/Municipality → Barangay
+   cascade** (`LocationCascadeFields`), + required **map pin** (`StorePinPicker`).
+   The cascade also geocodes the chosen area and hands the map a
+   `centerOverride`/`zoomOverride` so it follows the address — see
+   "Map pin: the location cascade" below.
 3. **Details** — shop code, delivery schedule (odd/even buttons), opening date.
 4. **Documents** — store photo (→ `zapp-public`), valid ID + proof of billing
    (→ `zapp-private`); all camera-enabled.
@@ -38,6 +41,38 @@ Conditions**. Both flows coexist.
 
 Submit uploads the files, then calls `submitApplication({...})` with the new
 fields. It flows into the existing Application → review → approve pipeline.
+
+## Map pin: the location cascade (added after a live bug report)
+The Store step originally had **three free-text inputs** for province/city/
+barangay and passed nothing but `province` to `StorePinPicker`. That picker can
+only self-center from a **12-entry hardcoded `PROVINCE_CENTROIDS` table matched
+EXACTLY by name**, so:
+
+- any province outside that table (e.g. **"Camarines Norte"**, which is not in
+  it) fell through to the Legazpi default, and
+- a non-empty province *still* bumped the zoom to 13, so the map sat at **street
+  level on the wrong province**.
+
+Reproduced on production: with `Camarines Norte` / `Daet` typed, the map was at
+`13.15, 123.75` @ z13 — ~120 km from Daet. Since the pin is **required**
+(`validateStep` case 2), the encoder simply could not finish the step. The boss
+reported this as "hindi gumagana ang map"; it worked on `/apply` because that
+form has always had the real cascade.
+
+**Fix:** `src/components/forms/LocationCascadeFields.tsx` — the PSGC cascade +
+Nominatim geocoding, extracted so internal forms get what `/apply` has. It
+reports resolved NAMES upward (each form keeps its own state shape) and a map
+target via `onMapTarget(center, zoom)`, which this page stores in
+`mapCenter`/`mapZoom` and passes as `centerOverride`/`zoomOverride`. Zoom follows
+the cascade: province 10 → city 13 → barangay 16. Each level degrades to a
+free-text `Input` if its fetch fails, so a PSGC/Nominatim outage can't hard-block
+the form. Verified: `Camarines Norte` → `14.26, 122.70` @ z10, then `Daet` →
+`14.09, 122.96` @ z13.
+
+⬜ `/apply` still has its own inline copy of this logic — deliberately NOT
+refactored (the public form is the highest-risk path to touch). Two
+implementations of the same cascade is how the province "(NCR)" mismatch bug
+happened; migrating `ApplicationPage` onto this component is worthwhile follow-up.
 
 ## Data flow into the Store (approval)
 `reviewApplication` (`src/store/useStore.ts`) copies the onboarding fields onto the
@@ -60,6 +95,9 @@ generic snake→camel (`db.ts`), so no read-mapper changes were needed; write si
 | File | Role |
 |---|---|
 | `src/pages/entities/FranchiseeOnboardingPage.tsx` | the wizard |
+| `src/components/forms/LocationCascadeFields.tsx` | PSGC cascade + geocoded map target (shared) |
+| `src/pages/public/StorePinPicker.tsx` | the map pin (shared with `/apply`, `/onboarding`) |
+| `src/lib/leafletIcon.ts` | bundled Leaflet marker images (no CDN) |
 | `src/pages/entities/FranchiseesPage.tsx` | entry button + Assign-Shop-Code modal |
 | `src/store/useStore.ts` → `reviewApplication` | copies onboarding fields to Store |
 | `src/types/index.ts` | ReferralType/DeliverySchedule + new Application/Store/ReferralCode/SPD fields |
@@ -76,6 +114,12 @@ generic snake→camel (`db.ts`), so no read-mapper changes were needed; write si
 - Verified end-to-end (Playwright): SPD channel → submit → approve → Store carries
   `shop_code=MD-TEST-001`, `delivery_schedule=odd`, `franchise_type=distributor`,
   `sub_partner_distributor_id=spd-01`.
+- **Province/city are now resolved PSGC names, not typed text.** That is also a
+  data-quality fix: free text never matched the Area Supervisor province master
+  list (same class of bug as migration 029). The cascade writes the canonical
+  name, so AS routing can actually match.
+- The province field the picker still receives is only a **fallback** centroid
+  lookup for when geocoding fails — the cascade's `centerOverride` wins.
 
 ## Related
 - Go-live reset: `scripts/reset-operational.ts` (`npm run db:reset`) clears

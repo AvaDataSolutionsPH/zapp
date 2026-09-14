@@ -20,25 +20,15 @@ import {
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, CircleMarker } from 'react-leaflet';
 import L from 'leaflet';
+import { applyDefaultLeafletIcon, MARKER_ICON_URLS } from '@/lib/leafletIcon';
 
-// Fix leaflet default icon — leaflet ships a private `_getIconUrl` that
-// breaks bundler asset resolution; deleting it forces fallback to the
-// mergeOptions URLs below. The `any` cast is intentional because the
-// property isn't part of Leaflet's public TypeScript surface.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-});
+// Marker images come from our own bundle, not a CDN — see src/lib/leafletIcon.
+applyDefaultLeafletIcon();
 
 // ── Custom Icons ─────────────────────────────────────────────
 
 const storeIcon = new L.Icon({
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+  ...MARKER_ICON_URLS,
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
@@ -396,11 +386,7 @@ export default function GeoHeatmapPage() {
         <CardContent>
           <div className="flex flex-wrap gap-6 text-xs">
             <div className="flex items-center gap-2">
-              <img
-                src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png"
-                alt="store"
-                className="w-4 h-6"
-              />
+              <img src={MARKER_ICON_URLS.iconUrl} alt="store" className="w-4 h-6" />
               <span className="text-gray-600">Store Location</span>
             </div>
             <div className="flex items-center gap-2">

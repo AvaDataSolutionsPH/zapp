@@ -38,7 +38,7 @@ Copy `_TEMPLATE.md` when adding a feature doc.
 ## Index
 
 - [public-application-flow](public-application-flow.md) — `/apply` wizard incl. the required Grab-style store map pin
-- [franchisee-onboarding](franchisee-onboarding.md) — internal "New Franchisee" onboarding form (`/franchisees/new`): channel code (PD/SPD/direct), shop code, delivery schedule, opening date, ID + proof, T&C
+- [franchisee-onboarding](franchisee-onboarding.md) — internal "New Franchisee" onboarding form (`/franchisees/new`): channel code (PD/SPD/direct), shop code, delivery schedule, opening date, ID + proof, T&C, PSGC location cascade + map pin
 - [partner-onboarding](partner-onboarding.md) — self-service applicant flow (`/onboarding`): account creation + docs + selfie + 4 confirmations; awaiting-verification screen (Phase 1)
 - [account-creation](account-creation.md) — "New Account" (`/accounts/new`): create a login + entity for a PD/SPD/Area Supervisor with a temp password (owner/ops any; PD scoped)
 - [application-monitoring](application-monitoring.md) — ZAPP New Application Monitoring: per-department evaluation fields with field-level RBAC + batch Save; Status stays an action (Approve/Decline)

@@ -17,6 +17,13 @@ untouched).
    real Supabase auth login (no session; email-taken caught here).
 2. **Business Info** — Store Name, Business + Residential Address, Facebook Link,
    Operating Hours, **map pin** (StorePinPicker).
+   ⬜ **This step has NO province/city/barangay fields at all**, so the picker
+   gets no `province` and no geocoded `centerOverride` — the map always opens on
+   the Legazpi default and the applicant must pan there by hand. `/apply` and
+   `/franchisees/new` both follow the address via the PSGC cascade
+   (`LocationCascadeFields`); wiring it here needs new fields, i.e. a product
+   decision, not just plumbing. The drift-proof "I-pin ang gitna ng mapa" button
+   does apply here (it lives in the shared picker).
 3. **Documents** — Gov ID, Proof of Billing, **Live Selfie** (camera), Store Photo.
 4. **Review Legal** — view Consignment / Privacy / Terms (`LegalDocModal`, reused).
 5. **Confirm & Submit** — **4 checkboxes** (Agreement, Privacy, Terms,

@@ -134,6 +134,15 @@ single marker on the EXACT store location.
 - **No external API** — tap/drag only. No geolocation, no geocoding/search
   (deliberate: honors the no-API / cost + privacy stance, and avoids
   auto-centering on the applicant's house). OSM tiles only.
+- **"I-pin ang gitna ng mapa" button + center crosshair** — a drift-proof
+  alternative to tapping. Leaflet **DISCARDS** any click whose pointer moved more
+  than 3px (`Draggable.clickTolerance`, enforced in `Map._fireDOMEvent` via
+  `_draggableMoved`), so a slightly shaky tap on a touchscreen or trackpad does
+  nothing at all — silently, with no error. The button reads
+  `map.getCenter()` instead (map instance captured by the `MapHandle` child), so
+  the applicant lines the crosshair up and presses a normal button. Tap-to-place
+  and drag-to-adjust are unchanged. The crosshair hides once a pin exists so it
+  never competes with the marker.
 - **Centering:** `PROVINCE_CENTROIDS[province]` → else `DEFAULT_CENTER`
   (Legazpi, Albay — Bicol-first business). `Recenter` (uses `useMap().setView`)
   follows province changes **only until a pin is dropped**, then leaves the pin
@@ -144,11 +153,19 @@ single marker on the EXACT store location.
   in `handleSubmit`, so nothing downstream changed.
 
 ## Leaflet setup (shared gotcha)
-- CSS is loaded **globally** in `index.html` (`unpkg .../leaflet.css`) — not
-  imported per-file.
-- Default marker icon is fixed the same way as `GeoHeatmapPage`: delete
-  `L.Icon.Default.prototype._getIconUrl` and `mergeOptions` the CDN icon URLs,
-  else markers render broken under the bundler.
+- CSS is **bundled**: `import 'leaflet/dist/leaflet.css'` in `src/main.tsx`,
+  placed BEFORE `./index.css` so our own rules still win (same cascade order as
+  the old `<link>`). It used to be a `<link>` to **unpkg** in `index.html` —
+  which made the entire map layout depend on a third-party CDN being reachable
+  from each user's network. Do not put it back.
+- Default marker icons come from **`src/lib/leafletIcon.ts`**
+  (`applyDefaultLeafletIcon()` / `MARKER_ICON_URLS`), which imports the PNGs from
+  the installed `leaflet` package so Vite bundles them (they're <4KB, so they
+  inline as data URIs — zero requests). They used to point at **cdnjs**: if that
+  CDN was blocked, the pin was placed but rendered as **nothing**, so tapping
+  looked like it had failed even though the coordinates were captured. Both
+  `StorePinPicker` and `GeoHeatmapPage` use this module — don't reintroduce a
+  CDN URL for marker art.
 - Leaflet containers need an explicit height — `StorePinPicker` sets
   `style={{ height: '18rem' }}`.
 

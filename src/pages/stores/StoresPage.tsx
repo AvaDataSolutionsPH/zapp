@@ -14,6 +14,7 @@ import {
 import type { TableColumn, SelectOption } from '@/components/ui';
 import type { Store, StoreDeliveryStatus } from '@/types';
 import { getOverdueReasonForStore } from '@/lib/deliveryEnforcement';
+import { shortName } from '@/lib/personName';
 
 const deliveryStatusVariant = (
   s: StoreDeliveryStatus,
@@ -88,7 +89,15 @@ export default function StoresPage() {
   }, [filtered, page]);
 
   const plantName = (id: string) => plants.find((p) => p.id === id)?.name ?? '-';
-  const distName = (id?: string) => (id ? distributors.find((d) => d.id === id)?.name ?? '-' : '-');
+  // Shortened on purpose (boss: "First Name tapos Surname initials lang.
+  // Example Jose B."). The OWNER column on the same row is frequently the
+  // same person, so the full name twice was noise. Display only — the filter
+  // below still matches on the real distributor id.
+  const distName = (id?: string) => {
+    if (!id) return '-';
+    const found = distributors.find((d) => d.id === id);
+    return found ? shortName(found.name) || found.name : '-';
+  };
 
   const plantOptions: SelectOption[] = [
     { value: '', label: 'All Plants' },

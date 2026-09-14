@@ -187,7 +187,11 @@ export default function FranchiseeOnboardingPage() {
         distributor,
         subPartner,
         plant,
-        label: `Sub-Partner Distributor — ${subPartner?.name ?? ref.subPartnerDistributorId ?? ''}`,
+        // Name deliberately omitted — boss: "tanggalin mo na full name ng
+        // distributor dito. di naman need nila malaman yan agad." The code +
+        // plant shown under this label already prove the right channel
+        // resolved, which is the only thing the encoder has to check here.
+        label: 'Sub-Partner Distributor',
       });
     } else if (ref.type === 'distributor') {
       const distributor = distributors.find((d) => d.id === ref.distributorId);
@@ -195,7 +199,7 @@ export default function FranchiseeOnboardingPage() {
         referral: ref,
         distributor,
         plant,
-        label: `Partner Distributor — ${distributor?.name ?? ref.distributorId ?? ''}`,
+        label: 'Partner Distributor',
       });
     } else {
       const areaSupervisor = areaSupervisors.find((a) => a.id === ref.areaSupervisorId);

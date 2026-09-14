@@ -18,6 +18,7 @@ import AwaitingVerificationPage from '@/pages/public/AwaitingVerificationPage'
 import AccountVerificationPage from '@/pages/auth/AccountVerificationPage'
 import { isAccountLocked } from '@/lib/accountGate'
 import ReferralEntryPage from '@/pages/public/ReferralEntryPage'
+import ReferralShortLink from '@/pages/public/ReferralShortLink'
 
 // Auth
 import LoginPage from '@/pages/auth/LoginPage'
@@ -219,6 +220,14 @@ function App() {
           }
         />
       </Route>
+
+      {/* Bare referral short link — zappdonuts.com/<code>. MUST stay directly
+          above the catch-all: a distributor's link used to fall through to it
+          and land on the marketing page with the referral silently dropped.
+          Static routes still outrank this, so /login, /apply, /dashboard and
+          every other real path are unaffected; anything that is not a valid
+          code redirects home exactly as before. */}
+      <Route path="/:code" element={<ReferralShortLink />} />
 
       {/* Catch all */}
       <Route path="*" element={<Navigate to="/" replace />} />

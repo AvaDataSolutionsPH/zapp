@@ -24,6 +24,7 @@ import {
   Facebook,
   Clock,
   CalendarDays,
+  Lock,
 } from 'lucide-react';
 import {
   Button,
@@ -138,10 +139,15 @@ export default function ApplicationPage() {
   const [submitting, setSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
+  // A code that arrived in the URL came from a distributor's own referral
+  // link, so it is not the applicant's to edit — see `referralLocked` below.
+  const [fromLink, setFromLink] = useState(false);
+
   // Auto-fill referral code from URL
   useEffect(() => {
     const refCode = searchParams.get('ref');
     if (refCode) {
+      setFromLink(true);
       setForm((prev) => ({ ...prev, referralCode: refCode }));
       // Auto-validate after a short delay
       const timer = setTimeout(() => {
@@ -285,6 +291,13 @@ export default function ApplicationPage() {
       setReferralLoading(false);
     }
   };
+
+  // Boss: "automatic nalabas na yung referral code tapos di sya pwede
+  // matanggal." Locked only once the link's code actually VALIDATES — a bad or
+  // deactivated link must stay editable, otherwise a stale URL would trap the
+  // applicant on step 1 with a code they cannot clear and no way forward.
+  // Someone who genuinely needs a different code can still open /apply plainly.
+  const referralLocked = fromLink && !!referralInfo;
 
   // ── Validation per step ────────────────────────────────────
 
@@ -509,26 +522,38 @@ export default function ApplicationPage() {
                 label="Referral Code *"
                 placeholder="e.g. BICOL-MARCO or ZAPP-INT-001"
                 required
+                readOnly={referralLocked}
                 value={form.referralCode}
                 onChange={(e) => {
+                  if (referralLocked) return;
                   updateForm('referralCode', e.target.value);
                   setReferralError('');
                   setReferralInfo(null);
                 }}
                 error={errors.referralCode}
                 className="flex-1"
-                iconLeft={<Hash size={16} />}
+                iconLeft={referralLocked ? <Lock size={16} /> : <Hash size={16} />}
+                helperText={
+                  referralLocked
+                    ? 'Galing ito sa referral link ng distributor mo — hindi na ito kailangang palitan.'
+                    : undefined
+                }
               />
-              <div className="flex items-end">
-                <Button
-                  variant="primary"
-                  onClick={() => handleValidateReferral()}
-                  loading={referralLoading}
-                  disabled={!form.referralCode.trim()}
-                >
-                  Validate
-                </Button>
-              </div>
+              {/* Already validated by the link, so there is nothing left to
+                  press — and leaving the button would imply the code is
+                  something the applicant is meant to change. */}
+              {!referralLocked && (
+                <div className="flex items-end">
+                  <Button
+                    variant="primary"
+                    onClick={() => handleValidateReferral()}
+                    loading={referralLoading}
+                    disabled={!form.referralCode.trim()}
+                  >
+                    Validate
+                  </Button>
+                </div>
+              )}
             </div>
 
             {referralError && (

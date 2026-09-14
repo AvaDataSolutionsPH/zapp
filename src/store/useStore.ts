@@ -116,6 +116,7 @@ import {
   updateUser,
   appendApplicationAudit,
   updateApplicationFields,
+  respondToEndorsementRpc,
   reserveApplicationNumber,
   updateApplicationChanges,
   activateStoreByShopCode,
@@ -1815,19 +1816,12 @@ export const useStore = create<AppStore>((set, get) => {
     if (get().dataSource !== 'db') return;
 
     try {
-      await updateApplicationFields(applicationId, {
-        assigned_distributor_id: nextDistributorId ?? null,
-        assigned_sub_partner_distributor_id: nextSpdId ?? null,
-        assigned_plant_id: nextPlantId,
-        endorsement_status: accepted ? 'accepted' : 'declined',
-        endorsement_resolved_at: now,
-        endorsement_decline_reason: accepted ? null : reason?.trim() || null,
-      });
-      // Appended AFTER the reassignment: on acceptance the row stops being
-      // reachable through the endorsement policy and becomes reachable through
-      // the ordinary assignment one, so the append must run against the new
-      // shape or RLS drops it.
-      await appendApplicationAudit(applicationId, entry);
+      // One RPC, not an UPDATE + an append. The reassignment, the status and
+      // the audit entry all land in a single statement, and the SERVER decides
+      // the new channel and plant — the values computed above are only for the
+      // optimistic render and are corrected by the next hydration if they ever
+      // disagree. See 049 for why a plain UPDATE could not express this.
+      await respondToEndorsementRpc(applicationId, accepted, entry, reason);
     } catch (err) {
       set({ applications: prev });
       throw err;

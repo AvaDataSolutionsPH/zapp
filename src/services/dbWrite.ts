@@ -381,6 +381,35 @@ export async function reserveApplicationNumber(): Promise<string | null> {
  *
  * Pair this with `appendApplicationAudit` for the history entry.
  */
+/**
+ * Answer an endorsement (049). Goes through an RPC rather than a direct UPDATE
+ * because a row-level predicate cannot express a STATE TRANSITION.
+ *
+ * ⚠️ DECLINE is the reason this exists. Declining changes no assignment, so the
+ * recipient is writing a row that is not and never was theirs; 048's policy
+ * refused it ("new row violates row-level security policy") while ACCEPT only
+ * appeared to work because it sets the assignment to the recipient and so
+ * satisfied 003 on its own.
+ *
+ * The audit entry is passed IN and appended inside the same statement: on
+ * decline the row stays with the sender, so a follow-up append from the client
+ * would be dropped by RLS and the decline would vanish from the history.
+ */
+export async function respondToEndorsementRpc(
+  applicationId: string,
+  accept: boolean,
+  entry: unknown,
+  reason?: string,
+): Promise<void> {
+  const { error } = await supabase.rpc('respond_to_endorsement', {
+    p_application_id: applicationId,
+    p_accept: accept,
+    p_entry: entry,
+    p_reason: reason ?? null,
+  });
+  if (error) throw error;
+}
+
 export async function updateApplicationFields(
   applicationId: string,
   patch: Record<string, unknown>,

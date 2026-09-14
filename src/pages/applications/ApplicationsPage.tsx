@@ -26,6 +26,7 @@ import {
 } from '@/components/ui';
 import type { TableColumn, SelectOption } from '@/components/ui';
 import { applicationType, effectiveAreaSupervisorId, MARKET_SOURCE_OPTIONS } from '@/lib/applicationMonitoring';
+import { isEndorsementSender, isEndorsementTarget } from '@/lib/endorsement';
 import { ensureHttpUrl } from '@/lib/externalUrl';
 import type { Application } from '@/types';
 
@@ -60,6 +61,13 @@ export default function ApplicationsPage() {
     }
     // A PD sees "Own Referral Code + assigned Sub PDs" — its own channel plus
     // every application filed under an SPD that reports to it.
+    //
+    // ⚠️ Plus both sides of an endorsement (048). Assignment does NOT move until
+    // an offer is accepted, so filtering on `assignedDistributorId` alone hid a
+    // pending offer from the very channel being asked to take it — RLS returned
+    // the row and the client threw it away, leaving the recipient unable to find
+    // the thing they were meant to answer. The mirror image of migration 029,
+    // where the DB dropped a row the client could resolve.
     if (currentUser?.role === 'partner_distributor') {
       const mySpdIds = subPartnerDistributors
         .filter((s) => s.parentDistributorId === currentUser.distributorId)
@@ -68,7 +76,12 @@ export default function ApplicationsPage() {
         (a) =>
           a.assignedDistributorId === currentUser.distributorId ||
           (!!a.assignedSubPartnerDistributorId &&
-            mySpdIds.includes(a.assignedSubPartnerDistributorId)),
+            mySpdIds.includes(a.assignedSubPartnerDistributorId)) ||
+          // An offer waiting on this PD's answer...
+          isEndorsementTarget(currentUser, a) ||
+          // ...and the read-only record of one they passed on, which otherwise
+          // vanishes from the list the moment it is accepted.
+          isEndorsementSender(currentUser, a),
       );
     }
     // An SPD sees "Own Referral Code only". RLS (022) already scopes the rows it
@@ -76,7 +89,9 @@ export default function ApplicationsPage() {
     // stops an SPD falling through to the see-everything branch below.
     if (currentUser?.role === 'sub_partner_distributor') {
       return allApplications.filter(
-        (a) => a.assignedSubPartnerDistributorId === currentUser.subPartnerDistributorId,
+        (a) =>
+          a.assignedSubPartnerDistributorId === currentUser.subPartnerDistributorId ||
+          isEndorsementTarget(currentUser, a),
       );
     }
     return allApplications;

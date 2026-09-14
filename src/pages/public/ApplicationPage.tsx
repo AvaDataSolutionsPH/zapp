@@ -518,6 +518,9 @@ export default function ApplicationPage() {
             </div>
 
             <div className="flex gap-3">
+              {/* When locked, the padlock carries the message on its own — a
+                  sentence of explanation under a field nobody has to act on is
+                  just noise. */}
               <Input
                 label="Referral Code *"
                 placeholder="e.g. BICOL-MARCO or ZAPP-INT-001"
@@ -533,11 +536,6 @@ export default function ApplicationPage() {
                 error={errors.referralCode}
                 className="flex-1"
                 iconLeft={referralLocked ? <Lock size={16} /> : <Hash size={16} />}
-                helperText={
-                  referralLocked
-                    ? 'Galing ito sa referral link ng distributor mo — hindi na ito kailangang palitan.'
-                    : undefined
-                }
               />
               {/* Already validated by the link, so there is nothing left to
                   press — and leaving the button would imply the code is

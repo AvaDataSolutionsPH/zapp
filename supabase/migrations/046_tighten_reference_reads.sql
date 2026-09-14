@@ -49,7 +49,25 @@
 --   franchisee -> users: 1, referral_codes: 0
 --   PD         -> referral_codes: their own (+ sub-partners')
 --   owner      -> users: all
+--
+-- ── "POTENTIAL ISSUE DETECTED: destructive operations" ───────────────────
+-- The Supabase SQL editor flags this. It is reacting to the word DROP, not to
+-- anything it has understood about the script. What gets dropped here is two
+-- POLICIES — no table, no column, no row of data is touched, and each DROP is
+-- followed immediately by the CREATE that replaces it.
+--
+-- There IS one real hazard, and the BEGIN/COMMIT below removes it: the editor
+-- runs statements one after another, so a failure landing BETWEEN a DROP and
+-- its CREATE would leave `users` with no SELECT policy at all — every signed-in
+-- person blanked out until someone re-ran the CREATE. Wrapped in a transaction,
+-- the whole thing either applies or none of it does.
+--
+-- Every helper this depends on (app_user_id, app_role, app_is_admin,
+-- app_distributor, app_spd, app_area_supervisor_id) was verified to exist on
+-- the live database before shipping this file.
 -- ============================================================
+
+BEGIN;
 
 -- ── users ────────────────────────────────────────────────────────────────
 DROP POLICY IF EXISTS ref_select ON users;
@@ -95,6 +113,8 @@ CREATE POLICY ref_select ON referral_codes
   );
 
 NOTIFY pgrst, 'reload schema';
+
+COMMIT;
 
 -- ── REVERT (manual) ──────────────────────────────────────────────────────
 -- Back to 045 + 003's blanket read. Only do this if narrowing `users` turns

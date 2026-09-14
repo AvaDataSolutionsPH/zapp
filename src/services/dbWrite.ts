@@ -242,6 +242,15 @@ const mapApplicationToDB = (a: Application) => ({
   agreement_version: a.agreementVersion ?? null,
   application_number: a.applicationNumber ?? null,
   application_source: a.applicationSource ?? null,
+  // "Endorsed to others" (048).
+  endorsed_by_distributor_id: a.endorsedByDistributorId ?? null,
+  endorsed_to_distributor_id: a.endorsedToDistributorId ?? null,
+  endorsed_to_sub_partner_distributor_id: a.endorsedToSubPartnerDistributorId ?? null,
+  endorsement_status: a.endorsementStatus ?? null,
+  endorsed_at: a.endorsedAt ?? null,
+  endorsement_resolved_at: a.endorsementResolvedAt ?? null,
+  endorsement_note: a.endorsementNote ?? null,
+  endorsement_decline_reason: a.endorsementDeclineReason ?? null,
   // Phase 3 — ID OCR autofill (editable).
   id_scanned_name: a.idScannedName ?? null,
   id_number: a.idNumber ?? null,

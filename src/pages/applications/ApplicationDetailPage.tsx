@@ -41,6 +41,8 @@ import { useStorageUrl } from '@/lib/useStorageUrl';
 import MonitoringFieldsCard from './MonitoringFieldsCard';
 import DocumentsSection from './DocumentsSection';
 import LoginCredentialsCard from './LoginCredentialsCard';
+import EndorsementCard from './EndorsementCard';
+import { blocksReview } from '@/lib/endorsement';
 
 // Resolves a private storage ref to a signed URL (one hook call per render) so
 // the reviewer can open the system-generated PDF copy of the application.
@@ -122,9 +124,15 @@ export default function ApplicationDetailPage() {
   // Two gates: the application must still be open, AND the role must own Status.
   // Admin / OS / PD / AS own it — see canSetStatus in lib/applicationMonitoring
   // for why each is on the list (and why SD is not).
+  // ⚠️ An outstanding endorsement freezes the review. Approving would create
+  // the store and the franchisee login under the SENDER's channel while the
+  // recipient is still looking at the same application as theirs to take —
+  // and the store, unlike the offer, cannot be handed back.
+  const endorsementPending = blocksReview(application);
   const canAct =
     (application.status === 'pending' || application.status === 'needs_more_info') &&
-    canSetStatus(currentUser?.role);
+    canSetStatus(currentUser?.role) &&
+    !endorsementPending;
 
   // The Shop Code becomes the franchisee's username, so approving without one
   // would create a store nobody can log into. Gates APPROVE only — declining or
@@ -235,6 +243,10 @@ export default function ApplicationDetailPage() {
           </span>
         </div>
       )}
+
+      {/* "Endorsed to others" — renders only for the two parties, or once an
+          endorsement exists. Self-hiding, so no role check is needed here. */}
+      <EndorsementCard application={application} />
 
       {/* Onboarding-specific details (self-service Partner Onboarding only) */}
       {isOnboarding && (

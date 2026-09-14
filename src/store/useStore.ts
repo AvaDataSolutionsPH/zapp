@@ -128,6 +128,7 @@ import { resolveLoginEmailCandidates, shopCodeToEmail } from '@/lib/shopCodeAuth
 import { resetPasswordForUser } from '@/services/resetPassword';
 import { changeLoginEmailForUser } from '@/services/changeLoginEmail';
 import { deleteAccountForUser } from '@/services/deleteAccount';
+import { canEndorse, canCancelEndorsement, isEndorsementTarget } from '@/lib/endorsement';
 
 // Compute the initial billing list from the seeded mock entities. This replaces
 // the previously hard-coded mockBillingRecords — billings are now derived from
@@ -403,6 +404,28 @@ interface AppStore {
     status: 'verified' | 'rejected',
     remarks?: string,
   ) => Promise<void>;
+  /**
+   * "Endorsed to others" (048) — a Partner Distributor offers an application
+   * from their own channel to another PD or to a sub-partner.
+   *
+   * ⚠️ Offers ONLY. Nothing is reassigned here: `assignedDistributorId` is the
+   * single thing deciding visibility, so moving it now would make the
+   * application vanish from the sender before anyone had agreed to take it,
+   * and a decline would have nowhere to return to.
+   */
+  endorseApplication: (
+    applicationId: string,
+    target: { kind: 'pd' | 'spd'; id: string },
+    note?: string,
+  ) => Promise<void>;
+  /** The recipient answers. Accepting is what actually moves ownership. */
+  respondToEndorsement: (
+    applicationId: string,
+    response: 'accept' | 'decline',
+    reason?: string,
+  ) => Promise<void>;
+  /** The sender withdraws an offer nobody has answered yet. */
+  cancelEndorsement: (applicationId: string) => Promise<void>;
   /**
    * Issue a NEW temporary password for a franchisee (Phase F). Runs through the
    * reset-password Edge Function because only the service_role key may set
@@ -1642,6 +1665,233 @@ export const useStore = create<AppStore>((set, get) => {
 
   // Staff document review. Two writes when the last document lands: the review
   // onto the application, and (only then) the account flip to `active`.
+  endorseApplication: async (applicationId, target, note) => {
+    const { currentUser, applications, distributors, subPartnerDistributors } = get();
+    if (!currentUser) throw new Error('Not signed in.');
+
+    const app = applications.find((a) => a.id === applicationId);
+    if (!app) throw new Error('Application not found.');
+    // Re-checked here and not only in the page: a disabled button is a
+    // courtesy, the store is the last line before the network.
+    if (!canEndorse(currentUser, app)) {
+      throw new Error('Ikaw lang ang PD na nakakuha nito ang pwedeng mag-endorse, at habang hindi pa ito naa-aksyunan.');
+    }
+
+    let toDistributorId: string | undefined;
+    let toSpdId: string | undefined;
+    let targetName: string;
+    if (target.kind === 'spd') {
+      const spd = subPartnerDistributors.find((x) => x.id === target.id);
+      if (!spd) throw new Error('Hindi mahanap ang Sub-Partner.');
+      toSpdId = spd.id;
+      targetName = spd.name;
+    } else {
+      const d = distributors.find((x) => x.id === target.id);
+      if (!d) throw new Error('Hindi mahanap ang Partner Distributor.');
+      if (d.id === currentUser.distributorId) throw new Error('Hindi mo pwedeng i-endorse sa sarili mo.');
+      toDistributorId = d.id;
+      targetName = d.name;
+    }
+
+    const now = new Date().toISOString();
+    const entry: AuditEntry = {
+      id: `audit-${uid()}`,
+      action: 'endorsed',
+      performedBy: currentUser.id,
+      performedByName: currentUser.name,
+      role: currentUser.role,
+      performedAt: now,
+      details: note?.trim() || `Endorsed to ${targetName}`,
+      fieldModified: 'Endorsement',
+      previousValue: '—',
+      newValue: `Pending — ${targetName}`,
+    };
+
+    const updated: Application = {
+      ...app,
+      endorsedByDistributorId: currentUser.distributorId,
+      endorsedToDistributorId: toDistributorId,
+      endorsedToSubPartnerDistributorId: toSpdId,
+      endorsementStatus: 'pending',
+      endorsedAt: now,
+      endorsementNote: note?.trim() || undefined,
+      // A previous decline must not linger next to a fresh offer.
+      endorsementResolvedAt: undefined,
+      endorsementDeclineReason: undefined,
+      auditLog: [...app.auditLog, entry],
+    };
+
+    const prev = applications;
+    set({ applications: applications.map((a) => (a.id === applicationId ? updated : a)) });
+    if (get().dataSource !== 'db') return;
+
+    try {
+      await updateApplicationFields(applicationId, {
+        endorsed_by_distributor_id: currentUser.distributorId ?? null,
+        endorsed_to_distributor_id: toDistributorId ?? null,
+        endorsed_to_sub_partner_distributor_id: toSpdId ?? null,
+        endorsement_status: 'pending',
+        endorsed_at: now,
+        endorsement_note: note?.trim() || null,
+        endorsement_resolved_at: null,
+        endorsement_decline_reason: null,
+      });
+      await appendApplicationAudit(applicationId, entry);
+    } catch (err) {
+      set({ applications: prev });
+      throw err;
+    }
+  },
+
+  respondToEndorsement: async (applicationId, response, reason) => {
+    const { currentUser, applications, distributors, subPartnerDistributors } = get();
+    if (!currentUser) throw new Error('Not signed in.');
+
+    const app = applications.find((a) => a.id === applicationId);
+    if (!app) throw new Error('Application not found.');
+    if (!isEndorsementTarget(currentUser, app)) {
+      throw new Error('Ikaw lang ang pinag-endorsuhan ang pwedeng sumagot dito.');
+    }
+
+    const now = new Date().toISOString();
+    const accepted = response === 'accept';
+
+    // Accepting is the ONLY moment ownership moves.
+    //
+    // ⚠️ An SPD must carry BOTH ids. `assigned_sub_partner_distributor_id`
+    // alone would leave the parent PD unable to see an application inside
+    // their own channel — the parent's scope keys on the distributor column.
+    let nextDistributorId = app.assignedDistributorId;
+    let nextSpdId = app.assignedSubPartnerDistributorId;
+    let nextPlantId = app.assignedPlantId;
+
+    if (accepted) {
+      if (currentUser.role === 'sub_partner_distributor') {
+        const spd = subPartnerDistributors.find((x) => x.id === currentUser.subPartnerDistributorId);
+        if (!spd) throw new Error('Walang Sub-Partner record ang account mo.');
+        nextSpdId = spd.id;
+        nextDistributorId = spd.parentDistributorId;
+        nextPlantId = spd.plantId;
+      } else {
+        const d = distributors.find((x) => x.id === currentUser.distributorId);
+        if (!d) throw new Error('Walang Distributor record ang account mo.');
+        nextDistributorId = d.id;
+        // A direct hand-over to a PD replaces the channel outright, so any
+        // sub-partner from the old channel must not travel with it.
+        nextSpdId = undefined;
+        // The point of the endorsement is that the RECIPIENT serves this area.
+        // Leaving the sender's plant would create the store under a plant that
+        // does not deliver there.
+        nextPlantId = d.plantId;
+      }
+    }
+
+    const entry: AuditEntry = {
+      id: `audit-${uid()}`,
+      action: accepted ? 'endorsement_accepted' : 'endorsement_declined',
+      performedBy: currentUser.id,
+      performedByName: currentUser.name,
+      role: currentUser.role,
+      performedAt: now,
+      details: reason?.trim() || (accepted ? 'Endorsement accepted' : 'Endorsement declined'),
+      fieldModified: 'Endorsement',
+      previousValue: 'Pending',
+      newValue: accepted ? 'Accepted' : 'Declined',
+    };
+
+    const updated: Application = {
+      ...app,
+      assignedDistributorId: nextDistributorId,
+      assignedSubPartnerDistributorId: nextSpdId,
+      assignedPlantId: nextPlantId,
+      endorsementStatus: accepted ? 'accepted' : 'declined',
+      endorsementResolvedAt: now,
+      endorsementDeclineReason: accepted ? undefined : reason?.trim() || undefined,
+      auditLog: [...app.auditLog, entry],
+    };
+
+    const prev = applications;
+    set({ applications: applications.map((a) => (a.id === applicationId ? updated : a)) });
+    if (get().dataSource !== 'db') return;
+
+    try {
+      await updateApplicationFields(applicationId, {
+        assigned_distributor_id: nextDistributorId ?? null,
+        assigned_sub_partner_distributor_id: nextSpdId ?? null,
+        assigned_plant_id: nextPlantId,
+        endorsement_status: accepted ? 'accepted' : 'declined',
+        endorsement_resolved_at: now,
+        endorsement_decline_reason: accepted ? null : reason?.trim() || null,
+      });
+      // Appended AFTER the reassignment: on acceptance the row stops being
+      // reachable through the endorsement policy and becomes reachable through
+      // the ordinary assignment one, so the append must run against the new
+      // shape or RLS drops it.
+      await appendApplicationAudit(applicationId, entry);
+    } catch (err) {
+      set({ applications: prev });
+      throw err;
+    }
+  },
+
+  cancelEndorsement: async (applicationId) => {
+    const { currentUser, applications } = get();
+    if (!currentUser) throw new Error('Not signed in.');
+
+    const app = applications.find((a) => a.id === applicationId);
+    if (!app) throw new Error('Application not found.');
+    if (!canCancelEndorsement(currentUser, app)) {
+      throw new Error('Hindi na ito mababawi — nasagot na o hindi ikaw ang nag-endorse.');
+    }
+
+    const now = new Date().toISOString();
+    const entry: AuditEntry = {
+      id: `audit-${uid()}`,
+      action: 'endorsement_cancelled',
+      performedBy: currentUser.id,
+      performedByName: currentUser.name,
+      role: currentUser.role,
+      performedAt: now,
+      details: 'Endorsement withdrawn',
+      fieldModified: 'Endorsement',
+      previousValue: 'Pending',
+      newValue: '—',
+    };
+
+    const updated: Application = {
+      ...app,
+      endorsedToDistributorId: undefined,
+      endorsedToSubPartnerDistributorId: undefined,
+      endorsementStatus: undefined,
+      endorsedAt: undefined,
+      endorsementNote: undefined,
+      endorsementResolvedAt: undefined,
+      auditLog: [...app.auditLog, entry],
+    };
+
+    const prev = applications;
+    set({ applications: applications.map((a) => (a.id === applicationId ? updated : a)) });
+    if (get().dataSource !== 'db') return;
+
+    try {
+      await updateApplicationFields(applicationId, {
+        endorsed_to_distributor_id: null,
+        endorsed_to_sub_partner_distributor_id: null,
+        endorsement_status: null,
+        endorsed_at: null,
+        endorsement_note: null,
+        endorsement_resolved_at: null,
+        // endorsed_by is deliberately KEPT: it is the sender's read record, and
+        // clearing it on cancel would be harmless today but inconsistent with
+        // every other transition.
+      });
+      await appendApplicationAudit(applicationId, entry);
+    } catch (err) {
+      set({ applications: prev });
+      throw err;
+    }
+  },
+
   reviewDocument: async (applicationId, key, status, remarks) => {
     const { currentUser, applications, demoUsers } = get();
     if (!currentUser) throw new Error('Not signed in.');

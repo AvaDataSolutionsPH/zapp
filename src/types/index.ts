@@ -25,6 +25,17 @@ export type StoreStatus = 'active' | 'inactive' | 'pending' | 'blocked';
 // screen; not terminal.
 export type ApplicationStatus = 'pending' | 'approved' | 'declined' | 'needs_more_info';
 
+/**
+ * Endorsement is deliberately SEPARATE from ApplicationStatus (048).
+ *
+ * An endorsed application is still `pending` — it has not been decided, only
+ * offered to a different channel. Folding this into the status union would
+ * have meant every status filter, badge and `canSetStatus` gate silently
+ * treating "waiting for another PD to accept" as a review outcome, and a
+ * declined endorsement would have had nowhere to return to.
+ */
+export type EndorsementStatus = 'pending' | 'accepted' | 'declined';
+
 // --- New Application Monitoring (module vocabulary) ---
 // The module labels `declined` as "Disapproved"; the stored value stays
 // `declined` for back-compat with every existing row and consumer.
@@ -377,6 +388,30 @@ export interface Application {
    * rows written by an older bundle.
    */
   applicationSource?: 'apply' | 'onboarding';
+
+  // ── "Endorsed to others" (048) ────────────────────────────────────────
+  // A Partner Distributor passing an inquiry they cannot serve to the channel
+  // that can. Two-step: the recipient must accept before anything reassigns.
+  //
+  // ⚠️ Ownership (`assignedDistributorId`) does NOT move until acceptance —
+  // that column is the only thing deciding visibility, so moving it at offer
+  // time would make the application vanish from the sender before anyone had
+  // agreed to take it. Read the state through the helpers in
+  // `lib/endorsement.ts` rather than these fields directly.
+  /** Who passed it on. Set at endorse time and never cleared — it is what
+   *  keeps the sender's read-only record alive after the hand-over. */
+  endorsedByDistributorId?: string;
+  /** The offered-to PD. For an SPD offer this stays undefined; the SPD's
+   *  parent is resolved at acceptance. */
+  endorsedToDistributorId?: string;
+  endorsedToSubPartnerDistributorId?: string;
+  /** undefined = never endorsed. */
+  endorsementStatus?: EndorsementStatus;
+  endorsedAt?: string;
+  endorsementResolvedAt?: string;
+  /** The sender's reason — the recipient is being asked to take on work. */
+  endorsementNote?: string;
+  endorsementDeclineReason?: string;
   // Phase 3 — best-effort ID OCR autofill (prefilled at capture, editable by the
   // applicant; the reviewer cross-checks against the uploaded ID image).
   idScannedName?: string;

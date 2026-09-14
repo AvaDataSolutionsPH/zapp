@@ -1028,7 +1028,15 @@ export const useStore = create<AppStore>((set, get) => {
             ? 'distributor'
             : 'direct',
         status: 'pending',
-        province: '',
+        // Carry the province ONTO the store. It used to be hardcoded empty, so
+        // every approved store had a blank Province column, the Stores province
+        // filter listed nothing, and any province-based lookup saw a store that
+        // belonged to no province at all. The application has known it since
+        // migration 021 — approval was simply dropping it on the floor.
+        province: updatedApp.province ?? '',
+        // `area` stays empty: it is a free-text CITY name and applications have
+        // no city column (the city only ever exists inside `address`). Better an
+        // honest blank than inventing one from the coarse `location` grouping.
         area: '',
         phone: updatedApp.mobile,
         email: updatedApp.email,

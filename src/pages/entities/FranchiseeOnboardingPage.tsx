@@ -322,6 +322,13 @@ export default function FranchiseeOnboardingPage() {
         email: form.email,
         storeName: form.storeName,
         address: `${form.address}${form.barangay ? `, Brgy. ${form.barangay}` : ''}, ${form.city}, ${form.province}`,
+        // The form REQUIRES a province and then used to flatten it into
+        // `address` only, so applications.province landed NULL. That silently
+        // disabled province-based Area Supervisor routing (the app resolves the
+        // AS from this column at read time), left Location blank and made the
+        // Applications/Stores province filters useless. Exactly the bug that was
+        // already fixed once on /apply.
+        province: form.province.trim() || undefined,
         lat: parseFloat(form.lat) || 0,
         lng: parseFloat(form.lng) || 0,
         storePhotoUrl: storePhotoRef,

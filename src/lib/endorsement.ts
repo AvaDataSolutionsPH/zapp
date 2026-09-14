@@ -98,6 +98,21 @@ export const canCancelEndorsement = (
   app.assignedDistributorId === user?.distributorId;
 
 /**
+ * The SENDER looking at an application that has already been handed over.
+ *
+ * ⚠️ They keep SELECT (that is the point of the read-only record) but lost
+ * UPDATE the moment assignment moved, so Approve/Decline would render, look
+ * live, and then fail against RLS. A button that cannot work must not be shown.
+ */
+export const isHandedOver = (
+  user: User | null | undefined,
+  app: Application,
+): boolean =>
+  app.endorsementStatus === 'accepted' &&
+  isEndorsementSender(user, app) &&
+  app.assignedDistributorId !== user?.distributorId;
+
+/**
  * ⚠️ Approving while an offer is outstanding would create the store and the
  * franchisee login under the SENDER's channel while the recipient is still
  * looking at it as theirs to take. Blocked until the endorsement resolves.

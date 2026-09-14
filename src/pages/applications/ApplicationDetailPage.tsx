@@ -42,7 +42,7 @@ import MonitoringFieldsCard from './MonitoringFieldsCard';
 import DocumentsSection from './DocumentsSection';
 import LoginCredentialsCard from './LoginCredentialsCard';
 import EndorsementCard from './EndorsementCard';
-import { blocksReview } from '@/lib/endorsement';
+import { blocksReview, isHandedOver } from '@/lib/endorsement';
 
 // Resolves a private storage ref to a signed URL (one hook call per render) so
 // the reviewer can open the system-generated PDF copy of the application.
@@ -129,10 +129,15 @@ export default function ApplicationDetailPage() {
   // recipient is still looking at the same application as theirs to take —
   // and the store, unlike the offer, cannot be handed back.
   const endorsementPending = blocksReview(application);
+  // The sender keeps READ access to what they handed over but lost the right to
+  // act on it. Without this they still saw Approve/Decline, which RLS would
+  // then refuse — a live-looking button that cannot work.
+  const handedOver = isHandedOver(currentUser, application);
   const canAct =
     (application.status === 'pending' || application.status === 'needs_more_info') &&
     canSetStatus(currentUser?.role) &&
-    !endorsementPending;
+    !endorsementPending &&
+    !handedOver;
 
   // The Shop Code becomes the franchisee's username, so approving without one
   // would create a store nobody can log into. Gates APPROVE only — declining or
